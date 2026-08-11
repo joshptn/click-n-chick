@@ -14,10 +14,10 @@ use Illuminate\Support\Facades\Route;
 
 
 
-Route::post('/register',[AuthController::class, 'register']);
-Route::post('/login',[AuthController::class, 'login'])->name('login');
+Route::post('/register',[AuthController::class, 'register'])->middleware('throttle:register');
+Route::post('/login',[AuthController::class, 'login'])->name('login')->middleware('throttle:login');
 Route::get('/user',[AuthController::class, 'userDetails'])->middleware('auth:sanctum');
-Route::put('/user/update',[AuthController::class, 'updateUser'])->middleware('auth:sanctum');
+Route::put('/user/update',[AuthController::class, 'updateUser'])->middleware(['auth:sanctum', 'throttle:user-update']);
 Route::post('/logout',[AuthController::class, 'logout'])->middleware('auth:sanctum');
 Route::get('/notifications', [NotificationController::class, 'index'])->middleware('auth:sanctum');
 Route::get('/notifications/{notification}', [NotificationController::class, 'show'])->middleware('auth:sanctum');
@@ -31,7 +31,7 @@ Route::get('/cart', [CartItemController::class, 'userCart']);
 Route::post('/cart/add/{foodId}', [CartItemController::class, 'addToCart']);
 Route::delete('/cart/remove/{orderId}', [CartItemController::class, 'removeToCart']);
 
-Route::post('/order/place', [OrderController::class, 'placeOrder']);
+Route::post('/order/place', [OrderController::class, 'placeOrder'])->middleware('throttle:place-order');
 Route::get('/orders', [OrderController::class, 'getUserOrder']);
 Route::get('/orders/all', [OrderController::class, 'allOrders']);
 Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder']);
