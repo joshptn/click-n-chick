@@ -6,7 +6,6 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
-use App\Http\Controllers\PaymongoController;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +42,3 @@ Route::apiResource('foods', FoodController::class);
 Route::apiResource('category', CategoryController::class);
 Route::get('drinks', [FoodController::class, 'drinks']);
 Route::get('sides', [FoodController::class, 'sides']);
-
-Route::post('/payments/create-checkout', [PaymongoController::class, 'createCheckout']);
-Route::get('/payments/verify/{orderId}', [PaymongoController::class, 'verifyByOrder']);
