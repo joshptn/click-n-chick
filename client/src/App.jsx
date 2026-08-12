@@ -5,7 +5,6 @@ import PrivateRoutes from './providers/PrivateRoutes'
 import AdminRoutes from './providers/AdminRoutes'
 import LandingPage from './pages/LandingPage'
 
-
 function App() {
 
   return (
