@@ -40,7 +40,7 @@ class BroadcastChannelAuthTest extends TestCase
         $order = $this->order($owner);
 
         $this->actingAs($owner, 'sanctum')
-            ->postJson('/broadcasting/auth', [
+            ->postJson('/api/broadcasting/auth', [
                 'channel_name' => 'private-orders.' . $order->id,
                 'socket_id' => '123.456',
             ])
@@ -54,7 +54,7 @@ class BroadcastChannelAuthTest extends TestCase
         $order = $this->order($owner);
 
         $this->actingAs($stranger, 'sanctum')
-            ->postJson('/broadcasting/auth', [
+            ->postJson('/api/broadcasting/auth', [
                 'channel_name' => 'private-orders.' . $order->id,
                 'socket_id' => '123.456',
             ])
@@ -68,7 +68,7 @@ class BroadcastChannelAuthTest extends TestCase
 
         foreach (['admin', 'super_admin'] as $role) {
             $this->actingAs($this->user($role), 'sanctum')
-                ->postJson('/broadcasting/auth', [
+                ->postJson('/api/broadcasting/auth', [
                     'channel_name' => 'private-orders.' . $order->id,
                     'socket_id' => '123.456',
                 ])
@@ -82,7 +82,7 @@ class BroadcastChannelAuthTest extends TestCase
         $stranger = $this->user('customer');
 
         $this->actingAs($stranger, 'sanctum')
-            ->postJson('/broadcasting/auth', [
+            ->postJson('/api/broadcasting/auth', [
                 'channel_name' => 'private-orders.' . $order->id,
                 'socket_id' => '123.456',
             ])
@@ -97,7 +97,7 @@ class BroadcastChannelAuthTest extends TestCase
     {
         foreach (['admin', 'super_admin'] as $role) {
             $this->actingAs($this->user($role), 'sanctum')
-                ->postJson('/broadcasting/auth', [
+                ->postJson('/api/broadcasting/auth', [
                     'channel_name' => 'private-admin.orders',
                     'socket_id' => '123.456',
                 ])
@@ -105,7 +105,7 @@ class BroadcastChannelAuthTest extends TestCase
         }
 
         $this->actingAs($this->user('customer'), 'sanctum')
-            ->postJson('/broadcasting/auth', [
+            ->postJson('/api/broadcasting/auth', [
                 'channel_name' => 'private-admin.orders',
                 'socket_id' => '123.456',
             ])
@@ -121,7 +121,7 @@ class BroadcastChannelAuthTest extends TestCase
         $recipient = $this->user('customer');
 
         $this->actingAs($recipient, 'sanctum')
-            ->postJson('/broadcasting/auth', [
+            ->postJson('/api/broadcasting/auth', [
                 'channel_name' => 'private-notifications.' . $recipient->id,
                 'socket_id' => '123.456',
             ])
@@ -134,7 +134,7 @@ class BroadcastChannelAuthTest extends TestCase
 
         foreach (['admin', 'super_admin'] as $role) {
             $this->actingAs($this->user($role), 'sanctum')
-                ->postJson('/broadcasting/auth', [
+                ->postJson('/api/broadcasting/auth', [
                     'channel_name' => 'private-notifications.' . $recipient->id,
                     'socket_id' => '123.456',
                 ])
@@ -150,9 +150,10 @@ class BroadcastChannelAuthTest extends TestCase
     {
         $order = $this->order($this->user('customer'));
 
-        $this->postJson('/broadcasting/auth', [
+        // auth:sanctum rejects before the channel callback is ever reached.
+        $this->postJson('/api/broadcasting/auth', [
             'channel_name' => 'private-orders.' . $order->id,
             'socket_id' => '123.456',
-        ])->assertForbidden();
+        ])->assertUnauthorized();
     }
 }
