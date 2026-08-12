@@ -210,7 +210,7 @@ class OrderController extends Controller implements HasMiddleware
         $this->authorize('isAdmin', Order::class);
 
         $user = $request->user();
-        if (!$user || $user->role !== "admin") {
+        if (!$user || !in_array($user->role, ['admin', 'super_admin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

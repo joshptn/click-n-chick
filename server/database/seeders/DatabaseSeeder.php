@@ -14,13 +14,22 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create admin account
-        User::updateOrCreate([
-            'name' => 'Admin User',
-            'email' => 'admin@gmail.com',
-            'role' => 'admin',
-            'password' => Hash::make('password123'), // make sure to hash the password
-        ]);
+        $accounts = [
+            ['email' => 'superadmin@chicknclick.test', 'name' => 'Super Admin',   'role' => 'super_admin'],
+            ['email' => 'admin@chicknclick.test',      'name' => 'Store Agent',   'role' => 'admin'],
+            ['email' => 'customer@chicknclick.test',   'name' => 'Test Customer', 'role' => 'customer'],
+        ];
+
+        foreach ($accounts as $account) {
+            User::updateOrCreate(
+                ['email' => $account['email']],
+                [
+                    'name'     => $account['name'],
+                    'role'     => $account['role'],
+                    'password' => Hash::make('password123'),
+                ]
+            );
+        }
 
         Category::updateOrCreate([
             'name'=>'Drinks'
