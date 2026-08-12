@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -34,13 +35,22 @@ class AuthController extends Controller
             'note' => 'nullable|string|max:500',
         ]);
 
-       
-        $validated['password'] = Hash::make($validated['password']);
-        
+        $user = new User();
+        $user->name         = $validated['name'];
+        $user->email        = $validated['email'];
+        $user->password     = Hash::make($validated['password']);
+        $user->first_name   = $validated['first_name']   ?? null;
+        $user->last_name    = $validated['last_name']    ?? null;
+        $user->phone_number = $validated['phone_number'] ?? null;
+        $user->location     = $validated['location']     ?? null;
+        $user->latitude     = $validated['latitude']     ?? null;
+        $user->longitude    = $validated['longitude']    ?? null;
+        $user->note         = $validated['note']         ?? null;
+        $user->save();
 
-        $user = User::create($validated);
+        $user->refresh();
 
-        $token = $user->createToken($request->name);
+        $token = $user->createToken($user->name);
 
         return response()->json([
             'user' => $user,
@@ -82,7 +92,7 @@ class AuthController extends Controller
         ];
     }
 
-   public function updateUser(Request $request)
+    public function updateUser(Request $request)
     {
         try {
             $user = $request->user();
@@ -95,17 +105,60 @@ class AuthController extends Controller
             }
 
             $validated = $request->validate([
-                'name' => 'sometimes|required|max:255',
-                'first_name' => 'nullable|string|max:255',
-                'last_name' => 'nullable|string|max:255',
-                'phone_number' => 'nullable|string|max:20',
-                'location' => 'nullable|string|max:255',
-                'latitude' => 'nullable|numeric|between:-90,90',
-                'longitude' => 'nullable|numeric|between:-180,180',
-                'note' => 'nullable|string|max:500',
+                'name' => 'sometimes|required|string|max:255',
+                'first_name' => 'sometimes|nullable|string|max:255',
+                'last_name' => 'sometimes|nullable|string|max:255',
+                'phone_number' => 'sometimes|nullable|string|max:20',
+                'location' => 'sometimes|nullable|string|max:255',
+                'latitude' => 'sometimes|nullable|numeric|between:-90,90',
+                'longitude' => 'sometimes|nullable|numeric|between:-180,180',
+                'note' => 'sometimes|nullable|string|max:500',
+
+                // Password change: the current password must be supplied and correct.
+                'current_password' => ['required_with:password', 'current_password'],
+                'password' => 'sometimes|required|string|min:8|confirmed',
             ]);
 
-            if (empty(array_filter($validated, fn($v) => !is_null($v) && $v !== ''))) {
+            $changed = false;
+
+            if (array_key_exists('name', $validated)) {
+                $user->name = $validated['name'];
+                $changed = true;
+            }
+            if (array_key_exists('first_name', $validated)) {
+                $user->first_name = $validated['first_name'];
+                $changed = true;
+            }
+            if (array_key_exists('last_name', $validated)) {
+                $user->last_name = $validated['last_name'];
+                $changed = true;
+            }
+            if (array_key_exists('phone_number', $validated)) {
+                $user->phone_number = $validated['phone_number'];
+                $changed = true;
+            }
+            if (array_key_exists('location', $validated)) {
+                $user->location = $validated['location'];
+                $changed = true;
+            }
+            if (array_key_exists('note', $validated)) {
+                $user->note = $validated['note'];
+                $changed = true;
+            }
+            if (array_key_exists('latitude', $validated)) {
+                $user->latitude = is_null($validated['latitude']) ? null : (float) $validated['latitude'];
+                $changed = true;
+            }
+            if (array_key_exists('longitude', $validated)) {
+                $user->longitude = is_null($validated['longitude']) ? null : (float) $validated['longitude'];
+                $changed = true;
+            }
+            if (array_key_exists('password', $validated)) {
+                $user->password = Hash::make($validated['password']);
+                $changed = true;
+            }
+
+            if (!$changed) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No data provided to update.',
@@ -113,15 +166,7 @@ class AuthController extends Controller
                 ], 400);
             }
 
-            // Convert latitude/longitude to floats if provided
-            if (isset($validated['latitude'])) {
-                $validated['latitude'] = (float) $validated['latitude'];
-            }
-            if (isset($validated['longitude'])) {
-                $validated['longitude'] = (float) $validated['longitude'];
-            }
-
-            $user->update($validated);
+            $user->save();
 
             return response()->json([
                 'success' => true,
@@ -143,5 +188,46 @@ class AuthController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function updateUserRole(Request $request, User $user)
+    {
+        $actor = $request->user();
+
+        $validated = $request->validate([
+            'role' => ['required', 'string', Rule::in(['super_admin', 'admin', 'customer'])],
+        ]);
+
+        if ($actor->id === $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You cannot change your own role.',
+            ], 422);
+        }
+
+        $isDemotingASuperAdmin = $user->role === 'super_admin'
+            && $validated['role'] !== 'super_admin';
+
+        if ($isDemotingASuperAdmin) {
+            $remaining = User::where('role', 'super_admin')
+                ->whereKeyNot($user->getKey())
+                ->count();
+
+            if ($remaining < 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot remove the last super admin.',
+                ], 422);
+            }
+        }
+
+        $user->role = $validated['role'];
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Role updated successfully.',
+            'user' => $user->fresh(),
+        ], 200);
     }
 }
