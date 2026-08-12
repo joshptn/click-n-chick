@@ -7,7 +7,7 @@ import '@mantine/core/styles.css';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from "@mantine/notifications";
 import { BrowserRouter } from 'react-router-dom';
-import AuthContext, { AuthProvider } from './Contexts/AuthContext.jsx';
+import AuthContext, { AuthProvider } from './context/AuthContext.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
