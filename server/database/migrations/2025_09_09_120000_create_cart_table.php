@@ -1,0 +1,27 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('cart', function (Blueprint $table) {
+            $table->id();
+            // Nullable for guest carts, which are identified by guest_token.
+            $table->foreignId('user_id')->nullable()->constrained('users')->cascadeOnDelete();
+            $table->string('guest_token')->nullable()->unique();
+            $table->string('cart_status')->default('active');
+            $table->timestamps();
+
+            $table->index('user_id');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('cart');
+    }
+};

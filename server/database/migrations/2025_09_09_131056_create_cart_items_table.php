@@ -13,7 +13,11 @@ return new class extends Migration
     {
         Schema::create('cart_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            // ERD shape: items hang off a cart. Nullable so the existing
+            // user_id path keeps working during the transition.
+            $table->foreignId('cart_id')->nullable()->constrained('cart')->cascadeOnDelete();
+            // Nullable for guest carts, which are identified by cart.guest_token.
+            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('food_id')->constrained()->onDelete('cascade');
             $table->integer('quantity')->default(1);
             $table->unsignedBigInteger('parent_cart_item_id')->nullable(); // points to cart_items.id

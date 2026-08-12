@@ -14,8 +14,11 @@ return new class extends Migration
         Schema::create('notifications', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            // Nullable: not every notification relates to an order.
+            $table->foreignId('order_id')->nullable()->constrained('orders')->cascadeOnDelete();
             $table->string('title');
             $table->string('body');
+            $table->string('notification_type')->nullable();
             $table->boolean('is_read')->default(false);
             $table->timestamps();
         });

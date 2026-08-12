@@ -17,8 +17,17 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('role')->default('user');
+            $table->string('account_status')->default('active');
+            // Running balance; loyalty_transactions is the ledger of record.
+            $table->integer('loyalty_points')->default(0);
             $table->string('password');
             $table->string('phone')->nullable();
+            // Deterministic hash so the encrypted phone_number stays queryable.
+            $table->string('phone_number_hash')->nullable()->unique();
+            $table->string('avatar')->nullable();
+            $table->text('two_factor_secret')->nullable();
+            $table->text('two_factor_recovery_codes')->nullable();
+            $table->timestamp('two_factor_confirmed_at')->nullable();
             $table->string('first_name')->nullable();
             $table->string('last_name')->nullable();
             $table->string('longitude')->nullable();
