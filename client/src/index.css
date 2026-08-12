@@ -1,15 +1,79 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 @import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
+/* ------------------------------------------------------------------
+   Brand design tokens.
 
+   Exposed through Tailwind's @theme so every landing-page surface pulls
+   from one palette instead of repeating hex literals. Naming follows the
+   product vocabulary: `brand` = the orange, `cocoa` = the dark brown
+   surfaces, `cream` = the light surfaces, `sun` = the yellow CTA band.
+   ------------------------------------------------------------------ */
+@theme {
+  /* Orange — buttons, accents, headline highlights */
+  --color-brand-50: #fff6ec;
+  --color-brand-100: #ffe8d1;
+  --color-brand-200: #ffcda1;
+  --color-brand-300: #ffb072;
+  --color-brand-400: #ff9c47;
+  --color-brand-500: #ff8b2b;
+  --color-brand-600: #f27d1d;
+  --color-brand-700: #ff7900;
+  --color-brand-800: #d96a10;
 
-@tailwind utilities;
+  /* The softer orange used for section accents and dividers */
+  --color-accent: #f08e35;
+  --color-accent-strong: #e88b23;
+
+  /* Dark brown surfaces */
+  --color-cocoa-950: #221006;
+  --color-cocoa-900: #2b150a;
+  --color-cocoa-800: #351a0d;
+  --color-cocoa-700: #412111;
+  --color-cocoa-600: #5a321d;
+  --color-cocoa-400: #a78a7f;
+  --color-cocoa-300: #d3a982;
+
+  /* Light surfaces */
+  --color-cream: #faf6f0;
+  --color-cream-100: #f5eee3;
+
+  /* Yellow CTA band */
+  --color-sun: #ffb800;
+
+  /* Text */
+  --color-ink: #292929;
+  --color-ink-900: #1a1a1a;
+  --color-ink-500: #6f6b68;
+  --color-ink-300: #a39f9b;
+
+  /* Type families. `display` drives the landing page, `logo` is reserved
+     for the wordmark, and the app keeps Fredoka as its body face. */
+  --font-display: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-logo: 'Fredoka', ui-rounded, ui-sans-serif, sans-serif;
+
+  /* Height of the fixed site header, reused for scroll offsets */
+  --spacing-header: 88px;
+}
 
 .hoc_font {
   font-family: 'Luckiest Guy', cursive;
 }
 
+body {
+  font-family: 'Fredoka', sans-serif;
+}
 
-body { font-family: 'Fredoka', sans-serif; }
+/* Anchor targets sit behind the fixed header without this offset. */
+[data-scroll-section] {
+  scroll-margin-top: var(--spacing-header);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
