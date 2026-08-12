@@ -2,6 +2,7 @@
 
 namespace App\Utils;
 
+use App\Events\NotificationBroadcast;
 use App\Models\Notification as ModelsNotification;
 
 class Notification
@@ -27,6 +28,6 @@ class Notification
             'body'    => $body,
         ]);
 
-        Websocket::broadcast('notify', 'notification',$notification, $user_id);
+        NotificationBroadcast::dispatch($notification, (int) $user_id);
     }
 }

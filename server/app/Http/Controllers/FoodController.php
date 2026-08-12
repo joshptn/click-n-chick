@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Food;
 use App\Utils\Image;
-use App\Utils\Websocket;
+use App\Events\MenuBroadcast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -63,7 +63,7 @@ class FoodController extends Controller implements HasMiddleware
 
             $food = Food::create($validated);
 
-            Websocket::broadcast('food', 'created', $food->load('category'));
+            MenuBroadcast::dispatch($food->load('category'), 'created');
 
             return response()->json($food->load('category'), 201);
 
@@ -142,7 +142,7 @@ class FoodController extends Controller implements HasMiddleware
             $food->update($validated);
             $food->refresh();
 
-            Websocket::broadcast('food', 'updated', $food->load('category'));
+            MenuBroadcast::dispatch($food->load('category'), 'updated');
 
             return response()->json($food->load('category'), 200);
 
@@ -180,7 +180,7 @@ class FoodController extends Controller implements HasMiddleware
             $foodData = $food->load('category');
             $food->delete();
             
-            Websocket::broadcast('food', 'deleted', $foodData);
+            MenuBroadcast::dispatch($foodData, 'deleted');
 
             return response()->json(['message' => 'Food deleted successfully'], 200);
 

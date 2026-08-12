@@ -9,7 +9,7 @@ use App\Models\OrderItem;
 use App\Utils\Distance;
 use App\Utils\Image;
 use App\Utils\Notification;
-use App\Utils\Websocket;
+use App\Events\OrderBroadcast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -95,7 +95,7 @@ class OrderController extends Controller implements HasMiddleware
             $order->total_price = $order->total_price + $dis_price;
             $order->save();
             
-            Websocket::broadcast('order', 'create', $order->load('items.food', 'items.food.category', 'user'), $order->user->id);
+            OrderBroadcast::dispatch($order->load('items.food', 'items.food.category', 'user'), 'create');
             Notification::notify('order', 'create', $order->user->id, $order);
 
             return response()->json(['message' => 'Order Placed']);
@@ -141,11 +141,7 @@ class OrderController extends Controller implements HasMiddleware
         $order->status = 'cancelled';
         $order->save();
 
-        Http::post(config('services.websocket.http_url') . "/broadcast/order", [
-            'event' => 'cancelled',
-            'order' => $order->load('items'),
-        ]);
-        Websocket::broadcast('order', 'cancelled', $order->load('items'));
+        OrderBroadcast::dispatch($order->load('items'), 'cancelled');
         Notification::notify('order', 'cancelled', $order->user->id, $order);
 
         return response()->json(['message' => 'Order cancelled successfully', 'order' => $order], 200);
@@ -168,11 +164,7 @@ class OrderController extends Controller implements HasMiddleware
         $order->status = $request->status;
         $order->save();
 
-        Http::post(config('services.websocket.http_url') . "/broadcast/order", [
-            'event' => 'update',
-            'user_id' => $order->user->id,
-            'order' => $order->load('items.food', 'items.food.category'),
-        ]);
+        OrderBroadcast::dispatch($order->load('items.food', 'items.food.category'), 'update');
         Notification::notify('order', $order->status, $order->user->id, $order);
 
         return response()->json(['message' => 'Order status updated', 'order' => $order], 200);
@@ -195,11 +187,7 @@ class OrderController extends Controller implements HasMiddleware
         $order->estimated_time_of_completion = $request->etc;
         $order->save();
 
-        Http::post(config('services.websocket.http_url') . "/broadcast/order", [
-            'event' => 'update',
-            'user_id' => $order->user->id,
-            'order' => $order->load('items.food', 'items.food.category'),
-        ]);
+        OrderBroadcast::dispatch($order->load('items.food', 'items.food.category'), 'update');
         Notification::notify('order', 'update', $order->user->id, $order);
 
         return response()->json(['message' => 'Order status updated', 'order' => $order], 200);
