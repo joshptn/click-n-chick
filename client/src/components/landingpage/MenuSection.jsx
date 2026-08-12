@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { MENU_ITEMS } from './menuData';
 
+const MotionDiv = motion.div;
+
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 3000;
 
@@ -57,8 +59,6 @@ export default function MenuSection() {
   const [offset, setOffset] = useState(0);
   const [paused, setPaused] = useState(false);
 
-  // Warm the browser cache for every slide up front so a rotation never
-  // lands on a half-decoded image.
   useEffect(() => {
     MENU_ITEMS.forEach((item) => {
       const preload = new window.Image();
@@ -66,8 +66,6 @@ export default function MenuSection() {
     });
   }, []);
 
-  // Auto-rotation is suspended while the user is hovering or focused inside
-  // the rail, and disabled outright when the OS asks for reduced motion.
   useEffect(() => {
     if (paused || reduceMotion) {
       return undefined;
@@ -90,7 +88,7 @@ export default function MenuSection() {
       <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
 
         <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap="xl" mb={50}>
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, amount: 0.3 }}
@@ -99,9 +97,9 @@ export default function MenuSection() {
             <h2 className="m-0 max-w-[13ch] font-display text-[38px] font-extrabold leading-[1.08] tracking-[-0.5px] sm:text-[46px] lg:text-[56px]">
               Our <span className="text-accent">BEST</span> Delivered Categories
             </h2>
-          </motion.div>
+          </MotionDiv>
 
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, amount: 0.3 }}
@@ -117,7 +115,7 @@ export default function MenuSection() {
             >
               EXPLORE FULL MENU
             </Button>
-          </motion.div>
+          </MotionDiv>
         </Flex>
 
         <div
@@ -129,14 +127,14 @@ export default function MenuSection() {
           <Grid gutter={{ base: 'xl', md: 40 }}>
             {visibleItems.map((item, slot) => (
               <Grid.Col key={slot} span={{ base: 12, sm: 6, md: 4 }}>
-                <motion.div
+                <MotionDiv
                   initial={{ opacity: 0, y: 40 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
                   transition={{ duration: 0.5, delay: slot * 0.15 }}
                 >
                   <AnimatePresence mode="wait" initial={false}>
-                    <motion.div
+                    <MotionDiv
                       key={item.id}
                       initial={{ opacity: 0, y: 18 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -144,9 +142,9 @@ export default function MenuSection() {
                       transition={{ duration: 0.35, delay: slot * 0.07, ease: 'easeOut' }}
                     >
                       <MenuCard item={item} onSelect={() => navigate('/login')} />
-                    </motion.div>
+                    </MotionDiv>
                   </AnimatePresence>
-                </motion.div>
+                </MotionDiv>
               </Grid.Col>
             ))}
           </Grid>

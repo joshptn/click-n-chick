@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 
 import LogoIcon from '../../assets/logo-icon.png';
 
+const MotionDiv = motion.div;
+
 const CONTACT_ROWS = [
   { icon: 'carbon:location-filled', lines: ['Sampaloc, Apalit', 'Pampanga, Philippines'] },
   { icon: 'carbon:phone-filled', lines: ['+63 123 456 789'] },
@@ -42,7 +44,7 @@ export default function SiteFooter() {
       className="border-t-[6px] border-accent bg-cocoa-700 pb-10 pt-20 text-white"
     >
       <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
-        <motion.div
+        <MotionDiv
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.2 }}
@@ -134,7 +136,7 @@ export default function SiteFooter() {
             </Grid.Col>
 
           </Grid>
-        </motion.div>
+        </MotionDiv>
 
         <Box className="mt-16 border-t border-cocoa-600 pt-6">
           <Grid align="center" gutter="md">

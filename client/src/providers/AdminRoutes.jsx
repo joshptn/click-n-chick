@@ -2,6 +2,9 @@ import { useContext, useEffect, useState } from "react";
 import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import AuthContext from "../context/AuthContext";
 import { Loader, Center } from "@mantine/core";
+import { ROLES } from "../lib/roles";
+
+const STAFF_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
 
 function AdminRoutes() {
   const { user, setUser, token } = useContext(AuthContext);
@@ -62,7 +65,7 @@ function AdminRoutes() {
   }
 
  
-  return user?.role === "admin" ? <Outlet /> : <Navigate to="/unauthorized" replace />;
+  return STAFF_ROLES.includes(user?.role) ? <Outlet /> : <Navigate to="/unauthorized" replace />;
 }
 
 export default AdminRoutes;

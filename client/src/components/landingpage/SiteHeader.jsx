@@ -7,6 +7,8 @@ import { motion } from 'framer-motion';
 import LogoIcon from '../../assets/logo-icon.png';
 import { NAV_LINKS } from './menuData';
 
+const MotionHeader = motion.header;
+
 function Wordmark({ onClick }) {
   return (
     <Group gap="xs" wrap="nowrap" className="cursor-pointer select-none" onClick={onClick}>
@@ -30,7 +32,7 @@ export default function SiteHeader({ active, onNavigate, scrolled }) {
 
   return (
     <>
-      <motion.header
+      <MotionHeader
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${scrolled ? 'bg-cream/95 py-3 shadow-[0_2px_20px_rgba(65,33,17,0.08)] backdrop-blur-md' : 'bg-transparent py-5'}`}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
@@ -68,7 +70,7 @@ export default function SiteHeader({ active, onNavigate, scrolled }) {
             </Group>
           </Group>
         </Container>
-      </motion.header>
+      </MotionHeader>
 
       <Drawer
         opened={mobileOpen}

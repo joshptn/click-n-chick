@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Button, Container, Text } from '@mantine/core';
 import { motion } from 'framer-motion';
 
+const MotionDiv = motion.div;
+
 export default function CtaBanner() {
   const navigate = useNavigate();
 
   return (
     <Box component="section" className="relative overflow-hidden bg-sun py-20 text-center md:py-24">
       <Container size="md" className="relative z-10">
-        <motion.div
+        <MotionDiv
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.4 }}
@@ -31,7 +33,7 @@ export default function CtaBanner() {
           >
             ORDER NOW
           </Button>
-        </motion.div>
+        </MotionDiv>
       </Container>
     </Box>
   );

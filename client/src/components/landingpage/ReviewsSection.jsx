@@ -3,6 +3,8 @@ import { ActionIcon, Avatar, Box, Card, Container, Flex, Grid, Group, Image, Tex
 import { Icon } from '@iconify/react';
 import { AnimatePresence, motion } from 'framer-motion';
 
+const MotionDiv = motion.div;
+
 const REVIEWS = [
   {
     id: 1,
@@ -35,7 +37,7 @@ export default function ReviewsSection() {
         <Grid gutter={{ base: 48, md: 60 }} align="center">
 
           <Grid.Col span={{ base: 12, md: 5 }}>
-            <motion.div
+            <MotionDiv
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true, amount: 0.3 }}
@@ -55,7 +57,7 @@ export default function ReviewsSection() {
 
               <div className="relative mt-5 min-h-[132px]">
                 <AnimatePresence mode="wait" initial={false} custom={direction}>
-                  <motion.div
+                  <MotionDiv
                     key={review.id}
                     custom={direction}
                     initial={{ opacity: 0, x: direction * 24 }}
@@ -66,7 +68,7 @@ export default function ReviewsSection() {
                     <Text className="font-display text-[13.5px] font-medium leading-[1.75] text-ink-500">
                       {review.text}
                     </Text>
-                  </motion.div>
+                  </MotionDiv>
                 </AnimatePresence>
               </div>
 
@@ -105,11 +107,11 @@ export default function ReviewsSection() {
                   </ActionIcon>
                 </Group>
               </Flex>
-            </motion.div>
+            </MotionDiv>
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, md: 7 }}>
-            <motion.div
+            <MotionDiv
               initial={{ opacity: 0, scale: 0.92 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true, amount: 0.3 }}
@@ -125,7 +127,7 @@ export default function ReviewsSection() {
                 />
               </div>
 
-              <motion.div
+              <MotionDiv
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -153,8 +155,8 @@ export default function ReviewsSection() {
                     Golden crispy outside, juicy inside.
                   </Text>
                 </Card>
-              </motion.div>
-            </motion.div>
+              </MotionDiv>
+            </MotionDiv>
           </Grid.Col>
 
         </Grid>

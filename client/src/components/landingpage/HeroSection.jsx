@@ -4,6 +4,9 @@ import { motion } from 'framer-motion';
 
 import chickenHero from '../../assets/chicken-hero.png';
 
+const MotionDiv = motion.div;
+const MotionH1 = motion.h1;
+
 export default function HeroSection({ onExplore }) {
   return (
     <Box
@@ -16,7 +19,7 @@ export default function HeroSection({ onExplore }) {
 
         <div className="relative z-10 order-2 max-w-[420px] lg:order-1">
 
-          <motion.h1
+          <MotionH1
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
@@ -24,9 +27,9 @@ export default function HeroSection({ onExplore }) {
           >
             <span className="block text-brand-700">Basta BES</span>
             <span className="block text-ink">da BEST!</span>
-          </motion.h1>
+          </MotionH1>
 
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.18, duration: 0.6, ease: 'easeOut' }}
@@ -34,9 +37,9 @@ export default function HeroSection({ onExplore }) {
             <Text className="mt-6 max-w-[300px] font-display text-[14px] font-medium leading-[1.6] text-ink-500">
               Freshly prepared and delivered to your doorstep. Why settle for less when you can have the BES?
             </Text>
-          </motion.div>
+          </MotionDiv>
 
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.34, duration: 0.5, ease: 'easeOut' }}
@@ -51,9 +54,9 @@ export default function HeroSection({ onExplore }) {
             <Text className="font-display text-[10px] text-ink-300">
               based on 1151 reviews
             </Text>
-          </motion.div>
+          </MotionDiv>
 
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.48, duration: 0.5, ease: 'easeOut' }}
@@ -65,18 +68,18 @@ export default function HeroSection({ onExplore }) {
             >
               Explore
             </Button>
-          </motion.div>
+          </MotionDiv>
 
         </div>
 
         <div className="relative order-1 flex items-center justify-center lg:order-2 lg:justify-end">
-          <motion.div
+          <MotionDiv
             className="relative flex w-full justify-center lg:justify-end"
             initial={{ opacity: 0, scale: 0.86, rotate: -4 }}
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
             transition={{ duration: 0.85, type: 'spring', bounce: 0.35 }}
           >
-            <motion.div
+            <MotionDiv
               animate={{ y: [0, -14, 0] }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
               className="w-full max-w-[720px]"
@@ -89,8 +92,8 @@ export default function HeroSection({ onExplore }) {
                 fit="contain"
                 className="pointer-events-none select-none drop-shadow-[0_24px_40px_rgba(65,33,17,0.12)]"
               />
-            </motion.div>
-          </motion.div>
+            </MotionDiv>
+          </MotionDiv>
         </div>
 
       </div>
