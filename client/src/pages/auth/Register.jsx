@@ -3,25 +3,16 @@ import { Link, useNavigate } from "react-router-dom";
 import { IconAlertCircle, IconLock, IconMail, IconPhone, IconUser } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
-import UserLocationMap from "../../components/LeafletMap";
 import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
-import Label from "../../components/ui/Label";
 
 function Register() {
   const nav = useNavigate();
   const { loginUser } = useContext(AuthContext);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [location, setLocation] = useState({
-    lat: null,
-    lng: null,
-    city: "",
-    country: "",
-    full: "",
-  });
 
   const RegisterUser = async (e) => {
     e.preventDefault();
@@ -48,9 +39,6 @@ function Register() {
         password: e.target.password.value,
         password_confirmation: e.target.password_confirmation.value,
         phone_number: `+63${phone}`,
-        latitude: location.lat,
-        longitude: location.lng,
-        location: location.full || "",
       };
 
       const response = await fetch(`${url}/api/register`, {
@@ -179,31 +167,7 @@ function Register() {
           )}
         </Field>
 
-        <div className="flex flex-col gap-2">
-          <Label required>Select your location</Label>
-
-          <div className="h-[220px] w-full overflow-hidden rounded-[12px] border border-[#e8e4de] shadow-inner">
-            <UserLocationMap editMode={true} setLocation={setLocation} location={location} user={null} />
-          </div>
-
-          {location.full ? (
-            <p className="font-display text-[12px] leading-snug text-[#6f6b68]">📍 {location.full}</p>
-          ) : (
-            <p className="font-display text-[12px] leading-snug text-[#8d867e]">
-              Drop a pin on the map to set your delivery address.
-            </p>
-          )}
-        </div>
-
-        <Button
-          type="submit"
-          fullWidth
-          size="lg"
-          loading={loading}
-          loadingLabel="Signing Up..."
-          disabled={loading || !location.lat}
-          className="mt-2"
-        >
+        <Button type="submit" fullWidth size="lg" loading={loading} loadingLabel="Signing Up..." className="mt-2">
           Sign Up
         </Button>
       </form>
