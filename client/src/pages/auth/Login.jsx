@@ -2,8 +2,6 @@ import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Notification, Loader } from "@mantine/core";
 import AuthContext from "../../context/AuthContext";
-import loginImage from "../../assets/login_image.svg";
-import logo from "../../assets/hoc_logo.png";
 
 function Login() {
   const { loginUser } = useContext(AuthContext);
@@ -40,7 +38,6 @@ function Login() {
 
         <div className="relative z-10 max-w-md w-full">
           {/* Logo */}
-          <img src={logo} alt="Click n' Chick" className="h-20 mb-6" />
 
           {/* Headings */}
           <h1 className="text-[#B54719] font-extrabold text-[90px] mb-0 leading-none hoc_font">
@@ -134,11 +131,7 @@ function Login() {
 
       {/* Right Side Image */}
       <div className="hidden md:flex justify-center items-center relative p-4">
-        <img
-          src={loginImage}
-          alt="Login visual"
-          className="object-cover h-full w-full rounded-l-3xl"
-        />
+              
       </div>
     </div>
   );

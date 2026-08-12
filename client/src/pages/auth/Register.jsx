@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Notification, Loader } from "@mantine/core";
 import AuthContext from "../../context/AuthContext";
 import UserLocationMap from "../../components/LeafletMap";
-import logo from "../../assets/hoc_logo.png";
 
 function Register() {
   const nav = useNavigate();
@@ -103,7 +102,7 @@ function Register() {
         <div className="w-full p-10 bg-white shadow-md rounded-2xl">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <img src={logo} alt="Click n' Chick" className="h-20" />
+            
           </div>
 
           {error && (
