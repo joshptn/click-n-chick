@@ -23,6 +23,19 @@ class Food extends Model
         'description',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'price' => 'integer',
+            // Null means the item is not stock-tracked.
+            'stock_quantity' => 'integer',
+            'prep_time' => 'integer',
+            // Manual override toggle, distinct from the legacy 'available'.
+            'is_available' => 'boolean',
+            'available' => 'boolean',
+        ];
+    }
+
     public function cartItems()
     {
         return $this->hasMany(CartItem::class);
@@ -37,5 +50,20 @@ class Food extends Model
         return $this->belongsTo(Category::class);
     }
 
-   
+    /** Add-ons offered for this item, via the addon_food join table. */
+    public function addons()
+    {
+        return $this->belongsToMany(Addon::class, 'addon_food')
+            ->withTimestamps();
+    }
+
+    public function orderItems()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function stockHolds()
+    {
+        return $this->hasMany(StockHold::class);
+    }
 }

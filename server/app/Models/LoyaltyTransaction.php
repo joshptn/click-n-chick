@@ -2,23 +2,25 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Notification extends Model
+class LoyaltyTransaction extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'user_id',
         'order_id',
-        'title',
-        'body',
-        'notification_type',
-        'is_read',
+        'points_change',
+        'reason',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_read' => 'boolean',
+            // Positive = earned, negative = redeemed.
+            'points_change' => 'integer',
         ];
     }
 
@@ -27,7 +29,7 @@ class Notification extends Model
         return $this->belongsTo(User::class);
     }
 
-    /** Null when the notification is not tied to an order. */
+    /** Null for manual adjustments not tied to an order. */
     public function order()
     {
         return $this->belongsTo(Order::class);

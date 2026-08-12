@@ -15,7 +15,19 @@ class OrderItem extends Model
         'food_id',
         'quantity',
         'price',
+        'unit_price',
+        'subtotal',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'quantity' => 'integer',
+            'price' => 'decimal:2',
+            'unit_price' => 'decimal:2',
+            'subtotal' => 'decimal:2',
+        ];
+    }
 
     public function order()
     {
@@ -25,5 +37,18 @@ class OrderItem extends Model
     public function food()
     {
         return $this->belongsTo(Food::class);
+    }
+
+    /** Add-ons selected for this line, with the price snapshot on the pivot. */
+    public function addons()
+    {
+        return $this->belongsToMany(Addon::class, 'order_item_addons')
+            ->withPivot('unit_price')
+            ->withTimestamps();
+    }
+
+    public function addonSelections()
+    {
+        return $this->hasMany(OrderItemAddon::class);
     }
 }
