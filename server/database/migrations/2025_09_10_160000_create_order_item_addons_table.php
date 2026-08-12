@@ -12,7 +12,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('order_item_id')->constrained('order_items')->cascadeOnDelete();
             $table->foreignId('addon_id')->constrained('addons')->cascadeOnDelete();
-            // Snapshot of the add-on price at order time.
             $table->decimal('unit_price', 10, 2)->default(0);
             $table->timestamps();
 

@@ -13,13 +13,12 @@ return new class extends Migration
     {
         Schema::create('food', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('category_id')->nullable()->constrained('categories')->nullOnDelete();
             $table->string('thumbnail');
             $table->string('food_name');
             $table->integer('price');
             $table->boolean('available')->default(true);
-            // Null means the item is not stock-tracked.
             $table->integer('stock_quantity')->nullable();
-            // Manual override toggle, per the ERD.
             $table->boolean('is_available')->default(true);
             $table->integer('prep_time')->nullable();
             $table->text('description');

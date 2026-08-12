@@ -26,15 +26,14 @@ class CartItemController extends Controller implements HasMiddleware
     private function cartPayloadForUser($user): array
     {
         $cartItems = $user->Cart()
-            ->with('food.categories', 'parent.food')
+            ->with('food.category', 'parent.food')
             ->get();
 
         $cartData = $cartItems->map(function ($item) {
             $food = $item->food;
 
-            $isAddon = $food && $food->categories->contains(
-                fn($cat) => in_array($cat->name, $this->addonCategoryNames, true),
-            );
+            $isAddon = $food
+                && in_array($food->category?->name, $this->addonCategoryNames, true);
 
             $parentMainFoodId = null;
             if ($item->parent_cart_item_id && $item->relationLoaded('parent') && $item->parent) {
@@ -79,13 +78,11 @@ class CartItemController extends Controller implements HasMiddleware
     private function existingAddonCount($mainCartItem, array $categoryNames): int
     {
         return $mainCartItem->addons()
-            ->with('food.categories')
+            ->with('food.category')
             ->get()
             ->filter(fn($addon) =>
                 $addon->food &&
-                $addon->food->categories->contains(
-                    fn($cat) => in_array($cat->name, $categoryNames, true)
-                )
+                in_array($addon->food->category?->name, $categoryNames, true)
             )
             ->sum('quantity');
     }
@@ -147,13 +144,11 @@ class CartItemController extends Controller implements HasMiddleware
 
         foreach ([$this->sideCategoryNames, $this->drinkCategoryNames] as $categoryNames) {
             $addons = $mainCartItem->addons()
-                ->with('food.categories')
+                ->with('food.category')
                 ->get()
                 ->filter(fn($addon) =>
                     $addon->food &&
-                    $addon->food->categories->contains(
-                        fn($cat) => in_array($cat->name, $categoryNames, true)
-                    )
+                    in_array($addon->food->category?->name, $categoryNames, true)
                 );
 
             $remaining = $cap;
@@ -210,7 +205,7 @@ class CartItemController extends Controller implements HasMiddleware
                 ]);
             }
 
-            $cartItem->load('addons.food.categories');
+            $cartItem->load('addons.food.category');
             $this->capAddonQuantitiesToMain($cartItem);
 
         } else {

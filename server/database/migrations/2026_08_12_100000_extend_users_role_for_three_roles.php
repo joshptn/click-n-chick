@@ -12,14 +12,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Normalise the legacy customer value before constraining the column.
         DB::table('users')->where('role', 'user')->update(['role' => 'customer']);
 
         Schema::table('users', function (Blueprint $table) {
             $table->string('role')->default('customer')->change();
         });
 
-        // sqlite (phpunit.xml forces :memory:) cannot ADD CONSTRAINT after the fact.
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check');
             DB::statement(

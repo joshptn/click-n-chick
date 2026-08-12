@@ -27,12 +27,6 @@ class AuthController extends Controller
                 'regex:/^[0-9+\-\s()]+$/'
             ],
 
-            'location' => 'nullable|string|max:255',
-
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
-
-            'note' => 'nullable|string|max:500',
         ]);
 
         $user = new User();
@@ -42,10 +36,6 @@ class AuthController extends Controller
         $user->first_name   = $validated['first_name']   ?? null;
         $user->last_name    = $validated['last_name']    ?? null;
         $user->phone_number = $validated['phone_number'] ?? null;
-        $user->location     = $validated['location']     ?? null;
-        $user->latitude     = $validated['latitude']     ?? null;
-        $user->longitude    = $validated['longitude']    ?? null;
-        $user->note         = $validated['note']         ?? null;
         $user->save();
 
         $user->refresh();
@@ -109,10 +99,6 @@ class AuthController extends Controller
                 'first_name' => 'sometimes|nullable|string|max:255',
                 'last_name' => 'sometimes|nullable|string|max:255',
                 'phone_number' => 'sometimes|nullable|string|max:20',
-                'location' => 'sometimes|nullable|string|max:255',
-                'latitude' => 'sometimes|nullable|numeric|between:-90,90',
-                'longitude' => 'sometimes|nullable|numeric|between:-180,180',
-                'note' => 'sometimes|nullable|string|max:500',
 
                 // Password change: the current password must be supplied and correct.
                 'current_password' => ['required_with:password', 'current_password'],
@@ -135,22 +121,6 @@ class AuthController extends Controller
             }
             if (array_key_exists('phone_number', $validated)) {
                 $user->phone_number = $validated['phone_number'];
-                $changed = true;
-            }
-            if (array_key_exists('location', $validated)) {
-                $user->location = $validated['location'];
-                $changed = true;
-            }
-            if (array_key_exists('note', $validated)) {
-                $user->note = $validated['note'];
-                $changed = true;
-            }
-            if (array_key_exists('latitude', $validated)) {
-                $user->latitude = is_null($validated['latitude']) ? null : (float) $validated['latitude'];
-                $changed = true;
-            }
-            if (array_key_exists('longitude', $validated)) {
-                $user->longitude = is_null($validated['longitude']) ? null : (float) $validated['longitude'];
                 $changed = true;
             }
             if (array_key_exists('password', $validated)) {

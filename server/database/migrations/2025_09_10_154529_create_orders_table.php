@@ -17,38 +17,27 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
             // Nullable: a guest has no saved address.
             $table->foreignId('address_id')->nullable()->constrained('addresses')->nullOnDelete();
-
             $table->string('order_number')->nullable()->unique();
-            // Replaces the former enum 'type' column.
             $table->string('order_type')->nullable();
-            // Set means this is an advance order.
             $table->dateTime('scheduled_for')->nullable();
-
             $table->decimal('total_price', 10, 2);
             $table->decimal('subtotal', 10, 2)->nullable();
             $table->decimal('discount_amount', 10, 2)->default(0);
             $table->decimal('delivery_fee', 10, 2)->default(0);
             $table->decimal('total_amount', 10, 2)->nullable();
-
             $table->string('status')->default('pending');
             $table->string('estimated_time_of_completion')->nullable();
             $table->string('payment_status')->nullable();
-
-            // Guest checkout contact details.
             $table->string('guest_name')->nullable();
             $table->string('guest_phone')->nullable();
             $table->string('guest_email')->nullable();
-
-            // Snapshot of the delivery target at order time.
             $table->string('full_address')->nullable();
             $table->string('longitude')->nullable();
             $table->string('latitude')->nullable();
             $table->string('location')->nullable();
-
             $table->string('reference_id')->nullable();
             $table->string('proof_of_payment')->nullable();
             $table->timestamps();
-
             $table->index('status');
             $table->index('order_type');
         });

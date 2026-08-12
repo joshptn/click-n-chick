@@ -12,21 +12,29 @@ class Food extends Model
     use HasFactory;
 
     protected $fillable = [
+        'category_id',
         'thumbnail',
         'food_name',
         'price',
+        'stock_quantity',
+        'is_available',
+        'prep_time',
         'available',
         'description',
-        'parent_food_id', 
     ];
 
     public function cartItems()
     {
         return $this->hasMany(CartItem::class);
     }
-    public function categories()
+
+    /**
+     * ERD: CATEGORIES ||--o{ FOOD. Replaced the former belongsToMany over the
+     * category_food pivot, which has been retired.
+     */
+    public function category()
     {
-        return $this->belongsToMany(Category::class, 'category_food');
+        return $this->belongsTo(Category::class);
     }
 
    

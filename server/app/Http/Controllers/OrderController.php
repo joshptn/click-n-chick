@@ -95,7 +95,7 @@ class OrderController extends Controller implements HasMiddleware
             $order->total_price = $order->total_price + $dis_price;
             $order->save();
             
-            Websocket::broadcast('order', 'create', $order->load('items.food', 'items.food.categories', 'user'), $order->user->id);
+            Websocket::broadcast('order', 'create', $order->load('items.food', 'items.food.category', 'user'), $order->user->id);
             Notification::notify('order', 'create', $order->user->id, $order);
 
             return response()->json(['message' => 'Order Placed']);
@@ -114,7 +114,7 @@ class OrderController extends Controller implements HasMiddleware
     {
         $user = $request->user();
 
-        $orders = $user->Orders()->with('items.food', 'items.food.categories', 'user')->orderBy('created_at', 'desc')->get();
+        $orders = $user->Orders()->with('items.food', 'items.food.category', 'user')->orderBy('created_at', 'desc')->get();
 
         if ($orders->isEmpty()) {
             return response()->json(['message' => 'No orders found'], 404);
@@ -171,7 +171,7 @@ class OrderController extends Controller implements HasMiddleware
         Http::post(config('services.websocket.http_url') . "/broadcast/order", [
             'event' => 'update',
             'user_id' => $order->user->id,
-            'order' => $order->load('items.food', 'items.food.categories'),
+            'order' => $order->load('items.food', 'items.food.category'),
         ]);
         Notification::notify('order', $order->status, $order->user->id, $order);
 
@@ -198,7 +198,7 @@ class OrderController extends Controller implements HasMiddleware
         Http::post(config('services.websocket.http_url') . "/broadcast/order", [
             'event' => 'update',
             'user_id' => $order->user->id,
-            'order' => $order->load('items.food', 'items.food.categories'),
+            'order' => $order->load('items.food', 'items.food.category'),
         ]);
         Notification::notify('order', 'update', $order->user->id, $order);
 
@@ -218,14 +218,14 @@ class OrderController extends Controller implements HasMiddleware
         $status = $request->get('status');
         $category = $request->get('category');
 
-        $query = Order::with(['items.food.categories', 'user']);
+        $query = Order::with(['items.food.category', 'user']);
 
         if ($status && $status !== "all") {
             $query->where("status", $status);
         }
 
         if ($category && $category !== "all") {
-            $query->whereHas("items.food.categories", function ($q) use ($category) {
+            $query->whereHas("items.food.category", function ($q) use ($category) {
                 $q->where("name", "LIKE", "%{$category}%");
             });
         }

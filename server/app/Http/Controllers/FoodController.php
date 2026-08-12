@@ -29,17 +29,10 @@ class FoodController extends Controller implements HasMiddleware
      */
     public function index()
     {
-        $foods = Food::with(['categories' => function($query) {
-            $query->orderBy('name', 'asc');
-        }])
-        ->get()
-        ->sortBy(function($food) {
-            if (!$food->categories || $food->categories->isEmpty()) {
-                return '';
-            }
-            return $food->categories->first()->name ?? '';
-        })
-        ->values();
+        $foods = Food::with('category')
+            ->get()
+            ->sortBy(fn ($food) => $food->category->name ?? '')
+            ->values();
 
         return response()->json($foods);
     }
@@ -58,7 +51,7 @@ class FoodController extends Controller implements HasMiddleware
                 'price'       => ['required', 'numeric', 'min:0'],
                 'available'   => ['required', 'boolean'],
                 'description' => ['required', 'string', 'max:255'],
-                'categories'  => ['array', 'nullable'],
+                'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             ]);
 
             $validated['thumbnail'] = null;
@@ -70,13 +63,9 @@ class FoodController extends Controller implements HasMiddleware
 
             $food = Food::create($validated);
 
-            if (!empty($validated['categories'])) {
-                $food->categories()->sync($validated['categories']);
-            }
+            Websocket::broadcast('food', 'created', $food->load('category'));
 
-            Websocket::broadcast('food', 'created', $food->load('categories'));
-
-            return response()->json($food->load('categories'), 201);
+            return response()->json($food->load('category'), 201);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -101,7 +90,7 @@ class FoodController extends Controller implements HasMiddleware
      */
     public function show(Food $food)
     {
-        return $food->load('categories');
+        return $food->load('category');
     }
 
     /**
@@ -118,7 +107,7 @@ class FoodController extends Controller implements HasMiddleware
                 'price'       => ['required', 'numeric', 'min:0'], 
                 'available'   => ['required', 'boolean'], 
                 'description' => ['required', 'string', 'max:255'],
-                'categories'  => ['array', 'nullable'], 
+                'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             ]);
 
             if ($request->hasFile('thumbnail')) {
@@ -153,15 +142,9 @@ class FoodController extends Controller implements HasMiddleware
             $food->update($validated);
             $food->refresh();
 
-            if (isset($validated['categories'])) {
-                $food->categories()->sync($validated['categories']);
-            } else {
-                $food->categories()->sync([]);
-            }
+            Websocket::broadcast('food', 'updated', $food->load('category'));
 
-            Websocket::broadcast('food', 'updated', $food->load('categories'));
-
-            return response()->json($food->load('categories'), 200);
+            return response()->json($food->load('category'), 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -194,7 +177,7 @@ class FoodController extends Controller implements HasMiddleware
                 Image::deleteImage($food->thumbnail, 'foods');
             }
 
-            $foodData = $food->load('categories');
+            $foodData = $food->load('category');
             $food->delete();
             
             Websocket::broadcast('food', 'deleted', $foodData);
@@ -216,22 +199,22 @@ class FoodController extends Controller implements HasMiddleware
 
     public function drinks(Request $request)
     {
-        $drinksAndAddons = Food::whereHas('categories', function ($query) {
-                $query->whereIn('name', ['Drinks', 'Addons']);
-            }, '=', 2) 
-            ->with('categories')
+        // Was: foods sitting in BOTH 'Drinks' and 'Addons'. A food now has a
+        // single category, so this matches on 'Drinks' alone.
+        $drinks = Food::whereRelation('category', 'name', 'Drinks')
+            ->with('category')
             ->get();
 
-        return response()->json($drinksAndAddons);
+        return response()->json($drinks);
     }
 
     public function sides(Request $request)
     {
-        $sides = Food::whereHas('categories', function ($query) {
-                $query->whereIn('name', ['Sides', 'Addons']);
-            }, '=', 2) 
-        ->with('categories')
-        ->get();
+        // Was: foods sitting in BOTH 'Sides' and 'Addons'. A food now has a
+        // single category, so this matches on 'Sides' alone.
+        $sides = Food::whereRelation('category', 'name', 'Sides')
+            ->with('category')
+            ->get();
 
         return response()->json($sides);
     }
