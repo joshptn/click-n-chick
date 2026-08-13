@@ -16,6 +16,7 @@ class Food extends Model
         'thumbnail',
         'food_name',
         'price',
+        'size',
         'stock_quantity',
         'is_available',
         'prep_time',
@@ -27,12 +28,9 @@ class Food extends Model
     {
         return [
             'price' => 'integer',
-            // Null means the item is not stock-tracked.
             'stock_quantity' => 'integer',
             'prep_time' => 'integer',
-            // Manual override toggle, distinct from the legacy 'available'.
             'is_available' => 'boolean',
-            'available' => 'boolean',
         ];
     }
 

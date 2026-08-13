@@ -17,7 +17,6 @@ return new class extends Migration
             $table->string('thumbnail');
             $table->string('food_name');
             $table->integer('price');
-            $table->boolean('available')->default(true);
             $table->integer('stock_quantity')->nullable();
             $table->boolean('is_available')->default(true);
             $table->integer('prep_time')->nullable();

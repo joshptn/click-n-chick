@@ -13,9 +13,7 @@ return new class extends Migration
     {
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
-            // Nullable for guest checkout.
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
-            // Nullable: a guest has no saved address.
             $table->foreignId('address_id')->nullable()->constrained('addresses')->nullOnDelete();
             $table->string('order_number')->nullable()->unique();
             $table->string('order_type')->nullable();
@@ -35,11 +33,7 @@ return new class extends Migration
             $table->string('longitude')->nullable();
             $table->string('latitude')->nullable();
             $table->string('location')->nullable();
-            $table->string('reference_id')->nullable();
-            $table->string('proof_of_payment')->nullable();
             $table->timestamps();
-            $table->index('status');
-            $table->index('order_type');
         });
     }
 

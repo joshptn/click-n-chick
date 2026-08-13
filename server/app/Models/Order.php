@@ -14,7 +14,6 @@ class Order extends Model
         'user_id',
         'address_id',
         'order_number',
-        // Replaced the dropped 'type' enum column.
         'order_type',
         'scheduled_for',
         'status',
@@ -23,9 +22,7 @@ class Order extends Model
         'discount_amount',
         'delivery_fee',
         'total_amount',
-        // Was previously listed as the nonexistent 'paid_status'.
         'payment_status',
-        'reference_id',
         'estimated_time_of_completion',
         'guest_name',
         'guest_phone',
@@ -34,7 +31,6 @@ class Order extends Model
         'latitude',
         'longitude',
         'location',
-        'proof_of_payment',
     ];
 
     protected function casts(): array
