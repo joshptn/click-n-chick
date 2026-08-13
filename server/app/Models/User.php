@@ -60,6 +60,60 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Canonical PH mobile form: '+63' followed by the 10-digit subscriber
+     * number. Accepts the shapes people actually type - 09XXXXXXXXX,
+     * 9XXXXXXXXX, +639XXXXXXXXX - plus spaces, dashes and parentheses.
+     *
+     * Returns null when the input cannot be resolved to a PH mobile number,
+     * which callers must treat as "no match" rather than "match anything".
+     */
+    public static function normalizePhoneNumber(?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $raw);
+
+        if ($digits === '') {
+            return null;
+        }
+
+        if (strlen($digits) === 12 && str_starts_with($digits, '63')) {
+            $subscriber = substr($digits, 2);
+        } elseif (strlen($digits) === 11 && str_starts_with($digits, '0')) {
+            $subscriber = substr($digits, 1);
+        } elseif (strlen($digits) === 10) {
+            $subscriber = $digits;
+        } else {
+            return null;
+        }
+
+        return '+63'.$subscriber;
+    }
+
+    /**
+     * Deterministic blind index for phone_number.
+     *
+     * phone_number is cast to 'encrypted', and Laravel's encryption uses a
+     * random IV, so the same number produces different ciphertext every time
+     * and can never be matched in a WHERE clause. This keyed hash gives an
+     * equality-searchable stand-in, stored in the unique phone_number_hash
+     * column. It is keyed on APP_KEY, so rotating APP_KEY invalidates it -
+     * the same constraint the encrypted column already carries.
+     */
+    public static function hashPhoneNumber(?string $raw): ?string
+    {
+        $canonical = static::normalizePhoneNumber($raw);
+
+        if ($canonical === null) {
+            return null;
+        }
+
+        return hash_hmac('sha256', $canonical, (string) config('app.key'));
+    }
+
     public function Cart()
     {
         return $this->hasMany(CartItem::class);

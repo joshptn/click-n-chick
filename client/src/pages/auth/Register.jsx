@@ -58,7 +58,7 @@ function Register() {
       await loginUser({
         preventDefault: () => {},
         target: {
-          email: { value: e.target.email.value },
+          login: { value: e.target.email.value },
           password: { value: e.target.password.value },
         },
       });

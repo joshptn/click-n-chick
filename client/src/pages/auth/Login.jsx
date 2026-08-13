@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { IconAlertCircle, IconLock, IconMail } from "@tabler/icons-react";
+import { IconAlertCircle, IconLock, IconUser } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import AuthLayout from "../../components/auth/AuthLayout";
@@ -10,8 +10,6 @@ import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import toast from "../../components/app/Toast";
 
-// Where each role lands after signing in. Unknown/absent roles fall back to the
-// customer home so a login never dead-ends on an unmatched route.
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
   [ROLES.ADMIN]: "/admin",
@@ -66,14 +64,14 @@ function Login() {
       )}
 
       <form onSubmit={handleLogin} className="flex flex-col gap-4">
-        <Field label="Enter your username or email address">
+        <Field label="Enter your phone number or email address">
           {(id) => (
             <Input
               id={id}
               type="text"
-              name="email"
-              icon={IconMail}
-              placeholder="Username or email address"
+              name="login"
+              icon={IconUser}
+              placeholder="Phone number or email address"
               autoComplete="username"
               required
               disabled={loading}

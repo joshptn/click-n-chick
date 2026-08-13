@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -29,12 +30,21 @@ class AuthController extends Controller
 
         ]);
 
+        $phoneHash = User::hashPhoneNumber($validated['phone_number'] ?? null);
+
+        if ($phoneHash !== null && User::where('phone_number_hash', $phoneHash)->exists()) {
+            throw ValidationException::withMessages([
+                'phone_number' => 'This phone number is already registered.',
+            ]);
+        }
+
         $user = new User();
-        $user->email        = $validated['email'];
-        $user->password     = Hash::make($validated['password']);
-        $user->first_name   = $validated['first_name'];
-        $user->last_name    = $validated['last_name'];
-        $user->phone_number = $validated['phone_number'] ?? null;
+        $user->email             = $validated['email'];
+        $user->password          = Hash::make($validated['password']);
+        $user->first_name        = $validated['first_name'];
+        $user->last_name         = $validated['last_name'];
+        $user->phone_number      = $validated['phone_number'] ?? null;
+        $user->phone_number_hash = $phoneHash;
         $user->save();
 
         $user->refresh();
@@ -47,17 +57,28 @@ class AuthController extends Controller
         ]);
     }
 
-    public function login(Request $request){
-
-         $request->validate([
-            'email' => 'required|email|exists:users',
-            'password' => 'required'
+    public function login(Request $request)
+    {
+        $validated = $request->validate([
+            'login' => ['required_without:email', 'nullable', 'string', 'max:255'],
+            'email' => ['required_without:login', 'nullable', 'string', 'max:255'],
+            'password' => ['required', 'string'],
         ]);
 
-        $user =  User::where('email', $request->email)->first();
+        $identifier = trim((string) ($validated['login'] ?? $validated['email'] ?? ''));
 
-        if(!$user || !Hash::check($request->password, $user->password)){
-            return[ 'message' => 'The credential are wrong' ];
+        if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            $user = User::where('email', $identifier)->first();
+        } else {
+            $phoneHash = User::hashPhoneNumber($identifier);
+
+            $user = $phoneHash === null
+                ? null
+                : User::where('phone_number_hash', $phoneHash)->first();
+        }
+
+        if (!$user || !Hash::check($validated['password'], $user->password)) {
+            return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
         $token = $user->createToken(self::TOKEN_NAME);
@@ -114,7 +135,20 @@ class AuthController extends Controller
                 $changed = true;
             }
             if (array_key_exists('phone_number', $validated)) {
+                $phoneHash = User::hashPhoneNumber($validated['phone_number']);
+
+                if ($phoneHash !== null
+                    && User::where('phone_number_hash', $phoneHash)
+                        ->whereKeyNot($user->getKey())
+                        ->exists()
+                ) {
+                    throw ValidationException::withMessages([
+                        'phone_number' => 'This phone number is already registered.',
+                    ]);
+                }
+
                 $user->phone_number = $validated['phone_number'];
+                $user->phone_number_hash = $phoneHash;
                 $changed = true;
             }
             if (array_key_exists('password', $validated)) {
