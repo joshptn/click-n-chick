@@ -15,18 +15,19 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $accounts = [
-            ['email' => 'superadmin@chicknclick.test', 'name' => 'Super Admin',   'role' => 'super_admin'],
-            ['email' => 'admin@chicknclick.test',      'name' => 'Store Agent',   'role' => 'admin'],
-            ['email' => 'customer@chicknclick.test',   'name' => 'Test Customer', 'role' => 'customer'],
+            ['email' => 'superadmin@chicknclick.test', 'first_name' => 'Super', 'last_name' => 'Admin',    'role' => 'super_admin'],
+            ['email' => 'admin@chicknclick.test',      'first_name' => 'Store', 'last_name' => 'Agent',    'role' => 'admin'],
+            ['email' => 'customer@chicknclick.test',   'first_name' => 'Test',  'last_name' => 'Customer', 'role' => 'customer'],
         ];
 
         foreach ($accounts as $account) {
             User::updateOrCreate(
                 ['email' => $account['email']],
                 [
-                    'name'     => $account['name'],
-                    'role'     => $account['role'],
-                    'password' => Hash::make('password123'),
+                    'first_name' => $account['first_name'],
+                    'last_name'  => $account['last_name'],
+                    'role'       => $account['role'],
+                    'password'   => Hash::make('password123'),
                 ]
             );
         }

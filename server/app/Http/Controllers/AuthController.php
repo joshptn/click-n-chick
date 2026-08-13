@@ -10,14 +10,15 @@ use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
+    private const TOKEN_NAME = 'auth_token';
+
     public function register(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
-            'first_name' => 'nullable|string|max:255',
-            'last_name' => 'nullable|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
 
             'phone_number' => [
                 'nullable',
@@ -29,17 +30,16 @@ class AuthController extends Controller
         ]);
 
         $user = new User();
-        $user->name         = $validated['name'];
         $user->email        = $validated['email'];
         $user->password     = Hash::make($validated['password']);
-        $user->first_name   = $validated['first_name']   ?? null;
-        $user->last_name    = $validated['last_name']    ?? null;
+        $user->first_name   = $validated['first_name'];
+        $user->last_name    = $validated['last_name'];
         $user->phone_number = $validated['phone_number'] ?? null;
         $user->save();
 
         $user->refresh();
 
-        $token = $user->createToken($user->name);
+        $token = $user->createToken(self::TOKEN_NAME);
 
         return response()->json([
             'user' => $user,
@@ -60,7 +60,7 @@ class AuthController extends Controller
             return[ 'message' => 'The credential are wrong' ];
         }
 
-        $token = $user->createToken($user->name);
+        $token = $user->createToken(self::TOKEN_NAME);
 
         return [
             'user' => $user,
@@ -94,7 +94,6 @@ class AuthController extends Controller
             }
 
             $validated = $request->validate([
-                'name' => 'sometimes|required|string|max:255',
                 'first_name' => 'sometimes|nullable|string|max:255',
                 'last_name' => 'sometimes|nullable|string|max:255',
                 'phone_number' => 'sometimes|nullable|string|max:20',
@@ -106,10 +105,6 @@ class AuthController extends Controller
 
             $changed = false;
 
-            if (array_key_exists('name', $validated)) {
-                $user->name = $validated['name'];
-                $changed = true;
-            }
             if (array_key_exists('first_name', $validated)) {
                 $user->first_name = $validated['first_name'];
                 $changed = true;

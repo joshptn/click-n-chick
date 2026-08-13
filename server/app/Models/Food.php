@@ -20,7 +20,6 @@ class Food extends Model
         'stock_quantity',
         'is_available',
         'prep_time',
-        'available',
         'description',
     ];
 
