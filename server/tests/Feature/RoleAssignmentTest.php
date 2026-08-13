@@ -32,15 +32,17 @@ class RoleAssignmentTest extends TestCase
             'email' => 'escalate@example.test',
             'password' => 'password123',
             'password_confirmation' => 'password123',
+            'phone_number' => '+639171234567',
             'role' => 'super_admin',
         ]);
 
-        $response->assertOk();
+        // 201 + no user/token in the body: registration is now the blocking
+        // pending_verification step, not an account handover.
+        $response->assertStatus(201);
 
         $user = User::where('email', 'escalate@example.test')->firstOrFail();
 
         $this->assertSame('customer', $user->role, 'register() must not honour a role supplied in the request.');
-        $this->assertSame('customer', $response->json('user.role'));
     }
 
     public function test_registration_ignores_role_like_aliases_in_the_payload(): void
@@ -51,13 +53,14 @@ class RoleAssignmentTest extends TestCase
             'email' => 'alias@example.test',
             'password' => 'password123',
             'password_confirmation' => 'password123',
+            'phone_number' => '+639171234567',
             'role' => 'super_admin',
             'user_role' => 'super_admin',
             'roles' => ['super_admin'],
             'is_admin' => true,
             'is_super_admin' => true,
             'account_status' => 'privileged',
-        ])->assertOk();
+        ])->assertStatus(201);
 
         $this->assertSame('customer', User::where('email', 'alias@example.test')->value('role'));
     }

@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
+import VerifyPhone from './pages/auth/VerifyPhone'
 import PrivateRoutes from './providers/PrivateRoutes'
 import { ROLES } from './lib/roles'
 import AdminRoutes from './providers/AdminRoutes'
@@ -18,6 +19,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-phone" element={<VerifyPhone />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 

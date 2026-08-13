@@ -15,6 +15,9 @@ return new class extends Migration
             $table->id();
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
+            // Null until the registration OTP is confirmed. Paired with
+            // account_status = 'pending_verification' during the blocking flow.
+            $table->timestamp('phone_verified_at')->nullable();
             $table->string('role')->default('user');
             $table->string('account_status')->default('active');
             $table->integer('loyalty_points')->default(0);

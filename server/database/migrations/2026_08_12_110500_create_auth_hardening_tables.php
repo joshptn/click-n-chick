@@ -18,6 +18,9 @@ return new class extends Migration
             // login, registration, verification
             $table->string('purpose');
             $table->string('ip_address', 45)->nullable();
+            // Wrong guesses against this specific code. Capped so a code cannot be
+            // brute-forced within its validity window even under the rate limits.
+            $table->unsignedTinyInteger('attempts')->default(0);
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('consumed_at')->nullable();
             $table->timestamps();

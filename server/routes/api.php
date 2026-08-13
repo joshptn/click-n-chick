@@ -6,11 +6,17 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OtpController;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/register',[AuthController::class, 'register'])->middleware('throttle:register');
+Route::post('/register',[AuthController::class, 'register'])->middleware(['throttle:register', 'throttle:otp-send']);
+
+// Blocking phone verification. Both are unauthenticated by necessity: the account
+// exists but holds no token until the code is confirmed.
+Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware('throttle:otp-verify');
+Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware('throttle:otp-send');
 Route::post('/login',[AuthController::class, 'login'])->name('login')->middleware('throttle:login');
 Route::get('/user',[AuthController::class, 'userDetails'])->middleware('auth:sanctum');
 Route::put('/user/update',[AuthController::class, 'updateUser'])->middleware(['auth:sanctum', 'throttle:user-update']);

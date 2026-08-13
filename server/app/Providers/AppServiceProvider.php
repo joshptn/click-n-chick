@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\User;
+use App\Services\Sms\LogSmsSender;
+use App\Services\Sms\PhilSmsClient;
+use App\Services\Sms\SmsSender;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -15,7 +19,30 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // PhilSMS stays behind an explicit switch. As of 2026-08-13 the account has
+        // no authorized sender ID - neither an alphanumeric brand ID (approval
+        // excludes academic use) nor the owner's own number - so every send is
+        // rejected by the provider. Enabling it before a sender ID is approved
+        // would turn registration into a 500.
         //
+        // Flip PHILSMS_ENABLED=true once the dashboard approves a sender ID; the
+        // response shape is already confirmed and PhilSmsClient is ready.
+        $this->app->bind(SmsSender::class, function ($app) {
+            $enabled = (bool) config('services.philsms.enabled')
+                && filled(config('services.philsms.token'))
+                && filled(config('services.philsms.sender_id'));
+
+            // Never let a test suite reach the real provider.
+            if (! $enabled || $app->runningUnitTests()) {
+                return new LogSmsSender();
+            }
+
+            return new PhilSmsClient(
+                (string) config('services.philsms.endpoint'),
+                (string) config('services.philsms.token'),
+                (string) config('services.philsms.sender_id'),
+            );
+        });
     }
 
     /**
@@ -57,6 +84,33 @@ class AppServiceProvider extends ServiceProvider
         // Authenticated profile writes.
         RateLimiter::for('user-update', function (Request $request) {
             return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Sending an OTP costs real money and texts a handset that may not belong to
+        // whoever submitted the form, so the phone and the IP are limited separately
+        // and both must pass. The per-phone limit also protects the recipient: PhilSMS
+        // warns that repeated near-identical messages can get a number temporarily
+        // blocked from receiving SMS altogether.
+        RateLimiter::for('otp-send', function (Request $request) {
+            $phoneKey = User::hashPhoneNumber($request->input('phone_number')) ?? 'unresolved';
+
+            return [
+                Limit::perMinutes(15, 3)->by('otp-send:phone:'.$phoneKey),
+                Limit::perMinutes(1440, 10)->by('otp-send:phone-day:'.$phoneKey),
+                Limit::perMinutes(15, 5)->by('otp-send:ip:'.$request->ip()),
+                Limit::perMinutes(1440, 30)->by('otp-send:ip-day:'.$request->ip()),
+            ];
+        });
+
+        // Verification is the brute-force surface. Per-code attempts are capped in
+        // OtpService as well; this stops an attacker cycling fresh codes instead.
+        RateLimiter::for('otp-verify', function (Request $request) {
+            $phoneKey = User::hashPhoneNumber($request->input('phone_number')) ?? 'unresolved';
+
+            return [
+                Limit::perMinutes(15, 10)->by('otp-verify:phone:'.$phoneKey),
+                Limit::perMinutes(15, 20)->by('otp-verify:ip:'.$request->ip()),
+            ];
         });
 
         // Order placement writes an order, uploads proof of payment to Cloudinary and

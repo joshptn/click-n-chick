@@ -15,9 +15,13 @@ class OtpCode extends Model
         'code_hash',
         'purpose',
         'ip_address',
+        'attempts',
         'expires_at',
         'consumed_at',
     ];
+
+    /** otp_codes.purpose for the blocking registration flow. */
+    public const PURPOSE_REGISTRATION = 'registration';
 
     protected $hidden = [
         'code_hash',
@@ -26,6 +30,7 @@ class OtpCode extends Model
     protected function casts(): array
     {
         return [
+            'attempts' => 'integer',
             'expires_at' => 'datetime',
             'consumed_at' => 'datetime',
         ];

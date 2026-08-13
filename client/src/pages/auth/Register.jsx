@@ -1,8 +1,7 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { IconAlertCircle, IconCheck, IconLock, IconMail, IconPhone, IconUser } from "@tabler/icons-react";
 
-import AuthContext from "../../context/AuthContext";
 import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
@@ -11,7 +10,6 @@ import toast from "../../components/app/Toast";
 
 function Register() {
   const nav = useNavigate();
-  const { loginUser } = useContext(AuthContext);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -54,16 +52,16 @@ function Register() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Registration failed");
 
-      // Auto-login after successful registration
-      await loginUser({
-        preventDefault: () => {},
-        target: {
-          login: { value: e.target.email.value },
-          password: { value: e.target.password.value },
+      // Blocking flow: the account exists but holds no token until the phone is
+      // verified, so there is no auto-login here and no way past this screen.
+      nav("/verify-phone", {
+        replace: true,
+        state: {
+          phoneNumber: body.phone_number,
+          maskedPhone: data.phone_number,
+          resendAvailableIn: data.resend_available_in,
         },
       });
-
-      nav("/home");
     } catch (err) {
       console.error("Registration error:", err);
       setError(err.message);

@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\Otp\OtpService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -13,48 +16,112 @@ class AuthController extends Controller
 {
     private const TOKEN_NAME = 'auth_token';
 
-    public function register(Request $request)
+    /**
+     * Step 1 of the blocking registration flow.
+     *
+     * Creates the account as pending_verification and texts an OTP. No token is
+     * issued and no authenticated access is granted here - the caller must clear
+     * OtpController::verify first. There is no skip path.
+     */
+    public function register(Request $request, OtpService $otp)
     {
+        // Uniqueness is resolved by hand below rather than with a `unique` rule:
+        // an unverified row for the same email/phone must be reusable as a resend
+        // instead of being rejected as a duplicate.
         $validated = $request->validate([
-            'email' => 'required|string|email|max:255|unique:users,email',
+            'email' => 'required|string|email|max:255',
             'password' => 'required|string|min:8|confirmed',
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-
             'phone_number' => [
-                'nullable',
+                'required',
                 'string',
                 'max:20',
-                'regex:/^[0-9+\-\s()]+$/'
+                'regex:/^[0-9+\-\s()]+$/',
             ],
-
         ]);
 
-        $phoneHash = User::hashPhoneNumber($validated['phone_number'] ?? null);
+        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
 
-        if ($phoneHash !== null && User::where('phone_number_hash', $phoneHash)->exists()) {
+        if ($phoneHash === null) {
             throw ValidationException::withMessages([
-                'phone_number' => 'This phone number is already registered.',
+                'phone_number' => 'Enter a valid Philippine mobile number.',
             ]);
         }
 
-        $user = new User();
+        $user = DB::transaction(function () use ($validated, $phoneHash) {
+            $pending = User::query()
+                ->where('account_status', User::STATUS_PENDING_VERIFICATION)
+                ->where(function ($query) use ($validated, $phoneHash) {
+                    $query->where('email', $validated['email'])
+                        ->orWhere('phone_number_hash', $phoneHash);
+                })
+                ->lockForUpdate()
+                ->first();
+
+            if ($pending !== null) {
+                if ($pending->created_at->gt(now()->subHours(User::PENDING_VERIFICATION_HOURS))) {
+                    // Live pending signup. Refresh the details from this submission
+                    // and fall through to a resend rather than erroring.
+                    return $this->fillRegistration($pending, $validated, $phoneHash);
+                }
+
+                // Past the abandonment window: the row is forfeit and this attempt
+                // may take the email/phone over.
+                $pending->delete();
+            }
+
+            // Only accounts that got past verification block a signup.
+            if (User::where('email', $validated['email'])->exists()) {
+                throw ValidationException::withMessages([
+                    'email' => 'This email address is already registered.',
+                ]);
+            }
+
+            if (User::where('phone_number_hash', $phoneHash)->exists()) {
+                throw ValidationException::withMessages([
+                    'phone_number' => 'This phone number is already registered.',
+                ]);
+            }
+
+            return $this->fillRegistration(new User(), $validated, $phoneHash);
+        });
+
+        $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip());
+
+        return response()->json([
+            'status' => User::STATUS_PENDING_VERIFICATION,
+            'message' => 'We sent a verification code to your phone.',
+            'phone_number' => $this->maskPhoneNumber($user->phone_number),
+            'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
+            'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
+        ], 201);
+    }
+
+    /** Apply a registration submission to a new or reused pending row. */
+    private function fillRegistration(User $user, array $validated, string $phoneHash): User
+    {
         $user->email             = $validated['email'];
         $user->password          = Hash::make($validated['password']);
         $user->first_name        = $validated['first_name'];
         $user->last_name         = $validated['last_name'];
-        $user->phone_number      = $validated['phone_number'] ?? null;
+        $user->phone_number      = $validated['phone_number'];
         $user->phone_number_hash = $phoneHash;
+        $user->account_status    = User::STATUS_PENDING_VERIFICATION;
+        $user->phone_verified_at = null;
         $user->save();
 
-        $user->refresh();
+        return $user->refresh();
+    }
 
-        $token = $user->createToken(self::TOKEN_NAME);
+    /** '+639171234567' -> '+639*****567', for echoing back to the UI. */
+    private function maskPhoneNumber(?string $phone): ?string
+    {
+        if ($phone === null || strlen($phone) < 7) {
+            return $phone;
+        }
 
-        return response()->json([
-            'user' => $user,
-            'token' => $token->plainTextToken
-        ]);
+        return substr($phone, 0, 4).str_repeat('*', strlen($phone) - 7).substr($phone, -3);
     }
 
     public function login(Request $request)
@@ -79,6 +146,17 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
             return response()->json(['message' => 'The credentials are wrong'], 401);
+        }
+
+        // Blocking flow: correct credentials are not enough while the phone is
+        // unverified. Answered distinctly (and only after the password checks out,
+        // so it is not an enumeration signal) so the UI can route to the code screen.
+        if ($user->isPendingVerification()) {
+            return response()->json([
+                'status' => User::STATUS_PENDING_VERIFICATION,
+                'message' => 'Verify your phone number to finish setting up your account.',
+                'phone_number' => $this->maskPhoneNumber($user->phone_number),
+            ], 403);
         }
 
         $token = $user->createToken(self::TOKEN_NAME);
