@@ -30,6 +30,18 @@ function Login() {
       const data = await loginUser(e);
       nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home");
     } catch (err) {
+      // 403 means the credentials were right but the phone is still unverified.
+      // Send them to finish the blocking flow rather than showing a dead error.
+      if (err.status === 403 && err.payload?.status === "pending_verification") {
+        nav("/verify-phone", {
+          state: {
+            phoneNumber: e.target.login.value.trim(),
+            maskedPhone: err.payload.phone_number,
+          },
+        });
+        return;
+      }
+
       setError(err.message);
       setTimeout(() => setError(""), 4000);
     } finally {

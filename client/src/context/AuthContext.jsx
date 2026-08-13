@@ -20,6 +20,23 @@ export function AuthProvider({children}) {
 
     const url = import.meta.env.VITE_API_URL
 
+    /**
+     * Start a session from a {user, token} payload.
+     *
+     * Login is not the only endpoint that issues one - OTP verification returns
+     * the same shape so a freshly verified account is signed in without a second
+     * round trip to /login.
+     */
+    const adoptSession = (data) => {
+        setToken(data.token);
+        setUser(data.user);
+
+        localStorage.setItem('token', JSON.stringify(data.token));
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        return data;
+    };
+
     const loginUser = async (e) => {
         e.preventDefault();
         const url = import.meta.env.VITE_API_URL;
@@ -38,16 +55,17 @@ export function AuthProvider({children}) {
         const data = await response.json();
 
         if (!response.ok) {
-            // throw error so Login component can catch it
-            throw new Error(data.message || 'Login failed. Check credentials.');
+            // throw error so Login component can catch it. The status and body ride
+            // along so the caller can tell an unverified account (403) apart from
+            // bad credentials (401) and route to the OTP screen.
+            const error = new Error(data.message || 'Login failed. Check credentials.');
+            error.status = response.status;
+            error.payload = data;
+            throw error;
         }
-        
-        if(data.token != undefined){
-            setToken(data.token);
-            setUser(data.user);
 
-            localStorage.setItem('token', JSON.stringify(data.token));
-            localStorage.setItem('user', JSON.stringify(data.user));
+        if(data.token != undefined){
+            adoptSession(data);
 
             return data;
         }else{
@@ -68,6 +86,7 @@ export function AuthProvider({children}) {
 
     var context = {
         loginUser:loginUser,
+        adoptSession:adoptSession,
         logOut:logoutUser,
         user:user,
         token:token,

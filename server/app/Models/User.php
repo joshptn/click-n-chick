@@ -52,12 +52,31 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
             // Left exactly as-is - see the note raised alongside this change.
             'phone_number' => 'encrypted',
             'loyalty_points' => 'integer',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    /** Account exists but the registration OTP has not been confirmed yet. */
+    public const STATUS_PENDING_VERIFICATION = 'pending_verification';
+
+    /**
+     * How long an unverified signup holds its email/phone. Past this the row is
+     * abandoned: a new signup may take the details over, and the purge command
+     * will delete it. Long enough to survive "I'll finish this after work",
+     * short enough that a typo'd number is not squatted on indefinitely.
+     */
+    public const PENDING_VERIFICATION_HOURS = 24;
+
+    public const STATUS_ACTIVE = 'active';
+
+    public function isPendingVerification(): bool
+    {
+        return $this->account_status === self::STATUS_PENDING_VERIFICATION;
     }
 
     /**

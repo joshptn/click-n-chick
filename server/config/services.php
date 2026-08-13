@@ -35,4 +35,17 @@ return [
         ],
     ],
 
+    'sms' => [
+        // 'log' writes the OTP to the log instead of calling the provider.
+        // Default everywhere; only a deliberate manual test flips it.
+        'driver' => env('SMS_DRIVER', 'log'),
+    ],
+
+    'semaphore' => [
+        'endpoint' => env('SEMAPHORE_ENDPOINT', 'https://api.semaphore.co/api/v4/otp'),
+        'key' => env('SEMAPHORE_API_KEY'),
+        // Empty -> omit `sendername` and let the account default apply.
+        'sender_name' => env('SEMAPHORE_SENDER_NAME'),
+    ],
+
 ];

@@ -136,9 +136,19 @@ class LoginIdentifierTest extends TestCase
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'phone_number' => '+639998887777',
-        ])->assertOk();
+        ])->assertStatus(201);
 
-        $this->assertNotNull(User::where('email', 'new@example.test')->value('phone_number_hash'));
+        $user = User::where('email', 'new@example.test')->firstOrFail();
+
+        $this->assertNotNull($user->phone_number_hash);
+
+        // Registration is now the blocking pending_verification step. Phone
+        // verification itself is covered by PhoneVerificationTest, so activate
+        // directly here to keep this test on identifier resolution.
+        $user->forceFill([
+            'account_status' => User::STATUS_ACTIVE,
+            'phone_verified_at' => now(),
+        ])->save();
 
         $this->postJson('/api/login', ['login' => '09998887777', 'password' => 'password123'])
             ->assertOk()
