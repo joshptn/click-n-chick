@@ -29,7 +29,7 @@ export function AuthProvider({children}) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({
-            email: e.target.email.value,
+            login: e.target.login.value,
             password: e.target.password.value,
             }),
             credentials: 'include',
@@ -54,7 +54,6 @@ export function AuthProvider({children}) {
             throw new Error(data.message || 'Login failed. Check credentials.');
         }
 
-         // return for optional chaining in Login component
         } catch (err) {
         throw err; // propagate to Login component
         }

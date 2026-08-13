@@ -27,7 +27,8 @@ class RoleAssignmentTest extends TestCase
     public function test_registration_ignores_a_role_field_in_the_payload(): void
     {
         $response = $this->postJson('/api/register', [
-            'name' => 'Escalation Attempt',
+            'first_name' => 'Escalation',
+            'last_name' => 'Attempt',
             'email' => 'escalate@example.test',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -45,7 +46,8 @@ class RoleAssignmentTest extends TestCase
     public function test_registration_ignores_role_like_aliases_in_the_payload(): void
     {
         $this->postJson('/api/register', [
-            'name' => 'Alias Attempt',
+            'first_name' => 'Alias',
+            'last_name' => 'Attempt',
             'email' => 'alias@example.test',
             'password' => 'password123',
             'password_confirmation' => 'password123',
@@ -70,14 +72,14 @@ class RoleAssignmentTest extends TestCase
 
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/user/update', [
-                'name' => 'Renamed',
+                'first_name' => 'Renamed',
                 'role' => 'super_admin',
                 'account_status' => 'banned',
             ])
             ->assertOk();
 
         $fresh = $user->fresh();
-        $this->assertSame('Renamed', $fresh->name);
+        $this->assertSame('Renamed', $fresh->first_name);
         $this->assertSame('customer', $fresh->role, 'Self-service update must not change role.');
     }
 

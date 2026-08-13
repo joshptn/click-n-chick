@@ -1,12 +1,13 @@
 import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { IconAlertCircle, IconLock, IconMail, IconPhone, IconUser } from "@tabler/icons-react";
+import { IconAlertCircle, IconCheck, IconLock, IconMail, IconPhone, IconUser } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
+import toast from "../../components/app/Toast";
 
 function Register() {
   const nav = useNavigate();
@@ -34,7 +35,6 @@ function Register() {
       const body = {
         first_name: e.target.first_name.value,
         last_name: e.target.last_name.value,
-        name: e.target.name.value,
         email: e.target.email.value,
         password: e.target.password.value,
         password_confirmation: e.target.password_confirmation.value,
@@ -58,7 +58,7 @@ function Register() {
       await loginUser({
         preventDefault: () => {},
         target: {
-          email: { value: e.target.email.value },
+          login: { value: e.target.email.value },
           password: { value: e.target.password.value },
         },
       });
@@ -100,12 +100,6 @@ function Register() {
       )}
 
       <form onSubmit={RegisterUser} className="flex flex-col gap-4">
-        <Field label="Enter your username" required>
-          {(id) => (
-            <Input id={id} type="text" name="name" icon={IconUser} placeholder="Username" autoComplete="username" required />
-          )}
-        </Field>
-
         <Field label="Enter your email address" required>
           {(id) => (
             <Input id={id} type="email" name="email" icon={IconMail} placeholder="Email address" autoComplete="email" required />
@@ -167,7 +161,47 @@ function Register() {
           )}
         </Field>
 
-        <Button type="submit" fullWidth size="lg" loading={loading} loadingLabel="Signing Up..." className="mt-2">
+        <div className="mt-1 flex items-start gap-3">
+          {/* The native input stays visible (appearance-none, not sr-only) so the
+              browser can focus it when `required` blocks submission. */}
+          <span className="relative mt-px flex shrink-0">
+            <input
+              id="terms"
+              type="checkbox"
+              name="terms"
+              required
+              className="peer h-5 w-5 cursor-pointer appearance-none rounded-full border-2 border-[#d9d3cb] bg-white transition-colors duration-150 checked:border-brand-500 checked:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+            />
+
+            <IconCheck
+              size={12}
+              stroke={3.5}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 m-auto text-white opacity-0 transition-opacity duration-150 peer-checked:opacity-100"
+            />
+          </span>
+
+          <p className="font-display text-[13px] leading-snug text-[#6f6b68]">
+            <label htmlFor="terms" className="cursor-pointer">I agree to the</label>{" "}
+            <button
+              type="button"
+              onClick={() => toast.info("Our Terms of Service page is on the way.", "Coming soon")}
+              className="bg-transparent font-semibold text-brand-600 hover:underline"
+            >
+              Terms of Service
+            </button>{" "}
+            <label htmlFor="terms" className="cursor-pointer">and</label>{" "}
+            <button
+              type="button"
+              onClick={() => toast.info("Our Privacy Policy page is on the way.", "Coming soon")}
+              className="bg-transparent font-semibold text-brand-600 hover:underline"
+            >
+              Privacy Policy
+            </button>
+          </p>
+        </div>
+
+        <Button type="submit" fullWidth size="lg" loading={loading} loadingLabel="Signing Up..." className="mt-1">
           Sign Up
         </Button>
       </form>
