@@ -22,6 +22,31 @@ class OtpService
     /** Minimum gap between two sends to the same number. */
     public const RESEND_COOLDOWN_SECONDS = 60;
 
+    /**
+     * One SMS segment. Semaphore's OTP route bills 2 credits per 160 characters,
+     * so spilling into a second segment doubles the cost of every send.
+     */
+    public const MAX_MESSAGE_LENGTH = 160;
+
+    /**
+     * The message as sent to the provider.
+     *
+     * '{otp}' stays literal: Semaphore substitutes it from the `code` parameter.
+     * Interpolating it here would make Semaphore append a second code of its own.
+     * Deliberately link-free - Smart blocks shortened URLs at the telco level.
+     */
+    public static function messageTemplate(): string
+    {
+        return '{otp} is your Click n Chick verification code. It expires in '
+            .self::EXPIRY_MINUTES.' minutes. Do not share it with anyone.';
+    }
+
+    /** Worst-case rendered length, used to keep the send inside one segment. */
+    public static function renderedMessageLength(): int
+    {
+        return strlen(str_replace('{otp}', str_repeat('0', self::CODE_LENGTH), self::messageTemplate()));
+    }
+
     public function __construct(private SmsSender $sms)
     {
     }
@@ -57,12 +82,7 @@ class OtpService
             ]);
         });
 
-        // Deliberately link-free: Smart blocks shortened URLs at the telco level.
-        $this->sms->send(
-            $user->phone_number,
-            "{$code} is your Click n Chick verification code. It expires in "
-                .self::EXPIRY_MINUTES.' minutes. Do not share it with anyone.'
-        );
+        $this->sms->send($user->phone_number, self::messageTemplate(), $code);
 
         return $otp;
     }

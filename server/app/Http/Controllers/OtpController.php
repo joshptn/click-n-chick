@@ -97,10 +97,10 @@ class OtpController extends Controller
         $wait = $this->otp->secondsUntilResendAllowed($phoneHash, OtpCode::PURPOSE_REGISTRATION);
 
         if ($wait > 0) {
-            // A per-number cooldown on top of the throttle. PhilSMS warns that
-            // repeated near-identical messages can get the recipient temporarily
-            // blocked from receiving SMS at all, so a customer mashing "resend"
-            // must not be able to lock out their own handset.
+            // A per-number cooldown on top of the throttle. Semaphore's OTP
+            // endpoint is explicitly NOT rate limited on their side, so nothing
+            // upstream stops a customer mashing "resend" from burning credits and
+            // spamming their own handset. This cooldown is load-bearing.
             return response()->json([
                 'message' => "Please wait {$wait}s before requesting another code.",
                 'resend_available_in' => $wait,

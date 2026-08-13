@@ -35,13 +35,17 @@ return [
         ],
     ],
 
-    'philsms' => [
-        // Master switch. Leave false until the dashboard approves a sender ID -
-        // the provider rejects every send without one.
-        'enabled' => env('PHILSMS_ENABLED', false),
-        'endpoint' => env('PHILSMS_ENDPOINT', 'https://dashboard.philsms.com/api/v3/sms/send'),
-        'token' => env('PHILSMS_API_TOKEN'),
-        'sender_id' => env('PHILSMS_SENDER_ID', 'ClicknChick'),
+    'sms' => [
+        // 'log' writes the OTP to the log instead of calling the provider.
+        // Default everywhere; only a deliberate manual test flips it.
+        'driver' => env('SMS_DRIVER', 'log'),
+    ],
+
+    'semaphore' => [
+        'endpoint' => env('SEMAPHORE_ENDPOINT', 'https://api.semaphore.co/api/v4/otp'),
+        'key' => env('SEMAPHORE_API_KEY'),
+        // Empty -> omit `sendername` and let the account default apply.
+        'sender_name' => env('SEMAPHORE_SENDER_NAME'),
     ],
 
 ];

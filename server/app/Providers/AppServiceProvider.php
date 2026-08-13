@@ -4,7 +4,7 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Services\Sms\LogSmsSender;
-use App\Services\Sms\PhilSmsClient;
+use App\Services\Sms\SemaphoreClient;
 use App\Services\Sms\SmsSender;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -19,28 +19,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // PhilSMS stays behind an explicit switch. As of 2026-08-13 the account has
-        // no authorized sender ID - neither an alphanumeric brand ID (approval
-        // excludes academic use) nor the owner's own number - so every send is
-        // rejected by the provider. Enabling it before a sender ID is approved
-        // would turn registration into a 500.
-        //
-        // Flip PHILSMS_ENABLED=true once the dashboard approves a sender ID; the
-        // response shape is already confirmed and PhilSmsClient is ready.
+        // SMS_DRIVER defaults to 'log', so normal development and every test run
+        // write the code to the log rather than texting a handset. Semaphore's OTP
+        // endpoint is NOT rate limited on their side, and repeated live testing
+        // risks the account, so reaching the real provider has to be deliberate.
         $this->app->bind(SmsSender::class, function ($app) {
-            $enabled = (bool) config('services.philsms.enabled')
-                && filled(config('services.philsms.token'))
-                && filled(config('services.philsms.sender_id'));
+            $usesProvider = config('services.sms.driver') === 'semaphore'
+                && filled(config('services.semaphore.key'));
 
-            // Never let a test suite reach the real provider.
-            if (! $enabled || $app->runningUnitTests()) {
+            // A test run must never reach the provider, whatever the env says.
+            if (! $usesProvider || $app->runningUnitTests()) {
                 return new LogSmsSender();
             }
 
-            return new PhilSmsClient(
-                (string) config('services.philsms.endpoint'),
-                (string) config('services.philsms.token'),
-                (string) config('services.philsms.sender_id'),
+            return new SemaphoreClient(
+                (string) config('services.semaphore.endpoint'),
+                (string) config('services.semaphore.key'),
+                config('services.semaphore.sender_name') ?: null,
             );
         });
     }
@@ -88,9 +83,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Sending an OTP costs real money and texts a handset that may not belong to
         // whoever submitted the form, so the phone and the IP are limited separately
-        // and both must pass. The per-phone limit also protects the recipient: PhilSMS
-        // warns that repeated near-identical messages can get a number temporarily
-        // blocked from receiving SMS altogether.
+        // and both must pass. These are the ONLY limits in play: Semaphore's OTP
+        // endpoint is documented as not rate limited, so nothing upstream backs
+        // this up if it is wrong. Treat as load-bearing, not best-effort.
         RateLimiter::for('otp-send', function (Request $request) {
             $phoneKey = User::hashPhoneNumber($request->input('phone_number')) ?? 'unresolved';
 

@@ -28,9 +28,16 @@ class PhoneVerificationTest extends TestCase
             {
             }
 
-            public function send(string $to, string $message): void
+            public function send(string $to, string $message, ?string $otpCode = null): void
             {
-                $this->sent[] = ['to' => $to, 'message' => $message];
+                $this->sent[] = [
+                    'to' => $to,
+                    'template' => $message,
+                    'code' => $otpCode,
+                    // What the recipient actually reads, once the provider
+                    // substitutes {otp} from the code parameter.
+                    'message' => $otpCode === null ? $message : str_replace('{otp}', $otpCode, $message),
+                ];
             }
         });
     }
@@ -85,6 +92,31 @@ class PhoneVerificationTest extends TestCase
         $this->assertStringNotContainsStringIgnoringCase('http', $message);
         $this->assertStringNotContainsString('://', $message);
         $this->assertStringNotContainsString('www.', $message);
+    }
+
+    public function test_the_code_travels_separately_from_the_template(): void
+    {
+        $this->postJson('/api/register', $this->payload())->assertStatus(201);
+
+        $sent = end($this->sent);
+
+        // Semaphore substitutes {otp} from the `code` parameter. If the template
+        // arrived already interpolated, Semaphore would append a second code of
+        // its own and the user would receive two.
+        $this->assertStringContainsString('{otp}', $sent['template']);
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $sent['code']);
+        $this->assertStringNotContainsString($sent['code'], $sent['template']);
+    }
+
+    public function test_the_message_fits_a_single_160_character_segment(): void
+    {
+        // Semaphore's OTP route bills 2 credits per 160 characters, so a second
+        // segment doubles the cost of every send.
+        $this->assertLessThanOrEqual(
+            OtpService::MAX_MESSAGE_LENGTH,
+            OtpService::renderedMessageLength(),
+            'The OTP message spilled into a second SMS segment.'
+        );
     }
 
     public function test_a_pending_account_cannot_log_in(): void
