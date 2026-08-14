@@ -53,6 +53,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
+            'privacy_consent_at' => 'datetime',
             'password' => 'hashed',
             // Left exactly as-is - see the note raised alongside this change.
             'phone_number' => 'encrypted',
@@ -77,6 +78,12 @@ class User extends Authenticatable
     public function isPendingVerification(): bool
     {
         return $this->account_status === self::STATUS_PENDING_VERIFICATION;
+    }
+
+    /** Whether the user has agreed to storage of their address and order history. */
+    public function hasGivenPrivacyConsent(): bool
+    {
+        return $this->privacy_consent_at !== null;
     }
 
     /**
