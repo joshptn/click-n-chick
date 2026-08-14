@@ -18,6 +18,11 @@ return new class extends Migration
             // Null until the registration OTP is confirmed. Paired with
             // account_status = 'pending_verification' during the blocking flow.
             $table->timestamp('phone_verified_at')->nullable();
+            // RA 10173 (Data Privacy Act) consent to store delivery address and
+            // order history. A timestamp rather than a boolean: demonstrating
+            // consent requires knowing when it was given, and null doubles as
+            // "not yet consented" so withdrawal is just setting it back to null.
+            $table->timestamp('privacy_consent_at')->nullable();
             $table->string('role')->default('user');
             $table->string('account_status')->default('active');
             $table->integer('loyalty_points')->default(0);

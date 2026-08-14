@@ -30,8 +30,8 @@ class RoleAssignmentTest extends TestCase
             'first_name' => 'Escalation',
             'last_name' => 'Attempt',
             'email' => 'escalate@example.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
             'phone_number' => '+639171234567',
             'role' => 'super_admin',
         ]);
@@ -51,8 +51,8 @@ class RoleAssignmentTest extends TestCase
             'first_name' => 'Alias',
             'last_name' => 'Attempt',
             'email' => 'alias@example.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
             'phone_number' => '+639171234567',
             'role' => 'super_admin',
             'user_role' => 'super_admin',
@@ -96,8 +96,8 @@ class RoleAssignmentTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/user/update', [
                 'current_password' => 'not-the-password',
-                'password' => 'brand-new-password',
-                'password_confirmation' => 'brand-new-password',
+                'password' => 'Brand-New-Password1',
+                'password_confirmation' => 'Brand-New-Password1',
             ])
             ->assertStatus(422);
 
@@ -107,12 +107,12 @@ class RoleAssignmentTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/user/update', [
                 'current_password' => 'original-password',
-                'password' => 'brand-new-password',
-                'password_confirmation' => 'brand-new-password',
+                'password' => 'Brand-New-Password1',
+                'password_confirmation' => 'Brand-New-Password1',
             ])
             ->assertOk();
 
-        $this->assertTrue(Hash::check('brand-new-password', $user->fresh()->password));
+        $this->assertTrue(Hash::check('Brand-New-Password1', $user->fresh()->password));
     }
 
     // ---------------------------------------------------------------------

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Rules\StrongPassword;
 use App\Services\Otp\OtpService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +31,7 @@ class AuthController extends Controller
         // instead of being rejected as a duplicate.
         $validated = $request->validate([
             'email' => 'required|string|email|max:255',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => ['required', 'string', 'confirmed', new StrongPassword()],
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'phone_number' => [
@@ -199,7 +200,7 @@ class AuthController extends Controller
 
                 // Password change: the current password must be supplied and correct.
                 'current_password' => ['required_with:password', 'current_password'],
-                'password' => 'sometimes|required|string|min:8|confirmed',
+                'password' => ['sometimes', 'required', 'string', 'confirmed', new StrongPassword()],
             ]);
 
             $changed = false;

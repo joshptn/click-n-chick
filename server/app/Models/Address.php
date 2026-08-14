@@ -18,6 +18,7 @@ class Address extends Model
         'longitude',
         'latitude',
         'location',
+        'delivery_note',
         'is_default',
     ];
 
