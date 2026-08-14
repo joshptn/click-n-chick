@@ -4,64 +4,41 @@
 
 A web-based online ordering and restaurant management platform for **BES House of Chicken**. The system supports customers and store personnel through online ordering, account management, menu and stock management, order fulfilment, payments, delivery, notifications, and restaurant operations.
 
-## 🚀 Key Features
+## Key Features
 
-- **Customer Account & Authentication**
-  - Customer registration and phone verification
-  - Login and account management
-  - Two-factor authentication and account security features
+- **Automated Discount Calculation:** Employs built-in logic to accurately calculate Senior Citizen and PWD discounts, including VAT exemptions. The system automatically applies the legal percentage reductions to the bill, ensuring compliance with Philippine law and reducing manual arithmetic errors.
 
-- **Menu & Catalog**
-  - Browse food items and categories
-  - Manage menu items, categories, prices, and availability
-  - Manage physical food stock
+- **Centralized Navigation and Catalog Provisioning:** Authorized managers are provided with persistent sidebar navigation for quick access to business management modules. Food and category management allow authorized managers to add, edit, or delete items while keeping the customer-facing menu updated.
 
-- **Cart & Ordering**
-  - Add food items to the cart
-  - Review order summaries
-  - Place immediate orders
-  - Support advance/scheduled orders
+- **Interactive Menu and Item Customizations:** Products are organized into menu categories, allowing customers to view food details, select available customizations and add-ons, and add orders to the cart with toast notifications.
 
-- **Order Queue & Fulfilment**
-  - Process orders through the fulfilment queue
-  - Monitor active orders and queue progression
-  - Real-time order status and availability updates
+- **Advance Ordering:** Allows customers to place orders ahead of time, helping reduce waiting time and peak-hour congestion while allowing staff to receive and prepare orders in advance.
 
-- **Payment & Delivery**
-  - QR Ph and supported e-wallet payments
-  - Payment confirmation and refunds
-  - Delivery and service-area handling
+- **Comprehensive Cart and Order Management:** Allows users to edit quantities, remove items, clear the cart, confirm orders, track order status through notifications, and receive real-time updates. Order cancellation is limited to pending orders.
 
-- **Discount & Customer Services**
-  - Senior Citizen and PWD discount eligibility
-  - Discount document submission and verification
-  - Customer feedback and related communications
+- **Geo-Mapped Logistics:** Features an interactive zone-based fee calculator that automatically determines delivery charges based on geographic location, reducing the need for manual distance estimation.
 
-- **Store & Management Operations**
-  - Store Manager and Store Agent capabilities
-  - Menu, pricing, stock, and operational management
-  - Administrative and reporting functions
+- **Real-Time Service Synchronization:** Bridges the gap between store capacity and customer expectations through live menu and service availability controls.
 
-## 🛠️ Technology Stack
+- **Systematic Order Queuing:** Establishes a first-come, first-served (FCFS) digital queue for handling high-volume traffic. During concurrent order surges, the system sequences transactions based on their submission time.
+
+## Technology Stack
 
 ### Server
 - Laravel
 - PHP
 - PostgreSQL
-- Laravel Sanctum
+- Laravel Reverb 
 
 ### Client
 - React
 - Vite
 
 ### External Services
-- Semaphore — SMS/OTP delivery
-- Gmail SMTP — Email services
-- PayMongo — Payment processing
-- OpenStreetMap / Nominatim — Mapping and location services
-- Cloudinary — File and image storage
-- Laravel Reverb — Real-time communication
-- Google reCAPTCHA — Human/bot verification
+- Semaphore — SMS Provider
+- PayMongo — Payment System
+- OpenStreetMap — Mapping and Location Services
+- Google reCAPTCHA — Human/Bot Verification
 
 ---
 
@@ -114,30 +91,3 @@ npm install
 npm run dev
 ```
 
-## 4. Access the Application
-
-After starting both the Laravel server and React development server, open the local URL displayed by Vite in your browser.
-
-The Laravel API should also be running at the address provided by `php artisan serve`.
-
----
-
-## ⚙️ Environment Configuration
-
-Configure the required environment variables in:
-
-```text
-server/.env
-client/.env
-```
-
-Do not commit `.env` files or API credentials to the repository.
-
-External services such as Semaphore, Gmail SMTP, PayMongo, Cloudinary, mapping services, and Google reCAPTCHA require their corresponding credentials before their related features can be used.
-
-## 📝 Notes
-
-- Run the Laravel server and React development server separately during local development.
-- Make sure PostgreSQL is running and the database configured in `server/.env` is available.
-- Some features depend on external services and may require valid credentials.
-- Production deployment configuration may differ from the local development setup.
