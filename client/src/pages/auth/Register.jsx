@@ -14,7 +14,6 @@ const PASSWORD_RULES = [
   { label: "At least 8 characters", test: (value) => value.length >= 8 },
   { label: "One uppercase letter", test: (value) => /[A-Z]/.test(value) },
   { label: "One number", test: (value) => /\d/.test(value) },
-  { label: "One symbol", test: (value) => /[^A-Za-z0-9]/.test(value) },
 ];
 
 function Register() {
@@ -176,7 +175,7 @@ function Register() {
           )}
         </Field>
 
-        <ul id="password-requirements" className="-mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        <ul id="password-requirements" className="-mt-1.5 grid grid-cols-1 gap-1.5">
           {PASSWORD_RULES.map((rule) => {
             const met = rule.test(password);
 
