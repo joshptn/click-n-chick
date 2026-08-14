@@ -48,8 +48,8 @@ class PhoneVerificationTest extends TestCase
             'first_name' => 'Juan',
             'last_name' => 'Dela Cruz',
             'email' => 'juan@example.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
             'phone_number' => '+639171234567',
         ], $overrides);
     }
@@ -123,7 +123,7 @@ class PhoneVerificationTest extends TestCase
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
 
-        $this->postJson('/api/login', ['login' => 'juan@example.test', 'password' => 'password123'])
+        $this->postJson('/api/login', ['login' => 'juan@example.test', 'password' => 'Password123!'])
             ->assertStatus(403)
             ->assertJsonPath('status', 'pending_verification')
             ->assertJsonMissingPath('token');
@@ -214,7 +214,7 @@ class PhoneVerificationTest extends TestCase
         $this->assertNotNull($user->phone_verified_at);
 
         // And the account can now log in normally.
-        $this->postJson('/api/login', ['login' => 'juan@example.test', 'password' => 'password123'])
+        $this->postJson('/api/login', ['login' => 'juan@example.test', 'password' => 'Password123!'])
             ->assertOk();
     }
 

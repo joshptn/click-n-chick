@@ -15,7 +15,7 @@ class LoginIdentifierTest extends TestCase
     {
         $user = User::factory()->create([
             'email' => 'rider@example.test',
-            'password' => Hash::make('password123'),
+            'password' => Hash::make('Password123!'),
         ]);
 
         $user->phone_number = $phone;
@@ -55,7 +55,7 @@ class LoginIdentifierTest extends TestCase
     {
         $this->registeredUser();
 
-        $this->postJson('/api/login', ['login' => 'rider@example.test', 'password' => 'password123'])
+        $this->postJson('/api/login', ['login' => 'rider@example.test', 'password' => 'Password123!'])
             ->assertOk()
             ->assertJsonPath('user.email', 'rider@example.test')
             ->assertJsonStructure(['token']);
@@ -66,7 +66,7 @@ class LoginIdentifierTest extends TestCase
         $this->registeredUser();
 
         foreach (['+639171234567', '09171234567', '9171234567', '+63 917 123 4567'] as $variant) {
-            $this->postJson('/api/login', ['login' => $variant, 'password' => 'password123'])
+            $this->postJson('/api/login', ['login' => $variant, 'password' => 'Password123!'])
                 ->assertOk()
                 ->assertJsonPath('user.email', 'rider@example.test');
         }
@@ -76,7 +76,7 @@ class LoginIdentifierTest extends TestCase
     {
         $this->registeredUser();
 
-        $this->postJson('/api/login', ['email' => 'rider@example.test', 'password' => 'password123'])
+        $this->postJson('/api/login', ['email' => 'rider@example.test', 'password' => 'Password123!'])
             ->assertOk();
     }
 
@@ -97,7 +97,7 @@ class LoginIdentifierTest extends TestCase
     {
         $this->registeredUser();
 
-        $unknown = $this->postJson('/api/login', ['login' => 'nobody@example.test', 'password' => 'password123']);
+        $unknown = $this->postJson('/api/login', ['login' => 'nobody@example.test', 'password' => 'Password123!']);
         $wrongPassword = $this->postJson('/api/login', ['login' => 'rider@example.test', 'password' => 'nope']);
 
         $unknown->assertStatus(401);
@@ -113,13 +113,13 @@ class LoginIdentifierTest extends TestCase
         // "is null", which would match every phone-less account.
         $this->registeredUser(null);
 
-        $this->postJson('/api/login', ['login' => 'not-a-number', 'password' => 'password123'])
+        $this->postJson('/api/login', ['login' => 'not-a-number', 'password' => 'Password123!'])
             ->assertStatus(401);
     }
 
     public function test_the_identifier_is_required(): void
     {
-        $this->postJson('/api/login', ['password' => 'password123'])
+        $this->postJson('/api/login', ['password' => 'Password123!'])
             ->assertStatus(422);
     }
 
@@ -133,8 +133,8 @@ class LoginIdentifierTest extends TestCase
             'first_name' => 'New',
             'last_name' => 'Rider',
             'email' => 'new@example.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
             'phone_number' => '+639998887777',
         ])->assertStatus(201);
 
@@ -150,7 +150,7 @@ class LoginIdentifierTest extends TestCase
             'phone_verified_at' => now(),
         ])->save();
 
-        $this->postJson('/api/login', ['login' => '09998887777', 'password' => 'password123'])
+        $this->postJson('/api/login', ['login' => '09998887777', 'password' => 'Password123!'])
             ->assertOk()
             ->assertJsonPath('user.email', 'new@example.test');
     }
@@ -163,8 +163,8 @@ class LoginIdentifierTest extends TestCase
             'first_name' => 'Copy',
             'last_name' => 'Cat',
             'email' => 'copy@example.test',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
             'phone_number' => '09171234567',
         ])->assertStatus(422)->assertJsonValidationErrors('phone_number');
     }
