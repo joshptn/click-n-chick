@@ -1,6 +1,6 @@
 # Chick-N-Click
 
-![BEStie](https://github.com/joshptn/BEStie/blob/main/client/public/Screenshot%202025-11-15%20235940.png?raw=true)  
+![BEStie](https://github.com/joshptn/click-n-chick/blob/main/client/public/Landing.png?raw=true)  
 
 A web-based online ordering and restaurant management platform for **BES House of Chicken**. The system supports customers and store personnel through online ordering, account management, menu and stock management, order fulfilment, payments, delivery, notifications, and restaurant operations.
 
