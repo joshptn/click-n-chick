@@ -62,6 +62,32 @@ class User extends Authenticatable
         ];
     }
 
+    /** Store Manager - account and role administration. */
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+
+    /** Store Agent - day-to-day store operations, including stock. */
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_CUSTOMER = 'customer';
+
+    /** Every role the system recognises. Used to catch typos in route middleware. */
+    public const ROLES = [
+        self::ROLE_SUPER_ADMIN,
+        self::ROLE_ADMIN,
+        self::ROLE_CUSTOMER,
+    ];
+
+    /**
+     * Exact membership test - there is no role hierarchy here on purpose.
+     *
+     * BR-29 requires the Store Manager to be excluded from Store-Agent-only
+     * stock work, so a super_admin must NOT satisfy hasRole('admin').
+     */
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role, $roles, true);
+    }
+
     /** Account exists but the registration OTP has not been confirmed yet. */
     public const STATUS_PENDING_VERIFICATION = 'pending_verification';
 
