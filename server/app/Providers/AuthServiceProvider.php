@@ -2,32 +2,40 @@
 
 namespace App\Providers;
 
+use App\Models\CartItem;
+use App\Models\Category;
 use App\Models\Food;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\User;
+use App\Policies\CartItemPolicy;
+use App\Policies\CategoryPolicy;
 use App\Policies\FoodPolicy;
 use App\Policies\OrderItemPolicy;
 use App\Policies\OrderPolicy;
-use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use App\Policies\UserPolicy;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\ServiceProvider;
+
 
 class AuthServiceProvider extends ServiceProvider
 {
     /**
-     * The policy mappings for the application.
-     *
      * @var array<class-string, class-string>
      */
-    protected $policies = [
+    private array $policies = [
+        CartItem::class => CartItemPolicy::class,
+        Category::class => CategoryPolicy::class,
         Food::class => FoodPolicy::class,
         Order::class => OrderPolicy::class,
         OrderItem::class => OrderItemPolicy::class,
+        User::class => UserPolicy::class,
     ];
 
-    /**
-     * Register any authentication / authorization services.
-     */
     public function boot(): void
     {
-        $this->registerPolicies();
+        foreach ($this->policies as $model => $policy) {
+            Gate::policy($model, $policy);
+        }
     }
 }
