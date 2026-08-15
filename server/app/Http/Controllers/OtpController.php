@@ -37,18 +37,9 @@ class OtpController extends Controller
             return [null, null];
         }
 
-        // An unparseable identifier resolves to no channel. Callers must treat
-        // that as "no match" rather than falling through to a broad lookup.
         return [$this->channels->forIdentifier($raw), trim($raw)];
     }
 
-    /**
-     * Step 2 of the blocking registration flow.
-     *
-     * On success the account becomes active and this endpoint issues the token
-     * itself, in the same shape login returns, so the client never has to make a
-     * second round trip to /login.
-     */
     public function verify(Request $request)
     {
         $request->validate([
@@ -68,8 +59,6 @@ class OtpController extends Controller
             return $invalid;
         }
 
-        // Every OTP lookup goes through the hash; a raw identifier is never
-        // matched in a WHERE clause.
         $identifierHash = $this->channels->hash($transport->channel(), $identifier);
 
         $result = $this->otp->verify($identifierHash, OtpCode::PURPOSE_REGISTRATION, $request->input('code'));
@@ -95,8 +84,6 @@ class OtpController extends Controller
             return $invalid;
         }
 
-        // The channel stamps its own column, which is what finally gives
-        // users.email_verified_at a writer.
         $transport->markVerified($user);
         $user->account_status = User::STATUS_ACTIVE;
         $user->save();
@@ -109,13 +96,7 @@ class OtpController extends Controller
         ]);
     }
 
-    /**
-     * Re-send the registration code.
-     *
-     * Answers the same way whether or not the identifier is awaiting
-     * verification, so this cannot be used to test which accounts exist. The
-     * only distinct response is the cooldown refusal.
-     */
+
     public function resend(Request $request)
     {
         $request->validate([
@@ -140,10 +121,6 @@ class OtpController extends Controller
         $wait = $this->otp->secondsUntilResendAllowed($identifierHash, OtpCode::PURPOSE_REGISTRATION);
 
         if ($wait > 0) {
-            // A per-identifier cooldown on top of the throttle. Semaphore's OTP
-            // endpoint is explicitly NOT rate limited on their side, so nothing
-            // upstream stops a customer mashing "resend" from burning credits and
-            // spamming their own handset. This cooldown is load-bearing.
             return response()->json([
                 'message' => "Please wait {$wait}s before requesting another code.",
                 'resend_available_in' => $wait,

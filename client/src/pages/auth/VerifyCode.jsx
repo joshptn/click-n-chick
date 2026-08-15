@@ -76,8 +76,6 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
 
       if (!response.ok) throw new Error(data.message || "That code is not correct.");
 
-      // This endpoint returns the same {user, token} shape as login, so the
-      // session starts here - no separate /login round trip.
       adoptSession(data);
       toast.success("Your account is verified.", "Welcome to Click n Chick");
       nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });

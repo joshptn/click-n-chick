@@ -31,17 +31,11 @@ function Login() {
       const data = await loginUser(e);
       nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home");
     } catch (err) {
-      // 403 means the credentials were right but the phone is still unverified.
-      // Send them to finish the blocking flow rather than showing a dead error.
       if (err.status === 403 && err.payload?.status === "pending_verification") {
         const channel = err.payload.verification_channel ?? CHANNELS.SMS;
         const typed = e.target.login.value.trim();
         const typedIsEmail = typed.includes("@");
 
-        // The 403 only carries a masked identifier, so it cannot be submitted
-        // back. Route to the code screen only when what they typed IS the
-        // identifier for their channel; otherwise send them to register, where
-        // the unexpired pending row is picked up as a resend.
         if ((channel === CHANNELS.EMAIL) === typedIsEmail) {
           nav(routeForChannel(channel), {
             state: {

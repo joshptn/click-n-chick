@@ -82,9 +82,6 @@ function Register() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Registration failed");
 
-      // Blocking flow: the account exists but holds no token until the chosen
-      // channel is verified, so there is no auto-login here and no way past
-      // this screen.
       nav(routeForChannel(data.verification_channel ?? channel), {
         replace: true,
         state: {
@@ -254,8 +251,6 @@ function Register() {
         </fieldset>
 
         <div className="mt-1 flex items-start gap-3">
-          {/* The native input stays visible (appearance-none, not sr-only) so the
-              browser can focus it when `required` blocks submission. */}
           <span className="relative mt-px flex shrink-0">
             <input
               id="terms"

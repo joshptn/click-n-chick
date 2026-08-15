@@ -170,10 +170,6 @@ class AuthController extends Controller
             return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
-        // Blocking flow: correct credentials are not enough while the chosen
-        // channel is unverified. Answered distinctly (and only after the password
-        // checks out, so it is not an enumeration signal) so the UI can route to
-        // the right code screen.
         if ($user->isPendingVerification()) {
             $transport = app(ChannelRegistry::class)->forUser($user);
 
@@ -183,8 +179,6 @@ class AuthController extends Controller
                     ? 'Verify your email address to finish setting up your account.'
                     : 'Verify your phone number to finish setting up your account.',
                 'verification_channel' => $transport->channel()->value,
-                // The identifier the code was sent to, so the client can prefill
-                // the verify screen without asking for it again.
                 'identifier' => $transport->mask($transport->identifierFor($user)),
                 'phone_number' => $this->maskPhoneNumber($user->phone_number),
             ], 403);
@@ -228,7 +222,6 @@ class AuthController extends Controller
                 'last_name' => 'sometimes|nullable|string|max:255',
                 'phone_number' => 'sometimes|nullable|string|max:20',
 
-                // Password change: the current password must be supplied and correct.
                 'current_password' => ['required_with:password', 'current_password'],
                 'password' => ['sometimes', 'required', 'string', 'confirmed', new StrongPassword()],
             ]);
