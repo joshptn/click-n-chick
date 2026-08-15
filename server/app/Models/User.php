@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Services\Verification\Channel;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -27,6 +28,7 @@ class User extends Authenticatable
         'last_name',
         'phone_number',
         'phone_number_hash',
+        'verification_channel',
         'avatar',
     ];
 
@@ -104,6 +106,14 @@ class User extends Authenticatable
     public function isPendingVerification(): bool
     {
         return $this->account_status === self::STATUS_PENDING_VERIFICATION;
+    }
+
+    /** True once the channel chosen at registration has been confirmed. */
+    public function hasVerifiedChosenChannel(): bool
+    {
+        return $this->verification_channel === Channel::Email->value
+            ? $this->email_verified_at !== null
+            : $this->phone_verified_at !== null;
     }
 
     /** Whether the user has agreed to storage of their address and order history. */

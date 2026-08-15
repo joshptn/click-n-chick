@@ -12,8 +12,15 @@ return new class extends Migration
             $table->id();
             // Nullable: an OTP may precede account creation.
             $table->foreignId('user_id')->nullable()->constrained('users')->cascadeOnDelete();
+            // Which channel this code was delivered over: 'sms' or 'email'.
+            // The row is otherwise channel-agnostic - one code table, one
+            // verification path, transport chosen here.
+            $table->string('channel')->default('sms');
+            // Blind index over whichever identifier the channel addresses: the
+            // canonical phone number for sms, the normalised address for email.
+            // Named generically because the code table is not phone-only.
             // Lookup key, especially pre-registration where there is no user row.
-            $table->string('phone_number_hash')->nullable();
+            $table->string('identifier_hash')->nullable();
             $table->string('code_hash');
             // login, registration, verification
             $table->string('purpose');
@@ -25,7 +32,9 @@ return new class extends Migration
             $table->timestamp('consumed_at')->nullable();
             $table->timestamps();
 
-            $table->index(['phone_number_hash', 'purpose']);
+            // Every lookup is (identifier, purpose); the hash already differs per
+            // channel, so channel does not need to join the key.
+            $table->index(['identifier_hash', 'purpose']);
             $table->index('expires_at');
         });
 

@@ -18,6 +18,10 @@ return new class extends Migration
             // Null until the registration OTP is confirmed. Paired with
             // account_status = 'pending_verification' during the blocking flow.
             $table->timestamp('phone_verified_at')->nullable();
+            // Channel the user chose at registration ('sms' or 'email'). The
+            // blocking flow gates on whichever this names; the other channel
+            // stays unverified until they choose to verify it later.
+            $table->string('verification_channel')->default('sms');
             // RA 10173 (Data Privacy Act) consent to store delivery address and
             // order history. A timestamp rather than a boolean: demonstrating
             // consent requires knowing when it was given, and null doubles as

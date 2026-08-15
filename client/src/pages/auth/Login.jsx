@@ -9,6 +9,7 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import toast from "../../components/app/Toast";
+import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
 
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
@@ -33,12 +34,31 @@ function Login() {
       // 403 means the credentials were right but the phone is still unverified.
       // Send them to finish the blocking flow rather than showing a dead error.
       if (err.status === 403 && err.payload?.status === "pending_verification") {
-        nav("/verify-phone", {
-          state: {
-            phoneNumber: e.target.login.value.trim(),
-            maskedPhone: err.payload.phone_number,
-          },
-        });
+        const channel = err.payload.verification_channel ?? CHANNELS.SMS;
+        const typed = e.target.login.value.trim();
+        const typedIsEmail = typed.includes("@");
+
+        // The 403 only carries a masked identifier, so it cannot be submitted
+        // back. Route to the code screen only when what they typed IS the
+        // identifier for their channel; otherwise send them to register, where
+        // the unexpired pending row is picked up as a resend.
+        if ((channel === CHANNELS.EMAIL) === typedIsEmail) {
+          nav(routeForChannel(channel), {
+            state: {
+              identifier: typed,
+              maskedIdentifier: err.payload.identifier ?? err.payload.phone_number,
+            },
+          });
+          return;
+        }
+
+        toast.info(
+          channel === CHANNELS.EMAIL
+            ? "Finish verifying your email address to activate your account."
+            : "Finish verifying your phone number to activate your account.",
+          "Almost there"
+        );
+        nav("/register");
         return;
       }
 

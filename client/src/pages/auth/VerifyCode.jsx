@@ -8,6 +8,7 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
+import { CHANNELS, CHANNEL_COPY } from "../../lib/verificationChannels";
 import toast from "../../components/app/Toast";
 
 const ROLE_DESTINATIONS = {
@@ -16,14 +17,24 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
-function VerifyPhone() {
+/**
+ * One OTP entry screen for both channels.
+ *
+ * The code flow is identical either way - the same endpoints, the same
+ * cooldown, the same single-use semantics - so only the copy and the request
+ * field name vary, and both come from CHANNEL_COPY. Splitting this into two
+ * components would duplicate the flow to change two strings.
+ */
+function VerifyCode({ channel = CHANNELS.SMS }) {
   const nav = useNavigate();
   const location = useLocation();
   const { adoptSession } = useContext(AuthContext);
 
+  const copy = CHANNEL_COPY[channel] ?? CHANNEL_COPY[CHANNELS.SMS];
+
   // Carried from the register (or blocked-login) redirect. Without it there is
   // nothing to verify against, so the screen sends the user back.
-  const { phoneNumber, maskedPhone, resendAvailableIn } = location.state ?? {};
+  const { identifier, maskedIdentifier, resendAvailableIn } = location.state ?? {};
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,10 +42,10 @@ function VerifyPhone() {
   const codeRef = useRef(null);
 
   useEffect(() => {
-    if (!phoneNumber) {
+    if (!identifier) {
       nav("/register", { replace: true });
     }
-  }, [phoneNumber, nav]);
+  }, [identifier, nav]);
 
   useEffect(() => {
     if (cooldown <= 0) return undefined;
@@ -57,7 +68,7 @@ function VerifyPhone() {
       const response = await fetch(`${url}/api/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber, code: e.target.code.value.trim() }),
+        body: JSON.stringify({ [copy.field]: identifier, code: e.target.code.value.trim() }),
         credentials: "include",
       });
 
@@ -68,7 +79,7 @@ function VerifyPhone() {
       // This endpoint returns the same {user, token} shape as login, so the
       // session starts here - no separate /login round trip.
       adoptSession(data);
-      toast.success("Your phone number is verified.", "Welcome to Click n Chick");
+      toast.success("Your account is verified.", "Welcome to Click n Chick");
       nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
     } catch (err) {
       setError(err.message);
@@ -85,7 +96,7 @@ function VerifyPhone() {
       const response = await fetch(`${url}/api/otp/resend`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber }),
+        body: JSON.stringify({ [copy.field]: identifier }),
         credentials: "include",
       });
 
@@ -106,11 +117,11 @@ function VerifyPhone() {
 
   return (
     <AuthLayout
-      eyebrow="One last step for"
-      heading="Verify your phone"
+      eyebrow={copy.eyebrow}
+      heading={copy.heading}
       footer={
         <p className="text-center font-display text-[13px] text-[#6f6b68]">
-          Wrong number?{" "}
+          Wrong details?{" "}
           <Link to="/register" className="font-bold text-brand-600 no-underline hover:underline">
             Start over
           </Link>
@@ -132,8 +143,8 @@ function VerifyPhone() {
       )}
 
       <p className="mb-5 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
-        We sent a 6-digit code to{" "}
-        <span className="font-semibold text-[#33302c]">{maskedPhone ?? phoneNumber}</span>. Enter it below to
+        We sent {copy.sentTo}{" "}
+        <span className="font-semibold text-[#33302c]">{maskedIdentifier ?? identifier}</span>. Enter it below to
         finish creating your account.
       </p>
 
@@ -148,7 +159,7 @@ function VerifyPhone() {
               icon={IconShieldLock}
               placeholder="123456"
               inputMode="numeric"
-              autoComplete="one-time-code"
+              autoComplete={copy.autoComplete}
               maxLength={6}
               pattern="\d{6}"
               autoFocus
@@ -178,4 +189,4 @@ function VerifyPhone() {
   );
 }
 
-export default VerifyPhone;
+export default VerifyCode;

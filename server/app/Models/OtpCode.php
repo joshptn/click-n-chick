@@ -11,7 +11,8 @@ class OtpCode extends Model
 
     protected $fillable = [
         'user_id',
-        'phone_number_hash',
+        'channel',
+        'identifier_hash',
         'code_hash',
         'purpose',
         'ip_address',

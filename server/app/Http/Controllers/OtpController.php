@@ -6,14 +6,40 @@ use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\Otp\OtpService;
 use App\Services\Otp\OtpVerificationResult;
+use App\Services\Verification\ChannelRegistry;
+use App\Services\Verification\VerificationChannel;
 use Illuminate\Http\Request;
 
 class OtpController extends Controller
 {
     private const TOKEN_NAME = 'auth_token';
 
-    public function __construct(private OtpService $otp)
+    public function __construct(
+        private OtpService $otp,
+        private ChannelRegistry $channels,
+    ) {
+    }
+
+    /**
+     * Pull the identifier out of a request that may name it either way.
+     *
+     * Callers submit `phone_number` or `email`; the channel follows from the
+     * shape of whichever arrives, so there is no separate channel parameter and
+     * neither path needs its own endpoint.
+     *
+     * @return array{0: ?VerificationChannel, 1: ?string}
+     */
+    private function resolveIdentifier(Request $request): array
     {
+        $raw = $request->input('phone_number') ?? $request->input('email');
+
+        if (! is_string($raw) || trim($raw) === '') {
+            return [null, null];
+        }
+
+        // An unparseable identifier resolves to no channel. Callers must treat
+        // that as "no match" rather than falling through to a broad lookup.
+        return [$this->channels->forIdentifier($raw), trim($raw)];
     }
 
     /**
@@ -25,16 +51,28 @@ class OtpController extends Controller
      */
     public function verify(Request $request)
     {
-        $validated = $request->validate([
-            'phone_number' => ['required', 'string', 'max:20'],
+        $request->validate([
+            'phone_number' => ['required_without:email', 'nullable', 'string', 'max:255'],
+            'email' => ['required_without:phone_number', 'nullable', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:12'],
         ]);
 
-        // Every OTP lookup goes through the hash; phone_number is encrypted with a
-        // random IV and can never be matched in a WHERE clause.
-        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
+        [$transport, $identifier] = $this->resolveIdentifier($request);
 
-        $result = $this->otp->verify($phoneHash, OtpCode::PURPOSE_REGISTRATION, $validated['code']);
+        $invalid = response()->json([
+            'message' => 'That code is not correct.',
+            'reason' => 'invalid',
+        ], 422);
+
+        if ($transport === null) {
+            return $invalid;
+        }
+
+        // Every OTP lookup goes through the hash; a raw identifier is never
+        // matched in a WHERE clause.
+        $identifierHash = $this->channels->hash($transport->channel(), $identifier);
+
+        $result = $this->otp->verify($identifierHash, OtpCode::PURPOSE_REGISTRATION, $request->input('code'));
 
         if ($result !== OtpVerificationResult::Verified) {
             return response()->json([
@@ -51,13 +89,15 @@ class OtpController extends Controller
             ], 422);
         }
 
-        $user = User::where('phone_number_hash', $phoneHash)->first();
+        $user = $transport->findUser($identifier);
 
         if (! $user) {
-            return response()->json(['message' => 'That code is not correct.', 'reason' => 'invalid'], 422);
+            return $invalid;
         }
 
-        $user->phone_verified_at = now();
+        // The channel stamps its own column, which is what finally gives
+        // users.email_verified_at a writer.
+        $transport->markVerified($user);
         $user->account_status = User::STATUS_ACTIVE;
         $user->save();
 
@@ -72,32 +112,35 @@ class OtpController extends Controller
     /**
      * Re-send the registration code.
      *
-     * Answers the same way whether or not the number is awaiting verification,
-     * so this cannot be used to test which numbers have signed up. The only
-     * distinct response is the cooldown refusal.
+     * Answers the same way whether or not the identifier is awaiting
+     * verification, so this cannot be used to test which accounts exist. The
+     * only distinct response is the cooldown refusal.
      */
     public function resend(Request $request)
     {
-        $validated = $request->validate([
-            'phone_number' => ['required', 'string', 'max:20'],
+        $request->validate([
+            'phone_number' => ['required_without:email', 'nullable', 'string', 'max:255'],
+            'email' => ['required_without:phone_number', 'nullable', 'string', 'max:255'],
         ]);
 
-        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
+        [$transport, $identifier] = $this->resolveIdentifier($request);
 
         $generic = [
-            'message' => 'If that number is awaiting verification, a new code is on its way.',
+            'message' => 'If that account is awaiting verification, a new code is on its way.',
             'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
             'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
         ];
 
-        if ($phoneHash === null) {
+        if ($transport === null) {
             return response()->json($generic);
         }
 
-        $wait = $this->otp->secondsUntilResendAllowed($phoneHash, OtpCode::PURPOSE_REGISTRATION);
+        $identifierHash = $this->channels->hash($transport->channel(), $identifier);
+
+        $wait = $this->otp->secondsUntilResendAllowed($identifierHash, OtpCode::PURPOSE_REGISTRATION);
 
         if ($wait > 0) {
-            // A per-number cooldown on top of the throttle. Semaphore's OTP
+            // A per-identifier cooldown on top of the throttle. Semaphore's OTP
             // endpoint is explicitly NOT rate limited on their side, so nothing
             // upstream stops a customer mashing "resend" from burning credits and
             // spamming their own handset. This cooldown is load-bearing.
@@ -107,13 +150,10 @@ class OtpController extends Controller
             ], 429);
         }
 
-        $user = User::query()
-            ->where('phone_number_hash', $phoneHash)
-            ->where('account_status', User::STATUS_PENDING_VERIFICATION)
-            ->first();
+        $user = $transport->findUser($identifier);
 
-        if ($user !== null) {
-            $this->otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip());
+        if ($user !== null && $user->isPendingVerification()) {
+            $this->otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $transport->channel());
         }
 
         return response()->json($generic);
