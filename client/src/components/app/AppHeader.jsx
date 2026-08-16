@@ -14,6 +14,7 @@ import {
 import AuthContext from "../../context/AuthContext";
 import LogoIcon from "../../assets/logo-icon.png";
 import { useCart } from "../../context/useCart";
+import { useRealtime } from "../../context/useRealtime";
 
 /**
  * The application header for every signed-in page.
@@ -36,6 +37,7 @@ function AppHeader({
   const nav = useNavigate();
   const { user, logOut } = useContext(AuthContext);
   const { item_count: itemCount } = useCart();
+  const { notifications, unreadCount, isConnected, isConfigured, isReady, markAllRead } = useRealtime();
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
@@ -133,20 +135,59 @@ function AppHeader({
             <Menu.Target>
               <button
                 type="button"
-                aria-label="Notifications"
+                aria-label={`Notifications${unreadCount ? `, ${unreadCount} new` : ""}`}
+                data-testid="notification-bell"
+                data-unread={unreadCount}
                 className="grid h-10 w-10 place-items-center rounded-full bg-transparent text-ink transition-colors hover:bg-[#f7f4f0]"
               >
-                <Indicator disabled size={7} color="#ff8b2b" offset={5}>
+                <Indicator disabled={unreadCount === 0} size={7} color="#ff8b2b" offset={5} processing>
                   <IconBell size={21} stroke={1.9} />
                 </Indicator>
               </button>
             </Menu.Target>
 
             <Menu.Dropdown>
-              <Menu.Label>Notifications</Menu.Label>
-              <div className="px-3 py-6 text-center">
-                <p className="m-0 font-display text-[13px] text-[#8d8884]">You&rsquo;re all caught up.</p>
-              </div>
+              <Menu.Label>
+                <span className="flex items-center justify-between gap-3">
+                  Notifications
+                  {/* Live, not decorative: this is the Reverb connection. */}
+                  {isConfigured && (
+                    <span
+                      data-testid="realtime-status"
+                      data-connected={isConnected}
+                      data-ready={isReady}
+                      title={isConnected ? "Live updates on" : "Reconnecting..."}
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${isConnected ? "bg-[#2f9e44]" : "bg-[#d9d3cb]"}`}
+                    />
+                  )}
+                </span>
+              </Menu.Label>
+
+              {notifications.length === 0 ? (
+                <div className="px-3 py-6 text-center">
+                  <p className="m-0 font-display text-[13px] text-[#8d8884]">You&rsquo;re all caught up.</p>
+                </div>
+              ) : (
+                <div data-testid="notification-list" className="max-h-[260px] overflow-y-auto">
+                  {notifications.map((item, index) => (
+                    <div
+                      key={item.id ?? index}
+                      className="border-b border-[#f5f0e9] px-3 py-2.5 last:border-b-0"
+                    >
+                      <p className="m-0 font-display text-[12.5px] font-semibold text-ink">{item.title}</p>
+                      <p className="m-0 font-display text-[12px] leading-snug text-[#6f6b68]">{item.body}</p>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={markAllRead}
+                    className="w-full bg-transparent px-3 py-2.5 text-center font-display text-[12px] font-bold text-brand-600 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
             </Menu.Dropdown>
           </Menu>
 
