@@ -61,6 +61,7 @@ class User extends Authenticatable
             'phone_number' => 'encrypted',
             'loyalty_points' => 'integer',
             'two_factor_confirmed_at' => 'datetime',
+            'two_factor_enabled' => 'boolean',
         ];
     }
 
@@ -108,12 +109,33 @@ class User extends Authenticatable
         return $this->account_status === self::STATUS_PENDING_VERIFICATION;
     }
 
+    /**
+     * Has this specific channel been confirmed?
+     *
+     * Reads the per-channel timestamp directly. account_status is a coarse
+     * marker and must never stand in for this: it is mass-assignable, so any
+     * path that set it to 'active' would otherwise wave through an account
+     * whose verified_at columns are both still null.
+     */
+    public function hasVerifiedChannel(Channel|string|null $channel): bool
+    {
+        $value = $channel instanceof Channel ? $channel->value : $channel;
+
+        return $value === Channel::Email->value
+            ? $this->email_verified_at !== null
+            : $this->phone_verified_at !== null;
+    }
+
     /** True once the channel chosen at registration has been confirmed. */
     public function hasVerifiedChosenChannel(): bool
     {
-        return $this->verification_channel === Channel::Email->value
-            ? $this->email_verified_at !== null
-            : $this->phone_verified_at !== null;
+        return $this->hasVerifiedChannel($this->verification_channel);
+    }
+
+    public function hasTwoFactorEnabled(): bool
+    {
+        return (bool) $this->two_factor_enabled
+            && $this->two_factor_channel !== null;
     }
 
     /** Whether the user has agreed to storage of their address and order history. */

@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import VerifyCode from './pages/auth/VerifyCode'
+import TwoFactorChallenge from './pages/auth/TwoFactorChallenge'
 import { CHANNELS } from './lib/verificationChannels'
 import PrivateRoutes from './providers/PrivateRoutes'
 import { ROLES } from './lib/roles'
@@ -23,6 +24,8 @@ function App() {
         {/* One component, two routes - the channel is the only difference. */}
         <Route path="/verify-phone" element={<VerifyCode channel={CHANNELS.SMS} />} />
         <Route path="/verify-email" element={<VerifyCode channel={CHANNELS.EMAIL} />} />
+        {/* Second factor at login. Reached only with a challenge token. */}
+        <Route path="/two-factor" element={<TwoFactorChallenge />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 

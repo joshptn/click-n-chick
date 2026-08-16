@@ -8,11 +8,8 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import toast from "../../components/app/Toast";
 import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
+import ChannelChoice from "../../components/auth/ChannelChoice";
 
-const CHANNEL_OPTIONS = [
-  { value: CHANNELS.SMS, label: "Text message", hint: "To your mobile number", Icon: IconPhone },
-  { value: CHANNELS.EMAIL, label: "Email", hint: "To your email address", Icon: IconMail },
-];
 
 // Mirrors App\Rules\StrongPassword on the server. The server is the authority;
 // this exists so the requirements are visible before the form is submitted.
@@ -214,41 +211,12 @@ function Register() {
           )}
         </Field>
 
-        <fieldset className="mt-1 border-0 p-0">
-          <legend className="mb-2 font-display text-[13px] font-semibold text-[#33302c]">
-            How should we send your verification code?
-          </legend>
-
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {CHANNEL_OPTIONS.map((option) => {
-              const { value, label, hint } = option;
-              const selected = channel === value;
-
-              return (
-                <label
-                  key={value}
-                  className={`flex cursor-pointer items-center gap-3 rounded-[12px] border-2 px-3.5 py-3 transition-colors ${selected ? "border-brand-500 bg-[#fff6ee]" : "border-[#e6ded4] bg-white hover:border-[#d9d3cb]"}`}
-                >
-                  <input
-                    type="radio"
-                    name="verification_channel"
-                    value={value}
-                    checked={selected}
-                    onChange={() => setChannel(value)}
-                    className="peer sr-only"
-                  />
-
-                  <option.Icon size={19} stroke={2} aria-hidden="true" className={selected ? "shrink-0 text-brand-600" : "shrink-0 text-[#a39f9b]"} />
-
-                  <span className="min-w-0">
-                    <span className="block font-display text-[13.5px] font-semibold text-[#33302c]">{label}</span>
-                    <span className="block font-display text-[12px] text-[#8d8884]">{hint}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
+        <ChannelChoice
+          value={channel}
+          onChange={setChannel}
+          legend="How should we send your verification code?"
+          disabled={loading}
+        />
 
         <div className="mt-1 flex items-start gap-3">
           <span className="relative mt-px flex shrink-0">

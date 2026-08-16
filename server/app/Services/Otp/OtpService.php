@@ -135,9 +135,47 @@ class OtpService
             return OtpVerificationResult::NoCode;
         }
 
-        $otp = OtpCode::query()
-            ->where('identifier_hash', $identifierHash)
+        return $this->redeem(
+            OtpCode::query()->where('identifier_hash', $identifierHash)->where('purpose', $purpose),
+            $code
+        );
+    }
+
+    /**
+     * Redeem a code issued to a known account, whichever channel it went to.
+     *
+     * Used by the authenticated flows - 2FA and password change - where the
+     * caller is already identified, so the channel does not need to round-trip
+     * through the request. Same rules as verify(); only the lookup differs.
+     */
+    public function verifyForUser(User $user, string $purpose, string $code): OtpVerificationResult
+    {
+        return $this->redeem(
+            OtpCode::query()->where('user_id', $user->id)->where('purpose', $purpose),
+            $code
+        );
+    }
+
+    /** The channel the outstanding code for this purpose was sent over. */
+    public function pendingChannelFor(User $user, string $purpose): ?Channel
+    {
+        $value = OtpCode::query()
+            ->where('user_id', $user->id)
             ->where('purpose', $purpose)
+            ->whereNull('consumed_at')
+            ->latest('id')
+            ->value('channel');
+
+        return Channel::tryFromValue($value);
+    }
+
+    /**
+     * The shared redemption rules: newest unconsumed code only, expiry before
+     * attempts, attempts before comparison, single use on success.
+     */
+    private function redeem($query, string $code): OtpVerificationResult
+    {
+        $otp = $query
             ->whereNull('consumed_at')
             ->latest('id')
             ->first();

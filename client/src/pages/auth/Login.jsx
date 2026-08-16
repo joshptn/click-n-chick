@@ -29,6 +29,19 @@ function Login() {
     setLoading(true);
     try {
       const data = await loginUser(e);
+
+      // 2FA is on: the password was accepted but no session exists yet.
+      if (data?.two_factor_required) {
+        nav("/two-factor", {
+          state: {
+            challengeToken: data.challenge_token,
+            channel: data.two_factor_channel,
+            identifier: data.identifier,
+          },
+        });
+        return;
+      }
+
       nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home");
     } catch (err) {
       if (err.status === 403 && err.payload?.status === "pending_verification") {

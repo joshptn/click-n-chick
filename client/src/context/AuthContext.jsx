@@ -54,6 +54,12 @@ export function AuthProvider({children}) {
             throw error;
         }
 
+        // Password accepted but 2FA is on: no session starts until the code is
+        // answered. The caller routes to the challenge screen.
+        if (data.two_factor_required) {
+            return data;
+        }
+
         if(data.token != undefined){
             adoptSession(data);
 

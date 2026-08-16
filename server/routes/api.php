@@ -7,6 +7,9 @@ use App\Http\Controllers\FoodController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OtpController;
+use App\Http\Controllers\PasswordChangeController;
+use App\Http\Controllers\TwoFactorController;
+use App\Http\Controllers\VerificationChannelController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,6 +45,14 @@ Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware('thrott
 Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware('throttle:otp-send');
 Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
 
+// Answering the 2FA challenge completes a login, so it cannot require a token.
+// The challenge_token issued by /login stands in for the password check.
+Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware('throttle:otp-verify');
+
+// Which channels can actually deliver. Public: registration reads it before
+// any account exists.
+Route::get('/verification/channels', [VerificationChannelController::class, 'index']);
+
 // Menu browsing is open to guests (PRD §5: Guest browses and orders).
 Route::get('/foods', [FoodController::class, 'index']);
 Route::get('/foods/{food}', [FoodController::class, 'show']);
@@ -57,6 +68,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'userDetails']);
     Route::put('/user/update', [AuthController::class, 'updateUser'])->middleware('throttle:user-update');
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Two-factor enrolment. The channel is fixed once, here.
+    Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware('throttle:otp-send');
+    Route::post('/2fa/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:otp-verify');
+
+    // BR-33: password changes are re-verified with an OTP on a channel chosen
+    // fresh each attempt. Deliberately not part of /user/update.
+    Route::post('/user/password/request-code', [PasswordChangeController::class, 'requestCode'])->middleware('throttle:otp-send');
+    Route::post('/user/password', [PasswordChangeController::class, 'update'])->middleware('throttle:otp-verify');
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/{notification}', [NotificationController::class, 'show']);
