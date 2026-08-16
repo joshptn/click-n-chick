@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\FoodResource;
 use App\Models\Food;
 use App\Utils\Image;
 use App\Events\MenuBroadcast;
@@ -25,16 +26,52 @@ class FoodController extends Controller implements HasMiddleware
     }
 
     /**
-     * Display a listing of the resource.
+     * The customer-facing menu, filtered and searched.
+     *
+     * Query parameters, all optional:
+     *   category    category id, or its name ('Combos'). 'all' means no filter.
+     *   search      matches the name or description
+     *   best_seller '1' to return only the Popular Dishes rail
+     *   orderable   '1' to hide sold-out items entirely
+     *
+     * Sold-out items are INCLUDED by default and flagged rather than removed:
+     * the design greys them out in place, which tells a customer the dish
+     * exists and is worth coming back for. Filtering them out silently would
+     * make the menu look shorter than it is.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $foods = Food::with('category')
-            ->get()
-            ->sortBy(fn ($food) => $food->category->name ?? '')
-            ->values();
+        $validated = $request->validate([
+            'category' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'best_seller' => ['sometimes', 'boolean'],
+            'orderable' => ['sometimes', 'boolean'],
+        ]);
 
-        return response()->json($foods);
+        $category = $validated['category'] ?? null;
+
+        $foods = Food::query()
+            ->with(['category', 'addons'])
+            ->when($category !== null && $category !== '' && $category !== 'all', function ($query) use ($category) {
+                // Accepts an id or a name so the chips can be driven by either.
+                is_numeric($category)
+                    ? $query->where('category_id', (int) $category)
+                    : $query->whereRelation('category', 'name', $category);
+            })
+            ->search($validated['search'] ?? null)
+            ->when($request->boolean('best_seller'), fn ($query) => $query->where('is_best_seller', true))
+            ->when($request->boolean('orderable'), fn ($query) => $query->orderable())
+            // Orderable first: a sold-out dish should not head the grid.
+            ->orderByDesc('is_available')
+            ->orderByRaw('CASE WHEN stock_quantity IS NULL THEN 1 WHEN stock_quantity > 0 THEN 1 ELSE 0 END DESC')
+            ->orderByDesc('is_best_seller')
+            ->orderBy('food_name')
+            ->get();
+
+        return response()->json([
+            'data' => FoodResource::collection($foods),
+            'meta' => FoodResource::meta(),
+        ]);
     }
 
     /**
@@ -49,7 +86,7 @@ class FoodController extends Controller implements HasMiddleware
                 'thumbnail'   => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
                 'food_name'   => ['required', 'string', 'max:255'],
                 'price'       => ['required', 'numeric', 'min:0'],
-                'available'   => ['required', 'boolean'],
+                'is_available' => ['sometimes', 'boolean'],
                 'description' => ['required', 'string', 'max:255'],
                 'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             ]);
@@ -90,7 +127,12 @@ class FoodController extends Controller implements HasMiddleware
      */
     public function show(Food $food)
     {
-        return $food->load('category');
+        // Add-ons are loaded here specifically: this is what backs the item
+        // detail modal, which is the only place they are selectable.
+        return response()->json([
+            'data' => new FoodResource($food->load(['category', 'addons'])),
+            'meta' => FoodResource::meta(),
+        ]);
     }
 
     /**
@@ -105,7 +147,7 @@ class FoodController extends Controller implements HasMiddleware
                 'thumbnail'   => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'], 
                 'food_name'   => ['required', 'string', 'max:255'],
                 'price'       => ['required', 'numeric', 'min:0'], 
-                'available'   => ['required', 'boolean'], 
+                'is_available' => ['sometimes', 'boolean'], 
                 'description' => ['required', 'string', 'max:255'],
                 'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             ]);
@@ -119,14 +161,14 @@ class FoodController extends Controller implements HasMiddleware
 
                 try {
                     
-                    Image::deleteImage($food->thumbnail, 'foods');
+                    Image::deleteImage($food->thumbnail, 'food');
 
                     // // Upload new image
                     // $result = $cloudinary->uploadApi()->upload($file->getRealPath(), [
                     //     'folder' => 'foods',
                     // ]);
 
-                    $validated['thumbnail'] = Image::uploadImage($file, 'foods');
+                    $validated['thumbnail'] = Image::uploadImage($file, 'food');
 
                 } catch (\Throwable $e) {
                     Log::error('Cloudinary upload failed: ' . $e->getMessage());
@@ -174,7 +216,7 @@ class FoodController extends Controller implements HasMiddleware
 
             // Delete from Cloudinary if URL exists
             if ($food->thumbnail && str_contains($food->thumbnail, 'res.cloudinary.com')) {
-                Image::deleteImage($food->thumbnail, 'foods');
+                Image::deleteImage($food->thumbnail, 'food');
             }
 
             $foodData = $food->load('category');

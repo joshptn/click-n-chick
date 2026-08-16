@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CartItemController;
+use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\NotificationController;
@@ -9,6 +9,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\PosterController;
 use App\Http\Controllers\RecaptchaConfigController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\VerificationChannelController;
@@ -35,6 +36,8 @@ Route::get('/drinks', [FoodController::class, 'drinks']);
 Route::get('/sides', [FoodController::class, 'sides']);
 Route::get('/category', [CategoryController::class, 'index']);
 Route::get('/category/{category}', [CategoryController::class, 'show']);
+// Homepage banner strip. Public: guests see the homepage too.
+Route::get('/posters', [PosterController::class, 'index']);
 
 // Customer
 Route::middleware('auth:sanctum')->group(function () {
@@ -54,9 +57,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
 
-    Route::get('/cart', [CartItemController::class, 'userCart']);
-    Route::post('/cart/add/{foodId}', [CartItemController::class, 'addToCart']);
-    Route::delete('/cart/remove/{orderId}', [CartItemController::class, 'removeToCart']);
+    // Cart, on the ERD relationships (cart -> cart_items -> cart_item_addons).
+    // A line is identified by food + add-on set, so two lines of the same dish
+    // with different add-ons stay distinct.
+    Route::get('/cart', [CartController::class, 'index']);
+    Route::post('/cart/items', [CartController::class, 'store']);
+    Route::patch('/cart/items/{cartItem}', [CartController::class, 'updateQuantity']);
+    Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
+    Route::delete('/cart', [CartController::class, 'clear']);
 
     Route::post('/order/place', [OrderController::class, 'placeOrder'])->middleware('throttle:place-order');
     Route::get('/orders', [OrderController::class, 'getUserOrder']);
@@ -87,6 +95,12 @@ Route::middleware(['auth:sanctum', 'role:super_admin'])->group(function () {
     Route::put('/category/{category}', [CategoryController::class, 'update']);
     Route::patch('/category/{category}', [CategoryController::class, 'update']);
     Route::delete('/category/{category}', [CategoryController::class, 'destroy']);
+
+    // Poster / banner management (FR-07.6: catalogue work is Manager-only).
+    Route::get('/admin/posters', [PosterController::class, 'all']);
+    Route::post('/admin/posters', [PosterController::class, 'store']);
+    Route::post('/admin/posters/{poster}', [PosterController::class, 'update']);
+    Route::delete('/admin/posters/{poster}', [PosterController::class, 'destroy']);
 
     Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])->middleware('throttle:user-update');
 });

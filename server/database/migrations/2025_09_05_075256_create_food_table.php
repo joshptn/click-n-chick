@@ -19,10 +19,16 @@ return new class extends Migration
             $table->integer('price');
             $table->integer('stock_quantity')->nullable();
             $table->boolean('is_available')->default(true);
+            // Drives the BEST SELLER ribbon on the menu card.
+            $table->boolean('is_best_seller')->default(false);
             $table->integer('prep_time')->nullable();
             $table->text('description');
             $table->enum('size',['small','medium','large'])->nullable();
             $table->timestamps();
+
+            // The home page filters by category and searches by name on load.
+            $table->index('category_id');
+            $table->index('is_best_seller');
         });
     }
 

@@ -41,6 +41,21 @@ return [
         'driver' => env('SMS_DRIVER', 'log'),
     ],
 
+    'recaptcha' => [
+        // On by default but inert until both keys exist, so pasting the
+        // credentials in is the only step needed to turn it on.
+        'enabled' => env('RECAPTCHA_ENABLED', true),
+        'site_key' => env('RECAPTCHA_SITE_KEY'),
+        'secret_key' => env('RECAPTCHA_SECRET_KEY'),
+        // Required. Without it the verify call has no URL to post to, the
+        // service treats that as an outage and fails open - which silently
+        // disables reCAPTCHA on every guarded route.
+        'verify_url' => env('RECAPTCHA_VERIFY_URL', 'https://www.google.com/recaptcha/api/siteverify'),
+        // v3 returns 0.0-1.0; below this the request is treated as automated.
+        'min_score' => (float) env('RECAPTCHA_MIN_SCORE', 0.5),
+        'timeout' => (int) env('RECAPTCHA_TIMEOUT', 5),
+    ],
+
     'semaphore' => [
         'endpoint' => env('SEMAPHORE_ENDPOINT', 'https://api.semaphore.co/api/v4/otp'),
         'key' => env('SEMAPHORE_API_KEY'),

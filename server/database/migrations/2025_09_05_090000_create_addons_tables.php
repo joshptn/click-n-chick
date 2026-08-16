@@ -13,8 +13,14 @@ return new class extends Migration
             $table->string('addon_name');
             $table->decimal('addon_price', 10, 2)->default(0);
             $table->boolean('availability')->default(true);
+            // The heading an add-on sits under on the item detail modal
+            // ('Drinks', 'Sides'). Free text rather than an enum so a new
+            // grouping needs no migration.
+            $table->string('addon_group')->default('Extras');
             $table->string('description')->nullable();
             $table->timestamps();
+
+            $table->index('addon_group');
         });
 
         Schema::create('addon_food', function (Blueprint $table) {
