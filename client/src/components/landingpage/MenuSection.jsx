@@ -3,7 +3,9 @@ import { Badge, Box, Button, Container, Flex, Grid, Group, Image, Text } from '@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
-import { MENU_ITEMS } from './menuData';
+import { useQuery } from '@tanstack/react-query';
+
+import { fetchFoods, formatPeso } from '../../lib/menu';
 
 const MotionDiv = motion.div;
 
@@ -14,16 +16,18 @@ function MenuCard({ item, onSelect }) {
   return (
     <div className="group cursor-pointer" onClick={onSelect}>
       <div className="relative aspect-4/3 overflow-hidden rounded-3xl border border-cocoa-600 shadow-2xl">
-        <Badge
-          radius="sm"
-          className="absolute bottom-4 left-4 z-20 bg-accent-strong px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white"
-        >
-          Best Seller
-        </Badge>
+        {item.is_best_seller && (
+          <Badge
+            radius="sm"
+            className="absolute bottom-4 left-4 z-20 bg-accent-strong px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white"
+          >
+            Best Seller
+          </Badge>
+        )}
 
         <Image
-          src={item.image}
-          alt={item.name}
+          src={item.thumbnail}
+          alt={item.food_name}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
@@ -35,17 +39,17 @@ function MenuCard({ item, onSelect }) {
 
           <div>
             <Text fw={800} className="font-display text-[15px] uppercase leading-tight tracking-[0.06em] text-white">
-              {item.name}
+              {item.food_name}
             </Text>
 
-            <Text className="mt-1 font-display text-[13px] font-medium text-accent-strong">
-              {item.description}
+            <Text lineClamp={2} className="mt-1 max-w-[28ch] font-display text-[13px] font-medium text-accent-strong">
+              {item.category?.name ?? item.description}
             </Text>
           </div>
         </Group>
 
         <Text fw={900} className="shrink-0 font-display text-[20px] leading-none text-accent-strong">
-          ₱{item.price}
+          {formatPeso(item.price)}
         </Text>
       </Flex>
     </div>
@@ -59,28 +63,42 @@ export default function MenuSection() {
   const [offset, setOffset] = useState(0);
   const [paused, setPaused] = useState(false);
 
-  useEffect(() => {
-    MENU_ITEMS.forEach((item) => {
-      const preload = new window.Image();
-      preload.src = item.image;
-    });
-  }, []);
+  // The same catalogue the customer home page reads. Best sellers only: this
+  // is a marketing rail, not the full menu.
+  const { data } = useQuery({
+    queryKey: ['foods', 'landing'],
+    queryFn: () => fetchFoods({ bestSeller: true }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const items = useMemo(() => data?.data ?? [], [data]);
 
   useEffect(() => {
-    if (paused || reduceMotion) {
+    items.forEach((item) => {
+      if (!item.thumbnail) return;
+      const preload = new window.Image();
+      preload.src = item.thumbnail;
+    });
+  }, [items]);
+
+  // A shorter catalogue than the rail is wide must not repeat a card.
+  const visibleCount = Math.min(VISIBLE_COUNT, items.length);
+
+  useEffect(() => {
+    if (paused || reduceMotion || items.length <= visibleCount) {
       return undefined;
     }
 
     const timer = window.setInterval(() => {
-      setOffset((prev) => (prev + 1) % MENU_ITEMS.length);
+      setOffset((prev) => (prev + 1) % items.length);
     }, ROTATE_INTERVAL_MS);
 
     return () => window.clearInterval(timer);
-  }, [paused, reduceMotion]);
+  }, [paused, reduceMotion, items.length, visibleCount]);
 
   const visibleItems = useMemo(
-    () => Array.from({ length: VISIBLE_COUNT }, (_, slot) => MENU_ITEMS[(offset + slot) % MENU_ITEMS.length]),
-    [offset]
+    () => Array.from({ length: visibleCount }, (_, slot) => items[(offset + slot) % items.length]),
+    [items, offset, visibleCount]
   );
 
   return (
@@ -118,6 +136,11 @@ export default function MenuSection() {
           </MotionDiv>
         </Flex>
 
+        {items.length === 0 ? (
+          <p className="m-0 py-10 text-center font-display text-[14px] text-white/60">
+            Our menu is being prepared. Check back shortly.
+          </p>
+        ) : (
         <div
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
@@ -150,11 +173,11 @@ export default function MenuSection() {
           </Grid>
 
           <Group justify="center" gap={10} mt={48}>
-            {MENU_ITEMS.map((item, index) => (
+            {items.map((item, index) => (
               <button
                 key={item.id}
                 type="button"
-                aria-label={`Show ${item.name}`}
+                aria-label={`Show ${item.food_name}`}
                 aria-current={index === offset}
                 onClick={() => setOffset(index)}
                 className={`h-2 rounded-full transition-all duration-300 ${index === offset ? 'w-7 bg-accent-strong' : 'w-2 bg-white/25 hover:bg-white/50'}`}
@@ -162,6 +185,7 @@ export default function MenuSection() {
             ))}
           </Group>
         </div>
+        )}
 
       </Container>
     </Box>

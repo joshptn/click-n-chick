@@ -30,7 +30,6 @@ function Login() {
     try {
       const data = await loginUser(e);
 
-      // 2FA is on: the password was accepted but no session exists yet.
       if (data?.two_factor_required) {
         nav("/two-factor", {
           state: {

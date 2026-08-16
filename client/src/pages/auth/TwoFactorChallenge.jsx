@@ -17,14 +17,6 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
-/**
- * Second factor at login.
- *
- * The channel is whatever was fixed when 2FA was enabled - there is no choice
- * here on purpose. The challenge token stands in for the password having
- * already been accepted; it lives in router state only, so a refresh sends the
- * user back to sign in rather than leaving a reusable credential lying around.
- */
 function TwoFactorChallenge() {
   const nav = useNavigate();
   const location = useLocation();
