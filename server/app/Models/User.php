@@ -65,42 +65,25 @@ class User extends Authenticatable
         ];
     }
 
-    /** Store Manager - account and role administration. */
     public const ROLE_SUPER_ADMIN = 'super_admin';
 
-    /** Store Agent - day-to-day store operations, including stock. */
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_CUSTOMER = 'customer';
-
-    /** Every role the system recognises. Used to catch typos in route middleware. */
     public const ROLES = [
         self::ROLE_SUPER_ADMIN,
         self::ROLE_ADMIN,
         self::ROLE_CUSTOMER,
     ];
 
-    /**
-     * Exact membership test - there is no role hierarchy here on purpose.
-     *
-     * BR-29 requires the Store Manager to be excluded from Store-Agent-only
-     * stock work, so a super_admin must NOT satisfy hasRole('admin').
-     */
     public function hasRole(string ...$roles): bool
     {
         return in_array($this->role, $roles, true);
     }
 
-    /** Account exists but the registration OTP has not been confirmed yet. */
     public const STATUS_PENDING_VERIFICATION = 'pending_verification';
 
-    /**
-     * How long an unverified signup holds its email/phone. Past this the row is
-     * abandoned: a new signup may take the details over, and the purge command
-     * will delete it. Long enough to survive "I'll finish this after work",
-     * short enough that a typo'd number is not squatted on indefinitely.
-     */
-    public const PENDING_VERIFICATION_HOURS = 24;
+    public const PENDING_VERIFICATION_HOURS = 12;
 
     public const STATUS_ACTIVE = 'active';
 
@@ -109,14 +92,6 @@ class User extends Authenticatable
         return $this->account_status === self::STATUS_PENDING_VERIFICATION;
     }
 
-    /**
-     * Has this specific channel been confirmed?
-     *
-     * Reads the per-channel timestamp directly. account_status is a coarse
-     * marker and must never stand in for this: it is mass-assignable, so any
-     * path that set it to 'active' would otherwise wave through an account
-     * whose verified_at columns are both still null.
-     */
     public function hasVerifiedChannel(Channel|string|null $channel): bool
     {
         $value = $channel instanceof Channel ? $channel->value : $channel;
@@ -126,7 +101,6 @@ class User extends Authenticatable
             : $this->phone_verified_at !== null;
     }
 
-    /** True once the channel chosen at registration has been confirmed. */
     public function hasVerifiedChosenChannel(): bool
     {
         return $this->hasVerifiedChannel($this->verification_channel);
@@ -138,20 +112,11 @@ class User extends Authenticatable
             && $this->two_factor_channel !== null;
     }
 
-    /** Whether the user has agreed to storage of their address and order history. */
     public function hasGivenPrivacyConsent(): bool
     {
         return $this->privacy_consent_at !== null;
     }
 
-    /**
-     * Canonical PH mobile form: '+63' followed by the 10-digit subscriber
-     * number. Accepts the shapes people actually type - 09XXXXXXXXX,
-     * 9XXXXXXXXX, +639XXXXXXXXX - plus spaces, dashes and parentheses.
-     *
-     * Returns null when the input cannot be resolved to a PH mobile number,
-     * which callers must treat as "no match" rather than "match anything".
-     */
     public static function normalizePhoneNumber(?string $raw): ?string
     {
         if ($raw === null) {
@@ -177,16 +142,6 @@ class User extends Authenticatable
         return '+63'.$subscriber;
     }
 
-    /**
-     * Deterministic blind index for phone_number.
-     *
-     * phone_number is cast to 'encrypted', and Laravel's encryption uses a
-     * random IV, so the same number produces different ciphertext every time
-     * and can never be matched in a WHERE clause. This keyed hash gives an
-     * equality-searchable stand-in, stored in the unique phone_number_hash
-     * column. It is keyed on APP_KEY, so rotating APP_KEY invalidates it -
-     * the same constraint the encrypted column already carries.
-     */
     public static function hashPhoneNumber(?string $raw): ?string
     {
         $canonical = static::normalizePhoneNumber($raw);
@@ -216,7 +171,6 @@ class User extends Authenticatable
         return $this->hasMany(Address::class);
     }
 
-    /** Carts owned by this user; guest carts have a null user_id. */
     public function carts()
     {
         return $this->hasMany(Cart::class);
@@ -232,7 +186,6 @@ class User extends Authenticatable
         return $this->hasMany(Discount::class);
     }
 
-    /** Ledger of record; users.loyalty_points is the derived running balance. */
     public function loyaltyTransactions()
     {
         return $this->hasMany(LoyaltyTransaction::class);

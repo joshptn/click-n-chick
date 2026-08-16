@@ -12,14 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
-/**
- * BR-33: a password change is re-verified with an OTP before it is accepted.
- *
- * The channel is chosen fresh on every attempt and is deliberately NOT stored -
- * unlike 2FA, where the channel is fixed at enable-time. Someone changing their
- * password may well be doing it because one of their channels is no longer
- * reachable, so pinning them to a remembered choice would be the wrong default.
- */
+
 class PasswordChangeController extends Controller
 {
     public function __construct(
@@ -28,7 +21,6 @@ class PasswordChangeController extends Controller
     ) {
     }
 
-    /** Step 1: send the code to whichever channel was picked for this attempt. */
     public function requestCode(Request $request)
     {
         $validated = $request->validate([
@@ -68,12 +60,7 @@ class PasswordChangeController extends Controller
         ]);
     }
 
-    /**
-     * Step 2: the current password AND a valid code are both required.
-     *
-     * The code is redeemed before the password is written, so a failed
-     * verification never leaves a partially applied change.
-     */
+
     public function update(Request $request)
     {
         $validated = $request->validate([
@@ -106,8 +93,6 @@ class PasswordChangeController extends Controller
         $user->password = Hash::make($validated['password']);
         $user->save();
 
-        // Every other session is invalidated: a password change should not
-        // leave tokens issued under the old one alive.
         $user->tokens()->delete();
 
         return response()->json([

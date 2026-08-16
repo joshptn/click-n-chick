@@ -133,15 +133,12 @@ function Login() {
           )}
         </Field>
 
-        <button
-          type="button"
-          onClick={() =>
-            toast.info("Password reset isn't available yet — please contact support.", "Coming soon")
-          }
-          className="-mt-1 self-end bg-transparent font-display text-[12.5px] font-bold text-brand-600 hover:underline"
+        <Link
+          to="/forgot-password"
+          className="-mt-1 self-end font-display text-[12.5px] font-bold text-brand-600 no-underline hover:underline"
         >
           Forgot Password?
-        </button>
+        </Link>
 
         <Button type="submit" fullWidth size="lg" loading={loading} loadingLabel="Signing In..." className="mt-2">
           Sign In

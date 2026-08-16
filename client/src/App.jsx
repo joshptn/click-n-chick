@@ -3,6 +3,8 @@ import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import VerifyCode from './pages/auth/VerifyCode'
 import TwoFactorChallenge from './pages/auth/TwoFactorChallenge'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword from './pages/auth/ResetPassword'
 import { CHANNELS } from './lib/verificationChannels'
 import PrivateRoutes from './providers/PrivateRoutes'
 import { ROLES } from './lib/roles'
@@ -26,6 +28,9 @@ function App() {
         <Route path="/verify-email" element={<VerifyCode channel={CHANNELS.EMAIL} />} />
         {/* Second factor at login. Reached only with a challenge token. */}
         <Route path="/two-factor" element={<TwoFactorChallenge />} />
+        {/* Password recovery. Public: the whole point is being unable to sign in. */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
