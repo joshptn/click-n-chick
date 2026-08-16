@@ -15,11 +15,15 @@ return new class extends Migration
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('poster_name');
             $table->string('image');
+            // Taken down without deleting the row or waiting for expires_at.
+            $table->boolean('is_active')->default(true);
+            $table->unsignedInteger('sort_order')->default(0);
             // Date it stops showing on the homepage.
             $table->date('expires_at')->nullable();
             $table->timestamps();
 
             $table->index('expires_at');
+            $table->index(['is_active', 'sort_order']);
         });
     }
 
