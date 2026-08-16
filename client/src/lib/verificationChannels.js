@@ -29,4 +29,23 @@ export function routeForChannel(channel) {
   return CHANNEL_COPY[channel]?.route ?? CHANNEL_COPY[CHANNELS.SMS].route;
 }
 
+// Email only - the channel that never depends on an external provider being
+// provisioned, so it is the safe assumption when the backend cannot be reached.
+const OFFLINE_FALLBACK = [{ channel: CHANNELS.EMAIL, label: "Email", available: true, reason: null }];
+
+export async function fetchVerificationChannels() {
+  const url = import.meta.env.VITE_API_URL;
+
+  try {
+    const response = await fetch(`${url}/api/verification/channels`, {
+      headers: { Accept: "application/json" },
+    });
+    const data = await response.json();
+
+    return data.channels ?? OFFLINE_FALLBACK;
+  } catch {
+    return OFFLINE_FALLBACK;
+  }
+}
+
 export default CHANNELS;

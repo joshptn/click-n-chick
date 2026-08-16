@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { IconInfoCircle, IconMail, IconPhone } from "@tabler/icons-react";
 
-import { CHANNELS } from "../../lib/verificationChannels";
+import { CHANNELS, fetchVerificationChannels } from "../../lib/verificationChannels";
 
 const ICONS = {
   [CHANNELS.SMS]: IconPhone,
@@ -13,50 +13,29 @@ const HINTS = {
   [CHANNELS.EMAIL]: "To your email address",
 };
 
-/**
- * Phone/email picker shared by registration, 2FA enrolment and the
- * password-change confirmation.
- *
- * Availability comes from GET /api/verification/channels, never from a
- * constant here - when the SMS provider is sorted out the backend flag flips
- * and the phone option enables itself with no change to this file.
- */
+
 function ChannelChoice({ value, onChange, legend = "How should we send your code?", disabled = false }) {
   const [channels, setChannels] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const url = import.meta.env.VITE_API_URL;
 
     const load = async () => {
-      try {
-        const response = await fetch(`${url}/api/verification/channels`, {
-          headers: { Accept: "application/json" },
-        });
-        const data = await response.json();
+      const list = await fetchVerificationChannels();
 
-        if (cancelled) return;
+      if (cancelled) return;
 
-        const list = data.channels ?? [];
-        setChannels(list);
+      setChannels(list);
 
-        // Never leave the form pointing at something that cannot deliver.
-        const current = list.find((c) => c.channel === value);
-        if (current && !current.available) {
-          const fallback = list.find((c) => c.available);
-          if (fallback) onChange(fallback.channel);
-        }
-      } catch {
-        // Backend unreachable: fall back to email only, which is the channel
-        // that never depends on an external provider being provisioned.
-        if (!cancelled) {
-          setChannels([{ channel: CHANNELS.EMAIL, label: "Email", available: true, reason: null }]);
-          onChange(CHANNELS.EMAIL);
-        }
-      } finally {
-        if (!cancelled) setLoaded(true);
+      // Never leave the form pointing at something that cannot deliver.
+      const current = list.find((c) => c.channel === value);
+      if (!current || !current.available) {
+        const fallback = list.find((c) => c.available);
+        if (fallback) onChange(fallback.channel);
       }
+
+      setLoaded(true);
     };
 
     load();

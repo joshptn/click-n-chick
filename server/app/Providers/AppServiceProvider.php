@@ -18,9 +18,6 @@ use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
 
@@ -47,9 +44,6 @@ class AppServiceProvider extends ServiceProvider
         });
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
         $this->configureRateLimiting();
@@ -94,27 +88,27 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        RateLimiter::for('password-reset', function (Request $request) {
+            $identifierKey = $this->otpIdentifierKey($request);
+
+            return [
+                Limit::perMinutes(15, 3)->by('pwreset:id:'.$identifierKey),
+                Limit::perMinutes(1440, 8)->by('pwreset:id-day:'.$identifierKey),
+                Limit::perMinutes(15, 5)->by('pwreset:ip:'.$request->ip()),
+                Limit::perMinutes(1440, 20)->by('pwreset:ip-day:'.$request->ip()),
+            ];
+        });
+
         RateLimiter::for('place-order', function (Request $request) {
             return Limit::perMinute(8)->by($request->user()?->id ?: $request->ip());
         });
     }
 
-    /**
-     * Normalise the submitted email for use in a rate limiter key.
-     *
-     * Guards against non-string input (e.g. email[]=foo), which would otherwise
-     * raise an "array to string conversion" error inside the limiter callback.
-     */
-    /**
-     * Per-identifier limiter key, whichever channel the caller is using.
-     *
-     * Falls back to a shared 'unresolved' bucket when the input is not a valid
-     * identifier for any channel, so junk submissions throttle as one group
-     * instead of each getting a fresh budget.
-     */
     protected function otpIdentifierKey(Request $request): string
     {
-        $raw = $request->input('phone_number') ?? $request->input('email');
+        $raw = $request->input('phone_number')
+            ?? $request->input('email')
+            ?? $request->input('identifier');
 
         if (! is_string($raw) || trim($raw) === '') {
             return 'unresolved';

@@ -13,19 +13,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
-/**
- * Two-factor authentication (FR-01.7).
- *
- * The channel is chosen once, at enable time, and recorded on the account.
- * Every later login challenge reuses it - there is deliberately no per-login
- * choice, so an attacker who has the password cannot steer the second factor
- * to whichever channel they happen to control.
- */
 class TwoFactorController extends Controller
 {
     private const TOKEN_NAME = 'auth_token';
 
-    /** Cache prefix for the short-lived post-password login challenge. */
     private const CHALLENGE_PREFIX = '2fa:challenge:';
 
     public function __construct(
@@ -34,9 +25,6 @@ class TwoFactorController extends Controller
     ) {
     }
 
-    /**
-     * Step 1 of enabling: send a code to the channel the user picked.
-     */
     public function enable(Request $request)
     {
         $validated = $request->validate([
@@ -76,15 +64,6 @@ class TwoFactorController extends Controller
         ]);
     }
 
-    /**
-     * Step 2: confirming the code turns 2FA on and fixes the delivery channel.
-     *
-     * If that channel had not been verified before, this confirmation verifies
-     * it too - the user has just proven control of it, and re-proving the same
-     * fact through the registration flow would be busywork. The verification is
-     * recorded through the same VerificationChannel::markVerified() the
-     * registration path uses rather than a second implementation.
-     */
     public function confirm(Request $request)
     {
         $request->validate([
@@ -110,7 +89,6 @@ class TwoFactorController extends Controller
 
         $transport = $this->channels->for($channel);
 
-        // Proving control of the channel verifies it, if it was not already.
         if (! $user->hasVerifiedChannel($channel)) {
             $transport->markVerified($user);
         }
@@ -167,12 +145,6 @@ class TwoFactorController extends Controller
         ];
     }
 
-    /**
-     * Complete the login by answering the challenge.
-     *
-     * Unauthenticated by necessity - no token exists yet. The challenge token
-     * stands in for having already passed the password check.
-     */
     public function challenge(Request $request)
     {
         $request->validate([
