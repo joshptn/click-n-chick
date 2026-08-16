@@ -61,7 +61,7 @@ class TestRecaptchaVerify extends Command
             try {
                 $response = Http::asForm()
                     ->timeout((int) config('services.recaptcha.timeout', 5))
-                    ->post((string) config('services.recaptcha.verify_url'), [
+                    ->post($recaptcha->verifyUrl(), [
                         'secret' => $secret,
                         'response' => $token,
                     ]);
