@@ -85,32 +85,60 @@ class PasswordPolicyTest extends TestCase
         }
     }
 
-    public function test_the_policy_applies_to_a_profile_password_change(): void
+    /** Password changes moved behind the BR-33 OTP; the policy still applies. */
+    public function test_the_policy_applies_to_a_password_change(): void
     {
         $user = User::factory()->create([
             'account_status' => User::STATUS_ACTIVE,
             'password' => Hash::make('Original1!'),
         ]);
 
+        $code = $this->requestPasswordCode($user);
+
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/user/update', [
+            ->postJson('/api/user/password', [
                 'current_password' => 'Original1!',
                 'password' => 'weakpassword',
                 'password_confirmation' => 'weakpassword',
+                'code' => $code,
             ])
-            ->assertStatus(422);
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('password');
 
         $this->assertTrue(Hash::check('Original1!', $user->fresh()->password));
 
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/user/update', [
+            ->postJson('/api/user/password', [
                 'current_password' => 'Original1!',
                 'password' => 'Replacement1!',
                 'password_confirmation' => 'Replacement1!',
+                'code' => $code,
             ])
             ->assertOk();
 
         $this->assertTrue(Hash::check('Replacement1!', $user->fresh()->password));
+    }
+
+    /** Requests a BR-33 code and returns the plaintext it was issued from. */
+    private function requestPasswordCode(User $user): string
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/user/password/request-code', ['channel' => 'email'])
+            ->assertOk();
+
+        $code = null;
+        \Illuminate\Support\Facades\Mail::assertSent(
+            \App\Mail\VerificationCodeMail::class,
+            function ($mail) use (&$code) {
+                $code = $mail->code;
+
+                return true;
+            }
+        );
+
+        return $code;
     }
 
     public function test_the_displayed_requirements_match_what_is_enforced(): void

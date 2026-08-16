@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Mail\VerificationCodeMail;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class RoleAssignmentTest extends TestCase
@@ -86,29 +88,48 @@ class RoleAssignmentTest extends TestCase
         $this->assertSame('customer', $fresh->role, 'Self-service update must not change role.');
     }
 
+    /**
+     * Password changes moved to POST /api/user/password (BR-33). The current
+     * password is still required; a valid OTP is now required alongside it.
+     */
     public function test_self_service_password_change_requires_current_password(): void
     {
+        Mail::fake();
+
         $user = $this->makeUser('customer');
         $user->password = Hash::make('original-password');
         $user->save();
 
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/user/password/request-code', ['channel' => 'email'])
+            ->assertOk();
+
+        $code = null;
+        Mail::assertSent(VerificationCodeMail::class, function ($mail) use (&$code) {
+            $code = $mail->code;
+
+            return true;
+        });
+
         // Wrong current password is rejected.
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/user/update', [
+            ->postJson('/api/user/password', [
                 'current_password' => 'not-the-password',
                 'password' => 'Brand-New-Password1',
                 'password_confirmation' => 'Brand-New-Password1',
+                'code' => $code,
             ])
             ->assertStatus(422);
 
         $this->assertTrue(Hash::check('original-password', $user->fresh()->password));
 
-        // Correct current password succeeds.
+        // Correct current password plus the code succeeds.
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/user/update', [
+            ->postJson('/api/user/password', [
                 'current_password' => 'original-password',
                 'password' => 'Brand-New-Password1',
                 'password_confirmation' => 'Brand-New-Password1',
+                'code' => $code,
             ])
             ->assertOk();
 
