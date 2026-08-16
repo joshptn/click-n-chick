@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
+import { disconnectEcho } from '../lib/echo';
 
 const AuthContext = createContext();
 
@@ -75,6 +76,10 @@ export function AuthProvider({children}) {
     };
     
     const logoutUser = () => {
+        // Before clearing the token: the socket authorized with it and would
+        // otherwise keep the previous user's subscriptions alive.
+        disconnectEcho();
+
         setUser(null);
         setToken(null);
         localStorage.removeItem('token');
