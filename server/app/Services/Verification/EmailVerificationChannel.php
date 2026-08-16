@@ -61,6 +61,26 @@ class EmailVerificationChannel implements VerificationChannel
         $user->email_verified_at = now();
     }
 
+    /**
+     * Always offered. Even with MAIL_MAILER=log the code is written where a
+     * developer can read it, so the flow is never a dead end the way an
+     * unconfigured SMS provider is.
+     */
+    public function isAvailable(): bool
+    {
+        return true;
+    }
+
+    public function unavailableReason(): ?string
+    {
+        return null;
+    }
+
+    public function label(): string
+    {
+        return 'Email';
+    }
+
     public function send(string $identifier, string $code): void
     {
         // Sent synchronously: registration blocks on this code arriving, so a

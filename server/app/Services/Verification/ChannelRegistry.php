@@ -37,6 +37,29 @@ class ChannelRegistry
         return $this->for($user->verification_channel);
     }
 
+    /**
+     * Every channel with its current deliverability, for the choice UI.
+     *
+     * The single source the frontend reads, so the phone option enables itself
+     * as soon as the SMS configuration says it can deliver.
+     *
+     * @return array<int, array{channel: string, label: string, available: bool, reason: ?string}>
+     */
+    public function describe(): array
+    {
+        return array_values(array_map(static fn (VerificationChannel $transport) => [
+            'channel' => $transport->channel()->value,
+            'label' => $transport->label(),
+            'available' => $transport->isAvailable(),
+            'reason' => $transport->unavailableReason(),
+        ], $this->channels));
+    }
+
+    public function isAvailable(Channel|string|null $channel): bool
+    {
+        return $this->for($channel)->isAvailable();
+    }
+
     /** The channel implied by the shape of a submitted identifier. */
     public function forIdentifier(?string $identifier): ?VerificationChannel
     {

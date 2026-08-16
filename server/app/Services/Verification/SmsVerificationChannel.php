@@ -54,6 +54,32 @@ class SmsVerificationChannel implements VerificationChannel
     }
 
     /**
+     * Available only when a real provider is configured.
+     *
+     * SMS_DRIVER=log writes the code to the application log and dispatches
+     * nothing, so offering it to a user would be a dead end. Setting
+     * SMS_DRIVER=semaphore with a key present turns this - and the phone option
+     * in every channel picker - back on with no code or UI change.
+     */
+    public function isAvailable(): bool
+    {
+        return config('services.sms.driver') === 'semaphore'
+            && filled(config('services.semaphore.key'));
+    }
+
+    public function unavailableReason(): ?string
+    {
+        return $this->isAvailable()
+            ? null
+            : 'SMS delivery is not available yet. Please use email instead.';
+    }
+
+    public function label(): string
+    {
+        return 'Text message';
+    }
+
+    /**
      * The message carries the literal '{otp}' placeholder and the code travels
      * separately - see SmsSender::send(). That contract is unchanged here.
      */

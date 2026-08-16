@@ -39,6 +39,20 @@ interface VerificationChannel
     public function markVerified(User $user): void;
 
     /**
+     * Can this channel actually deliver right now?
+     *
+     * Derived from configuration, never hardcoded, so the UI flips the moment
+     * the provider situation changes without a follow-up frontend edit.
+     */
+    public function isAvailable(): bool;
+
+    /** User-facing reason the channel is unavailable, or null when it is. */
+    public function unavailableReason(): ?string;
+
+    /** Short human label for the choice UI. */
+    public function label(): string;
+
+    /**
      * Deliver the code.
      *
      * @throws \RuntimeException when the transport refused the message.

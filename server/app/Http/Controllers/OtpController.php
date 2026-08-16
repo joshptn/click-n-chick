@@ -84,9 +84,24 @@ class OtpController extends Controller
             return $invalid;
         }
 
+        // The code must be for the channel this account actually registered on.
+        // Without this the account could be activated by confirming the OTHER
+        // channel, leaving the chosen one unverified.
+        if ($user->verification_channel !== $transport->channel()->value) {
+            return $invalid;
+        }
+
         $transport->markVerified($user);
+        // account_status is a coarse marker updated alongside the timestamp; it
+        // is never what the gate reads. See User::hasVerifiedChannel().
         $user->account_status = User::STATUS_ACTIVE;
         $user->save();
+
+        // Belt and braces: refuse to issue a token unless the specific
+        // per-channel timestamp is now set.
+        if (! $user->hasVerifiedChannel($transport->channel())) {
+            return $invalid;
+        }
 
         $token = $user->createToken(self::TOKEN_NAME);
 
@@ -129,7 +144,11 @@ class OtpController extends Controller
 
         $user = $transport->findUser($identifier);
 
-        if ($user !== null && $user->isPendingVerification()) {
+        // Gate on the specific channel, not account_status, and only resend for
+        // the channel this account actually registered on.
+        if ($user !== null
+            && $user->verification_channel === $transport->channel()->value
+            && ! $user->hasVerifiedChannel($transport->channel())) {
             $this->otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $transport->channel());
         }
 

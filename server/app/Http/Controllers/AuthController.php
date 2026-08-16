@@ -170,11 +170,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
-        if ($user->isPendingVerification()) {
-            $transport = app(ChannelRegistry::class)->forUser($user);
+        $registry = app(ChannelRegistry::class);
+
+        // Gate on the per-channel timestamp, NOT on account_status. That column
+        // is mass-assignable and any path that flipped it to 'active' would
+        // otherwise let an unverified account straight in.
+        if (! $user->hasVerifiedChosenChannel()) {
+            $transport = $registry->forUser($user);
 
             return response()->json([
                 'status' => User::STATUS_PENDING_VERIFICATION,
+                // Always names the specific channel - never "verify your account".
                 'message' => $transport->channel() === Channel::Email
                     ? 'Verify your email address to finish setting up your account.'
                     : 'Verify your phone number to finish setting up your account.',
@@ -182,6 +188,16 @@ class AuthController extends Controller
                 'identifier' => $transport->mask($transport->identifierFor($user)),
                 'phone_number' => $this->maskPhoneNumber($user->phone_number),
             ], 403);
+        }
+
+        // Password checked out and the account is fully active. If 2FA is on,
+        // the second factor goes to the channel fixed at enable-time - the user
+        // does not choose one per login.
+        if ($user->hasTwoFactorEnabled()) {
+            return response()->json(
+                app(TwoFactorController::class)->issueLoginChallenge($user, $request->ip()),
+                200
+            );
         }
 
         $token = $user->createToken(self::TOKEN_NAME);
@@ -222,8 +238,9 @@ class AuthController extends Controller
                 'last_name' => 'sometimes|nullable|string|max:255',
                 'phone_number' => 'sometimes|nullable|string|max:20',
 
-                'current_password' => ['required_with:password', 'current_password'],
-                'password' => ['sometimes', 'required', 'string', 'confirmed', new StrongPassword()],
+                // Password changes are NOT handled here. BR-33 requires an OTP
+                // re-verification first, so they go through
+                // PasswordChangeController (POST /api/user/password).
             ]);
 
             $changed = false;
@@ -253,11 +270,6 @@ class AuthController extends Controller
                 $user->phone_number_hash = $phoneHash;
                 $changed = true;
             }
-            if (array_key_exists('password', $validated)) {
-                $user->password = Hash::make($validated['password']);
-                $changed = true;
-            }
-
             if (!$changed) {
                 return response()->json([
                     'success' => false,
