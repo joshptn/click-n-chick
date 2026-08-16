@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
@@ -27,6 +28,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         //
         $middleware->append(HandleCors::class);
+
+        // Route-group role gate (PRD §7, FR-01.12). Always listed AFTER
+        // auth:sanctum in a group so the user is resolved before it runs.
+        $middleware->alias([
+            'role' => EnsureUserHasRole::class,
+        ]);
 
         // Applies the 'api' named limiter (see AppServiceProvider::configureRateLimiting)
         // to every route in routes/api.php as a baseline. Sensitive routes layer an

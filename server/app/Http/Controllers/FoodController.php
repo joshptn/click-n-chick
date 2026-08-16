@@ -43,7 +43,7 @@ class FoodController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         try {
-            $this->authorize('isAdmin', Food::class);
+            $this->authorize('isSuperAdmin', Food::class);
 
             $validated = $request->validate([
                 'thumbnail'   => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
@@ -99,7 +99,7 @@ class FoodController extends Controller implements HasMiddleware
     public function update(Request $request, Food $food)
     {
         try {
-            $this->authorize('isAdmin', Food::class);
+            $this->authorize('isSuperAdmin', Food::class);
             
             $validated = $request->validate([
                 'thumbnail'   => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'], 
@@ -170,7 +170,7 @@ class FoodController extends Controller implements HasMiddleware
     public function destroy(Food $food)
     {
         try {
-            $this->authorize('isAdmin', Food::class);
+            $this->authorize('isSuperAdmin', Food::class);
 
             // Delete from Cloudinary if URL exists
             if ($food->thumbnail && str_contains($food->thumbnail, 'res.cloudinary.com')) {
@@ -195,6 +195,47 @@ class FoodController extends Controller implements HasMiddleware
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Set an item's stock level. Store Agent only.
+     *
+     * BR-29 / FR-07.2. The gate is the route group's `role:admin`, which is an
+     * exact match and therefore excludes the Store Manager. Deliberately NOT
+     * guarded with authorize('isAdmin'), because that policy admits
+     * super_admin and would re-open the boundary this method exists to close.
+     */
+    public function updateStock(Request $request, Food $food)
+    {
+        $validated = $request->validate([
+            'stock_quantity' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $food->update($validated);
+        $food->refresh();
+
+        MenuBroadcast::dispatch($food->load('category'), 'updated');
+
+        return response()->json($food->load('category'), 200);
+    }
+
+    /**
+     * Toggle whether an item can be ordered. Store Agent only.
+     *
+     * Same boundary as updateStock - see BR-29 note above.
+     */
+    public function updateAvailability(Request $request, Food $food)
+    {
+        $validated = $request->validate([
+            'is_available' => ['required', 'boolean'],
+        ]);
+
+        $food->update($validated);
+        $food->refresh();
+
+        MenuBroadcast::dispatch($food->load('category'), 'updated');
+
+        return response()->json($food->load('category'), 200);
     }
 
     public function drinks(Request $request)

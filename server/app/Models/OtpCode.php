@@ -11,7 +11,8 @@ class OtpCode extends Model
 
     protected $fillable = [
         'user_id',
-        'phone_number_hash',
+        'channel',
+        'identifier_hash',
         'code_hash',
         'purpose',
         'ip_address',
@@ -22,6 +23,15 @@ class OtpCode extends Model
 
     /** otp_codes.purpose for the blocking registration flow. */
     public const PURPOSE_REGISTRATION = 'registration';
+
+    /** Confirming the channel a user is turning 2FA on for. */
+    public const PURPOSE_TWO_FACTOR_ENABLE = 'two_factor_enable';
+
+    /** The per-login challenge once 2FA is on. */
+    public const PURPOSE_TWO_FACTOR_LOGIN = 'two_factor_login';
+
+    /** BR-33: re-verifying identity before a password change is accepted. */
+    public const PURPOSE_PASSWORD_CHANGE = 'password_change';
 
     protected $hidden = [
         'code_hash',

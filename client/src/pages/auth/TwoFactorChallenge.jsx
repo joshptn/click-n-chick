@@ -8,7 +8,7 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
-import toast from "../../components/app/Toast";
+import { CHANNELS } from "../../lib/verificationChannels";
 
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
@@ -16,59 +16,59 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
-function VerifyPhone() {
+/**
+ * Second factor at login.
+ *
+ * The channel is whatever was fixed when 2FA was enabled - there is no choice
+ * here on purpose. The challenge token stands in for the password having
+ * already been accepted; it lives in router state only, so a refresh sends the
+ * user back to sign in rather than leaving a reusable credential lying around.
+ */
+function TwoFactorChallenge() {
   const nav = useNavigate();
   const location = useLocation();
   const { adoptSession } = useContext(AuthContext);
 
-  // Carried from the register (or blocked-login) redirect. Without it there is
-  // nothing to verify against, so the screen sends the user back.
-  const { phoneNumber, maskedPhone, resendAvailableIn } = location.state ?? {};
+  const { challengeToken, channel, identifier } = location.state ?? {};
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(resendAvailableIn ?? 0);
   const codeRef = useRef(null);
 
   useEffect(() => {
-    if (!phoneNumber) {
-      nav("/register", { replace: true });
+    if (!challengeToken) {
+      nav("/login", { replace: true });
     }
-  }, [phoneNumber, nav]);
-
-  useEffect(() => {
-    if (cooldown <= 0) return undefined;
-
-    const timer = window.setInterval(() => {
-      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [cooldown]);
+  }, [challengeToken, nav]);
 
   const url = import.meta.env.VITE_API_URL;
 
-  const handleVerify = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      const response = await fetch(`${url}/api/otp/verify`, {
+      const response = await fetch(`${url}/api/2fa/challenge`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber, code: e.target.code.value.trim() }),
+        body: JSON.stringify({ challenge_token: challengeToken, code: e.target.code.value.trim() }),
         credentials: "include",
       });
 
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.message || "That code is not correct.");
+      if (!response.ok) {
+        // An expired or spent challenge cannot be retried on this screen.
+        if (data.reason === "challenge_expired") {
+          nav("/login", { replace: true });
+          return;
+        }
 
-      // This endpoint returns the same {user, token} shape as login, so the
-      // session starts here - no separate /login round trip.
+        throw new Error(data.message || "That code is not correct.");
+      }
+
       adoptSession(data);
-      toast.success("Your phone number is verified.", "Welcome to Click n Chick");
       nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
     } catch (err) {
       setError(err.message);
@@ -78,41 +78,17 @@ function VerifyPhone() {
     }
   };
 
-  const handleResend = async () => {
-    setError("");
-
-    try {
-      const response = await fetch(`${url}/api/otp/resend`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ phone_number: phoneNumber }),
-        credentials: "include",
-      });
-
-      const data = await response.json();
-
-      setCooldown(data.resend_available_in ?? 60);
-
-      if (!response.ok) {
-        toast.warning(data.message || "Please wait before requesting another code.", "Hold on");
-        return;
-      }
-
-      toast.info(data.message, "Code sent");
-    } catch {
-      toast.error("We could not send a new code. Please try again.");
-    }
-  };
+  const sentTo = channel === CHANNELS.EMAIL ? "email address" : "phone";
 
   return (
     <AuthLayout
-      eyebrow="One last step for"
-      heading="Verify your phone"
+      eyebrow="Two-step verification for"
+      heading="Enter your code"
       footer={
         <p className="text-center font-display text-[13px] text-[#6f6b68]">
-          Wrong number?{" "}
-          <Link to="/register" className="font-bold text-brand-600 no-underline hover:underline">
-            Start over
+          Not you?{" "}
+          <Link to="/login" className="font-bold text-brand-600 no-underline hover:underline">
+            Back to sign in
           </Link>
         </p>
       }
@@ -132,12 +108,17 @@ function VerifyPhone() {
       )}
 
       <p className="mb-5 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
-        We sent a 6-digit code to{" "}
-        <span className="font-semibold text-[#33302c]">{maskedPhone ?? phoneNumber}</span>. Enter it below to
-        finish creating your account.
+        We sent a 6-digit code to your {sentTo}
+        {identifier ? (
+          <>
+            {" "}
+            <span className="font-semibold text-[#33302c]">{identifier}</span>
+          </>
+        ) : null}
+        . Enter it to finish signing in.
       </p>
 
-      <form onSubmit={handleVerify} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="Verification code" required>
           {(id) => (
             <Input
@@ -162,20 +143,11 @@ function VerifyPhone() {
         </Field>
 
         <Button type="submit" fullWidth size="lg" loading={loading} loadingLabel="Verifying..." className="mt-1">
-          Verify
+          Continue
         </Button>
-
-        <button
-          type="button"
-          onClick={handleResend}
-          disabled={cooldown > 0}
-          className="mx-auto bg-transparent font-display text-[12.5px] font-bold text-brand-600 transition-opacity hover:underline disabled:cursor-not-allowed disabled:text-[#a39f9b] disabled:no-underline"
-        >
-          {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
-        </button>
       </form>
     </AuthLayout>
   );
 }
 
-export default VerifyPhone;
+export default TwoFactorChallenge;

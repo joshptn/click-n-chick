@@ -6,35 +6,62 @@ use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\Otp\OtpService;
 use App\Services\Otp\OtpVerificationResult;
+use App\Services\Verification\ChannelRegistry;
+use App\Services\Verification\VerificationChannel;
 use Illuminate\Http\Request;
 
 class OtpController extends Controller
 {
     private const TOKEN_NAME = 'auth_token';
 
-    public function __construct(private OtpService $otp)
-    {
+    public function __construct(
+        private OtpService $otp,
+        private ChannelRegistry $channels,
+    ) {
     }
 
     /**
-     * Step 2 of the blocking registration flow.
+     * Pull the identifier out of a request that may name it either way.
      *
-     * On success the account becomes active and this endpoint issues the token
-     * itself, in the same shape login returns, so the client never has to make a
-     * second round trip to /login.
+     * Callers submit `phone_number` or `email`; the channel follows from the
+     * shape of whichever arrives, so there is no separate channel parameter and
+     * neither path needs its own endpoint.
+     *
+     * @return array{0: ?VerificationChannel, 1: ?string}
      */
+    private function resolveIdentifier(Request $request): array
+    {
+        $raw = $request->input('phone_number') ?? $request->input('email');
+
+        if (! is_string($raw) || trim($raw) === '') {
+            return [null, null];
+        }
+
+        return [$this->channels->forIdentifier($raw), trim($raw)];
+    }
+
     public function verify(Request $request)
     {
-        $validated = $request->validate([
-            'phone_number' => ['required', 'string', 'max:20'],
+        $request->validate([
+            'phone_number' => ['required_without:email', 'nullable', 'string', 'max:255'],
+            'email' => ['required_without:phone_number', 'nullable', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:12'],
         ]);
 
-        // Every OTP lookup goes through the hash; phone_number is encrypted with a
-        // random IV and can never be matched in a WHERE clause.
-        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
+        [$transport, $identifier] = $this->resolveIdentifier($request);
 
-        $result = $this->otp->verify($phoneHash, OtpCode::PURPOSE_REGISTRATION, $validated['code']);
+        $invalid = response()->json([
+            'message' => 'That code is not correct.',
+            'reason' => 'invalid',
+        ], 422);
+
+        if ($transport === null) {
+            return $invalid;
+        }
+
+        $identifierHash = $this->channels->hash($transport->channel(), $identifier);
+
+        $result = $this->otp->verify($identifierHash, OtpCode::PURPOSE_REGISTRATION, $request->input('code'));
 
         if ($result !== OtpVerificationResult::Verified) {
             return response()->json([
@@ -51,15 +78,30 @@ class OtpController extends Controller
             ], 422);
         }
 
-        $user = User::where('phone_number_hash', $phoneHash)->first();
+        $user = $transport->findUser($identifier);
 
         if (! $user) {
-            return response()->json(['message' => 'That code is not correct.', 'reason' => 'invalid'], 422);
+            return $invalid;
         }
 
-        $user->phone_verified_at = now();
+        // The code must be for the channel this account actually registered on.
+        // Without this the account could be activated by confirming the OTHER
+        // channel, leaving the chosen one unverified.
+        if ($user->verification_channel !== $transport->channel()->value) {
+            return $invalid;
+        }
+
+        $transport->markVerified($user);
+        // account_status is a coarse marker updated alongside the timestamp; it
+        // is never what the gate reads. See User::hasVerifiedChannel().
         $user->account_status = User::STATUS_ACTIVE;
         $user->save();
+
+        // Belt and braces: refuse to issue a token unless the specific
+        // per-channel timestamp is now set.
+        if (! $user->hasVerifiedChannel($transport->channel())) {
+            return $invalid;
+        }
 
         $token = $user->createToken(self::TOKEN_NAME);
 
@@ -69,51 +111,45 @@ class OtpController extends Controller
         ]);
     }
 
-    /**
-     * Re-send the registration code.
-     *
-     * Answers the same way whether or not the number is awaiting verification,
-     * so this cannot be used to test which numbers have signed up. The only
-     * distinct response is the cooldown refusal.
-     */
+
     public function resend(Request $request)
     {
-        $validated = $request->validate([
-            'phone_number' => ['required', 'string', 'max:20'],
+        $request->validate([
+            'phone_number' => ['required_without:email', 'nullable', 'string', 'max:255'],
+            'email' => ['required_without:phone_number', 'nullable', 'string', 'max:255'],
         ]);
 
-        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
+        [$transport, $identifier] = $this->resolveIdentifier($request);
 
         $generic = [
-            'message' => 'If that number is awaiting verification, a new code is on its way.',
+            'message' => 'If that account is awaiting verification, a new code is on its way.',
             'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
             'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
         ];
 
-        if ($phoneHash === null) {
+        if ($transport === null) {
             return response()->json($generic);
         }
 
-        $wait = $this->otp->secondsUntilResendAllowed($phoneHash, OtpCode::PURPOSE_REGISTRATION);
+        $identifierHash = $this->channels->hash($transport->channel(), $identifier);
+
+        $wait = $this->otp->secondsUntilResendAllowed($identifierHash, OtpCode::PURPOSE_REGISTRATION);
 
         if ($wait > 0) {
-            // A per-number cooldown on top of the throttle. Semaphore's OTP
-            // endpoint is explicitly NOT rate limited on their side, so nothing
-            // upstream stops a customer mashing "resend" from burning credits and
-            // spamming their own handset. This cooldown is load-bearing.
             return response()->json([
                 'message' => "Please wait {$wait}s before requesting another code.",
                 'resend_available_in' => $wait,
             ], 429);
         }
 
-        $user = User::query()
-            ->where('phone_number_hash', $phoneHash)
-            ->where('account_status', User::STATUS_PENDING_VERIFICATION)
-            ->first();
+        $user = $transport->findUser($identifier);
 
-        if ($user !== null) {
-            $this->otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip());
+        // Gate on the specific channel, not account_status, and only resend for
+        // the channel this account actually registered on.
+        if ($user !== null
+            && $user->verification_channel === $transport->channel()->value
+            && ! $user->hasVerifiedChannel($transport->channel())) {
+            $this->otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $transport->channel());
         }
 
         return response()->json($generic);

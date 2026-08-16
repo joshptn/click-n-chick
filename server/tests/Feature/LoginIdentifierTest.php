@@ -20,6 +20,10 @@ class LoginIdentifierTest extends TestCase
 
         $user->phone_number = $phone;
         $user->phone_number_hash = User::hashPhoneNumber($phone);
+        // Login gates on the per-channel timestamp, not account_status, so a
+        // fixture that intends "already verified" has to say so explicitly.
+        $user->verification_channel = 'sms';
+        $user->phone_verified_at = now();
         $user->save();
 
         return $user->fresh();

@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Services\Verification\Channel;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -27,6 +28,7 @@ class User extends Authenticatable
         'last_name',
         'phone_number',
         'phone_number_hash',
+        'verification_channel',
         'avatar',
     ];
 
@@ -59,7 +61,34 @@ class User extends Authenticatable
             'phone_number' => 'encrypted',
             'loyalty_points' => 'integer',
             'two_factor_confirmed_at' => 'datetime',
+            'two_factor_enabled' => 'boolean',
         ];
+    }
+
+    /** Store Manager - account and role administration. */
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+
+    /** Store Agent - day-to-day store operations, including stock. */
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_CUSTOMER = 'customer';
+
+    /** Every role the system recognises. Used to catch typos in route middleware. */
+    public const ROLES = [
+        self::ROLE_SUPER_ADMIN,
+        self::ROLE_ADMIN,
+        self::ROLE_CUSTOMER,
+    ];
+
+    /**
+     * Exact membership test - there is no role hierarchy here on purpose.
+     *
+     * BR-29 requires the Store Manager to be excluded from Store-Agent-only
+     * stock work, so a super_admin must NOT satisfy hasRole('admin').
+     */
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role, $roles, true);
     }
 
     /** Account exists but the registration OTP has not been confirmed yet. */
@@ -78,6 +107,35 @@ class User extends Authenticatable
     public function isPendingVerification(): bool
     {
         return $this->account_status === self::STATUS_PENDING_VERIFICATION;
+    }
+
+    /**
+     * Has this specific channel been confirmed?
+     *
+     * Reads the per-channel timestamp directly. account_status is a coarse
+     * marker and must never stand in for this: it is mass-assignable, so any
+     * path that set it to 'active' would otherwise wave through an account
+     * whose verified_at columns are both still null.
+     */
+    public function hasVerifiedChannel(Channel|string|null $channel): bool
+    {
+        $value = $channel instanceof Channel ? $channel->value : $channel;
+
+        return $value === Channel::Email->value
+            ? $this->email_verified_at !== null
+            : $this->phone_verified_at !== null;
+    }
+
+    /** True once the channel chosen at registration has been confirmed. */
+    public function hasVerifiedChosenChannel(): bool
+    {
+        return $this->hasVerifiedChannel($this->verification_channel);
+    }
+
+    public function hasTwoFactorEnabled(): bool
+    {
+        return (bool) $this->two_factor_enabled
+            && $this->two_factor_channel !== null;
     }
 
     /** Whether the user has agreed to storage of their address and order history. */

@@ -7,6 +7,9 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import toast from "../../components/app/Toast";
+import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
+import ChannelChoice from "../../components/auth/ChannelChoice";
+
 
 // Mirrors App\Rules\StrongPassword on the server. The server is the authority;
 // this exists so the requirements are visible before the form is submitted.
@@ -20,6 +23,9 @@ function Register() {
   const nav = useNavigate();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // PRD §6.2: phone and email are both first-class; whichever is chosen here is
+  // the one that blocks registration until verified.
+  const [channel, setChannel] = useState(CHANNELS.SMS);
   // Observed, not controlled - the form stays uncontrolled and submit still
   // reads from e.target. This only drives the live requirement checklist.
   const [password, setPassword] = useState("");
@@ -57,6 +63,7 @@ function Register() {
         password: e.target.password.value,
         password_confirmation: e.target.password_confirmation.value,
         phone_number: `+63${phone}`,
+        verification_channel: channel,
       };
 
       const response = await fetch(`${url}/api/register`, {
@@ -72,13 +79,11 @@ function Register() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Registration failed");
 
-      // Blocking flow: the account exists but holds no token until the phone is
-      // verified, so there is no auto-login here and no way past this screen.
-      nav("/verify-phone", {
+      nav(routeForChannel(data.verification_channel ?? channel), {
         replace: true,
         state: {
-          phoneNumber: body.phone_number,
-          maskedPhone: data.phone_number,
+          identifier: channel === CHANNELS.EMAIL ? body.email : body.phone_number,
+          maskedIdentifier: data.identifier,
           resendAvailableIn: data.resend_available_in,
         },
       });
@@ -206,9 +211,14 @@ function Register() {
           )}
         </Field>
 
+        <ChannelChoice
+          value={channel}
+          onChange={setChannel}
+          legend="How should we send your verification code?"
+          disabled={loading}
+        />
+
         <div className="mt-1 flex items-start gap-3">
-          {/* The native input stays visible (appearance-none, not sr-only) so the
-              browser can focus it when `required` blocks submission. */}
           <span className="relative mt-px flex shrink-0">
             <input
               id="terms"

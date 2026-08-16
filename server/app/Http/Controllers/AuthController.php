@@ -7,6 +7,8 @@ use App\Models\OtpCode;
 use App\Models\User;
 use App\Rules\StrongPassword;
 use App\Services\Otp\OtpService;
+use App\Services\Verification\Channel;
+use App\Services\Verification\ChannelRegistry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -40,7 +42,13 @@ class AuthController extends Controller
                 'max:20',
                 'regex:/^[0-9+\-\s()]+$/',
             ],
+            // PRD §6.2: the user picks which channel blocks registration. Both
+            // identifiers are always collected (FR-01.1); only the chosen one is
+            // verified now. Defaults to sms when a caller omits it.
+            'verification_channel' => ['sometimes', 'string', Rule::in(Channel::values())],
         ]);
+
+        $channel = Channel::tryFromValue($validated['verification_channel'] ?? null) ?? Channel::Sms;
 
         $phoneHash = User::hashPhoneNumber($validated['phone_number']);
 
@@ -50,7 +58,7 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = DB::transaction(function () use ($validated, $phoneHash) {
+        $user = DB::transaction(function () use ($validated, $phoneHash, $channel) {
             $pending = User::query()
                 ->where('account_status', User::STATUS_PENDING_VERIFICATION)
                 ->where(function ($query) use ($validated, $phoneHash) {
@@ -64,7 +72,7 @@ class AuthController extends Controller
                 if ($pending->created_at->gt(now()->subHours(User::PENDING_VERIFICATION_HOURS))) {
                     // Live pending signup. Refresh the details from this submission
                     // and fall through to a resend rather than erroring.
-                    return $this->fillRegistration($pending, $validated, $phoneHash);
+                    return $this->fillRegistration($pending, $validated, $phoneHash, $channel);
                 }
 
                 // Past the abandonment window: the row is forfeit and this attempt
@@ -85,14 +93,23 @@ class AuthController extends Controller
                 ]);
             }
 
-            return $this->fillRegistration(new User(), $validated, $phoneHash);
+            return $this->fillRegistration(new User(), $validated, $phoneHash, $channel);
         });
 
-        $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip());
+        $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $channel);
+
+        $transport = app(ChannelRegistry::class)->for($channel);
+        $identifier = $transport->identifierFor($user);
 
         return response()->json([
             'status' => User::STATUS_PENDING_VERIFICATION,
-            'message' => 'We sent a verification code to your phone.',
+            'message' => $channel === Channel::Email
+                ? 'We sent a verification code to your email address.'
+                : 'We sent a verification code to your phone.',
+            'verification_channel' => $channel->value,
+            // Whichever identifier the code went to, masked. `phone_number` is
+            // kept alongside it so existing callers keep reading what they expect.
+            'identifier' => $transport->mask($identifier),
             'phone_number' => $this->maskPhoneNumber($user->phone_number),
             'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
             'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
@@ -100,16 +117,20 @@ class AuthController extends Controller
     }
 
     /** Apply a registration submission to a new or reused pending row. */
-    private function fillRegistration(User $user, array $validated, string $phoneHash): User
+    private function fillRegistration(User $user, array $validated, string $phoneHash, Channel $channel): User
     {
-        $user->email             = $validated['email'];
-        $user->password          = Hash::make($validated['password']);
-        $user->first_name        = $validated['first_name'];
-        $user->last_name         = $validated['last_name'];
-        $user->phone_number      = $validated['phone_number'];
-        $user->phone_number_hash = $phoneHash;
-        $user->account_status    = User::STATUS_PENDING_VERIFICATION;
-        $user->phone_verified_at = null;
+        $user->email                = $validated['email'];
+        $user->password             = Hash::make($validated['password']);
+        $user->first_name           = $validated['first_name'];
+        $user->last_name            = $validated['last_name'];
+        $user->phone_number         = $validated['phone_number'];
+        $user->phone_number_hash    = $phoneHash;
+        $user->verification_channel = $channel->value;
+        $user->account_status       = User::STATUS_PENDING_VERIFICATION;
+        // Both cleared: a re-used pending row must not carry a stale
+        // verification from an earlier attempt on the other channel.
+        $user->phone_verified_at    = null;
+        $user->email_verified_at    = null;
         $user->save();
 
         return $user->refresh();
@@ -149,15 +170,34 @@ class AuthController extends Controller
             return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
-        // Blocking flow: correct credentials are not enough while the phone is
-        // unverified. Answered distinctly (and only after the password checks out,
-        // so it is not an enumeration signal) so the UI can route to the code screen.
-        if ($user->isPendingVerification()) {
+        $registry = app(ChannelRegistry::class);
+
+        // Gate on the per-channel timestamp, NOT on account_status. That column
+        // is mass-assignable and any path that flipped it to 'active' would
+        // otherwise let an unverified account straight in.
+        if (! $user->hasVerifiedChosenChannel()) {
+            $transport = $registry->forUser($user);
+
             return response()->json([
                 'status' => User::STATUS_PENDING_VERIFICATION,
-                'message' => 'Verify your phone number to finish setting up your account.',
+                // Always names the specific channel - never "verify your account".
+                'message' => $transport->channel() === Channel::Email
+                    ? 'Verify your email address to finish setting up your account.'
+                    : 'Verify your phone number to finish setting up your account.',
+                'verification_channel' => $transport->channel()->value,
+                'identifier' => $transport->mask($transport->identifierFor($user)),
                 'phone_number' => $this->maskPhoneNumber($user->phone_number),
             ], 403);
+        }
+
+        // Password checked out and the account is fully active. If 2FA is on,
+        // the second factor goes to the channel fixed at enable-time - the user
+        // does not choose one per login.
+        if ($user->hasTwoFactorEnabled()) {
+            return response()->json(
+                app(TwoFactorController::class)->issueLoginChallenge($user, $request->ip()),
+                200
+            );
         }
 
         $token = $user->createToken(self::TOKEN_NAME);
@@ -198,9 +238,9 @@ class AuthController extends Controller
                 'last_name' => 'sometimes|nullable|string|max:255',
                 'phone_number' => 'sometimes|nullable|string|max:20',
 
-                // Password change: the current password must be supplied and correct.
-                'current_password' => ['required_with:password', 'current_password'],
-                'password' => ['sometimes', 'required', 'string', 'confirmed', new StrongPassword()],
+                // Password changes are NOT handled here. BR-33 requires an OTP
+                // re-verification first, so they go through
+                // PasswordChangeController (POST /api/user/password).
             ]);
 
             $changed = false;
@@ -230,11 +270,6 @@ class AuthController extends Controller
                 $user->phone_number_hash = $phoneHash;
                 $changed = true;
             }
-            if (array_key_exists('password', $validated)) {
-                $user->password = Hash::make($validated['password']);
-                $changed = true;
-            }
-
             if (!$changed) {
                 return response()->json([
                     'success' => false,

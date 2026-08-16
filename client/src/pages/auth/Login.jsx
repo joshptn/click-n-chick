@@ -9,6 +9,7 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import toast from "../../components/app/Toast";
+import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
 
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
@@ -28,17 +29,43 @@ function Login() {
     setLoading(true);
     try {
       const data = await loginUser(e);
-      nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home");
-    } catch (err) {
-      // 403 means the credentials were right but the phone is still unverified.
-      // Send them to finish the blocking flow rather than showing a dead error.
-      if (err.status === 403 && err.payload?.status === "pending_verification") {
-        nav("/verify-phone", {
+
+      // 2FA is on: the password was accepted but no session exists yet.
+      if (data?.two_factor_required) {
+        nav("/two-factor", {
           state: {
-            phoneNumber: e.target.login.value.trim(),
-            maskedPhone: err.payload.phone_number,
+            challengeToken: data.challenge_token,
+            channel: data.two_factor_channel,
+            identifier: data.identifier,
           },
         });
+        return;
+      }
+
+      nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home");
+    } catch (err) {
+      if (err.status === 403 && err.payload?.status === "pending_verification") {
+        const channel = err.payload.verification_channel ?? CHANNELS.SMS;
+        const typed = e.target.login.value.trim();
+        const typedIsEmail = typed.includes("@");
+
+        if ((channel === CHANNELS.EMAIL) === typedIsEmail) {
+          nav(routeForChannel(channel), {
+            state: {
+              identifier: typed,
+              maskedIdentifier: err.payload.identifier ?? err.payload.phone_number,
+            },
+          });
+          return;
+        }
+
+        toast.info(
+          channel === CHANNELS.EMAIL
+            ? "Finish verifying your email address to activate your account."
+            : "Finish verifying your phone number to activate your account.",
+          "Almost there"
+        );
+        nav("/register");
         return;
       }
 

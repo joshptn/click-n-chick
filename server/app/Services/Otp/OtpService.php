@@ -4,7 +4,8 @@ namespace App\Services\Otp;
 
 use App\Models\OtpCode;
 use App\Models\User;
-use App\Services\Sms\SmsSender;
+use App\Services\Verification\Channel;
+use App\Services\Verification\ChannelRegistry;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 
@@ -47,34 +48,46 @@ class OtpService
         return strlen(str_replace('{otp}', str_repeat('0', self::CODE_LENGTH), self::messageTemplate()));
     }
 
-    public function __construct(private SmsSender $sms)
+    public function __construct(private ChannelRegistry $channels)
     {
     }
 
     /**
-     * Issue a code for the given purpose and text it to the user.
+     * Issue a code for the given purpose and deliver it over the user's chosen
+     * channel.
      *
-     * Any earlier unconsumed code for the same number+purpose is invalidated
-     * first, so only the most recent code can ever be redeemed.
+     * Nothing below branches on which channel that is: the registry hands back
+     * a transport, and every rule about superseding, expiry and single use is
+     * applied identically either way. That is the whole point of the channel
+     * abstraction - one code path, two deliveries.
+     *
+     * Any earlier unconsumed code for the same identifier+purpose is
+     * invalidated first, so only the most recent code can ever be redeemed.
      */
-    public function send(User $user, string $purpose, ?string $ip = null): OtpCode
+    public function send(User $user, string $purpose, ?string $ip = null, Channel|string|null $channel = null): OtpCode
     {
-        $phoneHash = $user->phone_number_hash;
+        $transport = $channel === null
+            ? $this->channels->forUser($user)
+            : $this->channels->for($channel);
+
+        $identifier = $transport->identifierFor($user);
+        $identifierHash = $this->channels->hash($transport->channel(), $identifier);
 
         $code = $this->generateCode();
 
-        $otp = DB::transaction(function () use ($user, $phoneHash, $purpose, $ip, $code) {
+        $otp = DB::transaction(function () use ($user, $transport, $identifierHash, $purpose, $ip, $code) {
             // Supersede outstanding codes: marking them consumed keeps the row for
             // audit while making them unredeemable.
             OtpCode::query()
-                ->where('phone_number_hash', $phoneHash)
+                ->where('identifier_hash', $identifierHash)
                 ->where('purpose', $purpose)
                 ->whereNull('consumed_at')
                 ->update(['consumed_at' => now()]);
 
             return OtpCode::create([
                 'user_id' => $user->id,
-                'phone_number_hash' => $phoneHash,
+                'channel' => $transport->channel()->value,
+                'identifier_hash' => $identifierHash,
                 'code_hash' => Hash::make($code),
                 'purpose' => $purpose,
                 'ip_address' => $ip,
@@ -82,23 +95,23 @@ class OtpService
             ]);
         });
 
-        $this->sms->send($user->phone_number, self::messageTemplate(), $code);
+        $transport->send($identifier, $code);
 
         return $otp;
     }
 
     /**
-     * True when the most recent send for this number+purpose is still inside
-     * the cooldown, i.e. a resend should be refused.
+     * True when the most recent send for this identifier+purpose is still
+     * inside the cooldown, i.e. a resend should be refused.
      */
-    public function secondsUntilResendAllowed(?string $phoneHash, string $purpose): int
+    public function secondsUntilResendAllowed(?string $identifierHash, string $purpose): int
     {
-        if ($phoneHash === null) {
+        if ($identifierHash === null) {
             return 0;
         }
 
         $last = OtpCode::query()
-            ->where('phone_number_hash', $phoneHash)
+            ->where('identifier_hash', $identifierHash)
             ->where('purpose', $purpose)
             ->latest('created_at')
             ->first();
@@ -116,15 +129,53 @@ class OtpService
      * Redeem a code. Returns the outcome so callers can respond precisely
      * without leaking which accounts exist.
      */
-    public function verify(?string $phoneHash, string $purpose, string $code): OtpVerificationResult
+    public function verify(?string $identifierHash, string $purpose, string $code): OtpVerificationResult
     {
-        if ($phoneHash === null) {
+        if ($identifierHash === null) {
             return OtpVerificationResult::NoCode;
         }
 
-        $otp = OtpCode::query()
-            ->where('phone_number_hash', $phoneHash)
+        return $this->redeem(
+            OtpCode::query()->where('identifier_hash', $identifierHash)->where('purpose', $purpose),
+            $code
+        );
+    }
+
+    /**
+     * Redeem a code issued to a known account, whichever channel it went to.
+     *
+     * Used by the authenticated flows - 2FA and password change - where the
+     * caller is already identified, so the channel does not need to round-trip
+     * through the request. Same rules as verify(); only the lookup differs.
+     */
+    public function verifyForUser(User $user, string $purpose, string $code): OtpVerificationResult
+    {
+        return $this->redeem(
+            OtpCode::query()->where('user_id', $user->id)->where('purpose', $purpose),
+            $code
+        );
+    }
+
+    /** The channel the outstanding code for this purpose was sent over. */
+    public function pendingChannelFor(User $user, string $purpose): ?Channel
+    {
+        $value = OtpCode::query()
+            ->where('user_id', $user->id)
             ->where('purpose', $purpose)
+            ->whereNull('consumed_at')
+            ->latest('id')
+            ->value('channel');
+
+        return Channel::tryFromValue($value);
+    }
+
+    /**
+     * The shared redemption rules: newest unconsumed code only, expiry before
+     * attempts, attempts before comparison, single use on success.
+     */
+    private function redeem($query, string $code): OtpVerificationResult
+    {
+        $otp = $query
             ->whereNull('consumed_at')
             ->latest('id')
             ->first();
