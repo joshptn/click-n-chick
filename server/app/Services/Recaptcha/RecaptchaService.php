@@ -16,6 +16,23 @@ use Throwable;
  */
 class RecaptchaService
 {
+    /**
+     * Fallback for a missing services.recaptcha.verify_url.
+     *
+     * Without one the verify call posts to an empty URL, which throws, which
+     * the catch below treats as an outage and fails open - silently disabling
+     * reCAPTCHA on every guarded route. A dropped config key must not be able
+     * to turn the protection off, so the endpoint is hardcoded here as well.
+     */
+    private const DEFAULT_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
+
+    public function verifyUrl(): string
+    {
+        $configured = config('services.recaptcha.verify_url');
+
+        return is_string($configured) && $configured !== '' ? $configured : self::DEFAULT_VERIFY_URL;
+    }
+
     public function isEnabled(): bool
     {
         return (bool) config('services.recaptcha.enabled')
@@ -52,7 +69,7 @@ class RecaptchaService
         try {
             $response = Http::asForm()
                 ->timeout((int) config('services.recaptcha.timeout', 5))
-                ->post((string) config('services.recaptcha.verify_url'), array_filter([
+                ->post($this->verifyUrl(), array_filter([
                     'secret' => (string) config('services.recaptcha.secret_key'),
                     'response' => trim($token),
                     'remoteip' => $ip,

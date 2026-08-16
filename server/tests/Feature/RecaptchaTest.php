@@ -267,6 +267,21 @@ class RecaptchaTest extends TestCase
         $this->login(['recaptcha_token' => 'good-token'])->assertOk();
     }
 
+    public function test_a_missing_verify_url_does_not_silently_disable_the_protection(): void
+    {
+        // Guards a real regression: the config key was dropped once, the post
+        // went to an empty URL, that threw, the outage path failed open, and
+        // every guarded route quietly stopped checking anything.
+        $this->enableRecaptcha();
+        config()->set('services.recaptcha.verify_url', null);
+
+        $this->fakeVerdict(['success' => false, 'error-codes' => ['invalid-input-response']]);
+
+        $this->login(['recaptcha_token' => 'forged'])
+            ->assertStatus(422)
+            ->assertJsonPath('reason', 'invalid');
+    }
+
     // -----------------------------------------------------------------
     // Coverage of the flows named in the requirement
     // -----------------------------------------------------------------
