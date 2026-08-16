@@ -11,16 +11,13 @@ import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
 import ChannelChoice from "../../components/auth/ChannelChoice";
 import PasswordChecklist from "../../components/auth/PasswordChecklist";
 import { unmetPasswordRules } from "../../lib/passwordRules";
+import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
 
 function Register() {
   const nav = useNavigate();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // PRD §6.2: phone and email are both first-class; whichever is chosen here is
-  // the one that blocks registration until verified.
   const [channel, setChannel] = useState(CHANNELS.SMS);
-  // Observed, not controlled - the form stays uncontrolled and submit still
-  // reads from e.target. This only drives the live requirement checklist.
   const [password, setPassword] = useState("");
 
   const RegisterUser = async (e) => {
@@ -65,7 +62,7 @@ function Register() {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(await withRecaptcha(body, RECAPTCHA_ACTIONS.REGISTER)),
         credentials: "include",
       });
 

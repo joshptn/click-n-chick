@@ -1,11 +1,17 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import authMascot from '../../assets/auth-image.png';
 import LogoIcon from '../../assets/logo-icon.png';
+import { primeRecaptcha } from '../../lib/recaptcha';
 
 const MotionDiv = motion.div;
 
 function AuthLayout({ eyebrow = 'Welcome to', heading, children, footer }) {
+  useEffect(() => {
+    primeRecaptcha();
+  }, []);
+
   return (
     <div className="h-dvh w-full overflow-hidden bg-[#fdf5ea] font-display">
       <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col px-6 py-6 sm:px-10 lg:px-14">

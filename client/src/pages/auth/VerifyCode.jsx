@@ -9,6 +9,7 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import { CHANNELS, CHANNEL_COPY } from "../../lib/verificationChannels";
+import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
 import toast from "../../components/app/Toast";
 
 const ROLE_DESTINATIONS = {
@@ -17,14 +18,6 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
-/**
- * One OTP entry screen for both channels.
- *
- * The code flow is identical either way - the same endpoints, the same
- * cooldown, the same single-use semantics - so only the copy and the request
- * field name vary, and both come from CHANNEL_COPY. Splitting this into two
- * components would duplicate the flow to change two strings.
- */
 function VerifyCode({ channel = CHANNELS.SMS }) {
   const nav = useNavigate();
   const location = useLocation();
@@ -32,8 +25,6 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
 
   const copy = CHANNEL_COPY[channel] ?? CHANNEL_COPY[CHANNELS.SMS];
 
-  // Carried from the register (or blocked-login) redirect. Without it there is
-  // nothing to verify against, so the screen sends the user back.
   const { identifier, maskedIdentifier, resendAvailableIn } = location.state ?? {};
 
   const [error, setError] = useState("");
@@ -94,7 +85,9 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
       const response = await fetch(`${url}/api/otp/resend`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ [copy.field]: identifier }),
+        body: JSON.stringify(
+          await withRecaptcha({ [copy.field]: identifier }, RECAPTCHA_ACTIONS.OTP_RESEND)
+        ),
         credentials: "include",
       });
 
