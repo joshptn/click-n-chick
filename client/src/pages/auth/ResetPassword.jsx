@@ -10,6 +10,7 @@ import Input from "../../components/ui/Input";
 import PasswordChecklist from "../../components/auth/PasswordChecklist";
 import { ROLES } from "../../lib/roles";
 import { unmetPasswordRules } from "../../lib/passwordRules";
+import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
 import toast from "../../components/app/Toast";
 
 const ROLE_DESTINATIONS = {
@@ -18,26 +19,11 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
-/**
- * Step 2 of password recovery: redeem the code and choose a new password.
- *
- * Code and password are submitted together, matching the API - there is no
- * intermediate "verify the code" round trip, so the code is spent exactly once,
- * at the moment the password is set. A code rejected here is not consumed, so
- * the user can correct it and resubmit.
- *
- * Unlike registration verification, completing this DOES start a session: the
- * user has just set the password, so making them immediately type it again
- * would be friction with nothing behind it. The account still answers to 2FA if
- * it has it - the API sends a challenge instead of a token in that case.
- */
 function ResetPassword() {
   const nav = useNavigate();
   const location = useLocation();
   const { adoptSession } = useContext(AuthContext);
 
-  // Carried from the forgot-password step. Without it there is no account to
-  // reset against, so the screen sends the user back to name one.
   const { identifier, notice, resendAvailableIn } = location.state ?? {};
 
   const [error, setError] = useState("");
@@ -89,12 +75,17 @@ function ResetPassword() {
       const response = await fetch(`${url}/api/password/reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          identifier,
-          code: e.target.code.value.trim(),
-          password: newPassword,
-          password_confirmation: confirmation,
-        }),
+        body: JSON.stringify(
+          await withRecaptcha(
+            {
+              identifier,
+              code: e.target.code.value.trim(),
+              password: newPassword,
+              password_confirmation: confirmation,
+            },
+            RECAPTCHA_ACTIONS.PASSWORD_RESET
+          )
+        ),
         credentials: "include",
       });
 
@@ -104,8 +95,6 @@ function ResetPassword() {
         throw new Error(data.message || "That code is not correct.");
       }
 
-      // 2FA is on: the password is already changed, but the second factor still
-      // stands between the user and a session.
       if (data.two_factor_required) {
         toast.success("Your password has been reset.", "Almost done");
         nav("/two-factor", {
@@ -137,7 +126,7 @@ function ResetPassword() {
       const response = await fetch(`${url}/api/password/forgot`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ identifier }),
+        body: JSON.stringify(await withRecaptcha({ identifier }, RECAPTCHA_ACTIONS.PASSWORD_FORGOT)),
         credentials: "include",
       });
 

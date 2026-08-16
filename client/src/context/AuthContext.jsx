@@ -1,5 +1,6 @@
 import React, { createContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
+import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 
 const AuthContext = createContext();
 
@@ -35,13 +36,15 @@ export function AuthProvider({children}) {
         const url = import.meta.env.VITE_API_URL;
 
         try {
+        const body = await withRecaptcha({
+            login: e.target.login.value,
+            password: e.target.password.value,
+        }, RECAPTCHA_ACTIONS.LOGIN);
+
         const response = await fetch(url + '/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-            login: e.target.login.value,
-            password: e.target.password.value,
-            }),
+            body: JSON.stringify(body),
             credentials: 'include',
         });
 

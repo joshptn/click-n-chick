@@ -9,6 +9,7 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import { CHANNELS } from "../../lib/verificationChannels";
+import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
 
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
@@ -52,14 +53,18 @@ function TwoFactorChallenge() {
       const response = await fetch(`${url}/api/2fa/challenge`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ challenge_token: challengeToken, code: e.target.code.value.trim() }),
+        body: JSON.stringify(
+          await withRecaptcha(
+            { challenge_token: challengeToken, code: e.target.code.value.trim() },
+            RECAPTCHA_ACTIONS.TWO_FACTOR_CHALLENGE
+          )
+        ),
         credentials: "include",
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        // An expired or spent challenge cannot be retried on this screen.
         if (data.reason === "challenge_expired") {
           nav("/login", { replace: true });
           return;

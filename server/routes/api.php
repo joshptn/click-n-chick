@@ -9,21 +9,24 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\RecaptchaConfigController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\VerificationChannelController;
+use App\Services\Recaptcha\RecaptchaAction;
 use Illuminate\Support\Facades\Route;
 
 
-// Public 
-Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:register', 'throttle:otp-send']);
+// Public
+Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:register', 'throttle:otp-send', 'recaptcha:'.RecaptchaAction::REGISTER]);
 
 Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware('throttle:otp-verify');
-Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware('throttle:otp-send');
-Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:login');
-Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware('throttle:password-reset');
-Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware('throttle:otp-verify');
-Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware('throttle:otp-verify');
+Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::OTP_RESEND]);
+Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware(['throttle:login', 'recaptcha:'.RecaptchaAction::LOGIN]);
+Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware(['throttle:password-reset', 'recaptcha:'.RecaptchaAction::PASSWORD_FORGOT]);
+Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_RESET]);
+Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_CHALLENGE]);
 Route::get('/verification/channels', [VerificationChannelController::class, 'index']);
+Route::get('/config/recaptcha', [RecaptchaConfigController::class, 'show']);
 
 // Menu browsing 
 Route::get('/foods', [FoodController::class, 'index']);
@@ -40,11 +43,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
 
-    Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware('throttle:otp-send');
+    Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_ENABLE]);
     Route::post('/2fa/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:otp-verify');
 
-    Route::post('/user/password/request-code', [PasswordChangeController::class, 'requestCode'])->middleware('throttle:otp-send');
-    Route::post('/user/password', [PasswordChangeController::class, 'update'])->middleware('throttle:otp-verify');
+    Route::post('/user/password/request-code', [PasswordChangeController::class, 'requestCode'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::PASSWORD_CHANGE]);
+    Route::post('/user/password', [PasswordChangeController::class, 'update'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_CHANGE]);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/{notification}', [NotificationController::class, 'show']);

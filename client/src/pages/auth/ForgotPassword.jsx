@@ -7,27 +7,14 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { CHANNELS, fetchVerificationChannels } from "../../lib/verificationChannels";
+import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
 
-/**
- * Step 1 of password recovery: name the account.
- *
- * One free-text field rather than a phone/email toggle - someone who has lost
- * access to their account should not first have to remember which identifier
- * they signed up with. The backend infers the channel from the shape of what
- * arrives.
- *
- * The response is deliberately the same whether or not the identifier is
- * registered, so this screen must not branch on it. It always moves the user
- * forward to the code step; anything else would rebuild the account-existence
- * oracle the API is careful not to be.
- */
 function ForgotPassword() {
   const nav = useNavigate();
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  // Backend-driven, never a constant here: the note appears only while SMS
-  // genuinely cannot deliver, and disappears on its own once it can.
+
   const [smsNote, setSmsNote] = useState(null);
 
   useEffect(() => {
@@ -57,14 +44,12 @@ function ForgotPassword() {
       const response = await fetch(`${url}/api/password/forgot`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ identifier }),
+        body: JSON.stringify(await withRecaptcha({ identifier }, RECAPTCHA_ACTIONS.PASSWORD_FORGOT)),
         credentials: "include",
       });
 
       const data = await response.json();
 
-      // 429 is the only failure worth surfacing - it is about this caller's
-      // request rate, not about whether the account exists.
       if (!response.ok) {
         throw new Error(data.message || "Too many attempts. Please try again shortly.");
       }
