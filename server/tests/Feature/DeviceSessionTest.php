@@ -99,7 +99,11 @@ class DeviceSessionTest extends TestCase
             ->json('current_device_id');
 
         $this->actingAsDevice($token)
-            ->patchJson("/api/user/devices/{$currentId}/trust", ['trusted' => true])
+            ->patchJson("/api/user/devices/{$currentId}/trust", [
+                'trusted' => true,
+                // Granting trust re-checks the account password.
+                'password' => 'Password123!',
+            ])
             ->assertOk();
 
         return $currentId;
@@ -465,7 +469,10 @@ class DeviceSessionTest extends TestCase
             ->json('current_device_id');
 
         $this->actingAsDevice($laptop)
-            ->patchJson("/api/user/devices/{$currentId}/trust", ['trusted' => true])
+            ->patchJson("/api/user/devices/{$currentId}/trust", [
+                'trusted' => true,
+                'password' => 'Password123!',
+            ])
             ->assertOk()
             ->assertJson(['device' => ['is_trusted' => true]]);
 
@@ -486,7 +493,10 @@ class DeviceSessionTest extends TestCase
 
         // Otherwise an untrusted device could simply promote itself by proxy.
         $this->actingAsDevice($laptop)
-            ->patchJson('/api/user/devices/'.$phoneDevice->id.'/trust', ['trusted' => true])
+            ->patchJson('/api/user/devices/'.$phoneDevice->id.'/trust', [
+                'trusted' => true,
+                'password' => 'Password123!',
+            ])
             ->assertForbidden()
             ->assertJson(['code' => 'DEVICE_NOT_TRUSTED']);
 
@@ -549,10 +559,169 @@ class DeviceSessionTest extends TestCase
         $bobDevice = KnownDevice::where('user_id', $bob->id)->sole();
 
         $this->actingAsDevice($aliceToken)
-            ->patchJson('/api/user/devices/'.$bobDevice->id.'/trust', ['trusted' => true])
+            ->patchJson('/api/user/devices/'.$bobDevice->id.'/trust', [
+                'trusted' => true,
+                'password' => 'Password123!',
+            ])
             ->assertNotFound();
 
         $this->assertFalse($bobDevice->fresh()->is_trusted);
+        $this->actingAsDevice($bobToken)->getJson('/api/user')->assertOk();
+    }
+
+    // -----------------------------------------------------------------
+    // Granting trust is password-gated
+    // -----------------------------------------------------------------
+
+    public function test_trusting_a_device_without_the_password_is_refused(): void
+    {
+        $user = $this->verifiedUser('pw1@example.test');
+        $laptop = $this->signInFrom($user, 'laptop');
+
+        $currentId = $this->actingAsDevice($laptop)
+            ->getJson('/api/user/devices')->json('current_device_id');
+
+        // A stolen session must not be able to promote itself in one click.
+        $this->actingAsDevice($laptop)
+            ->patchJson("/api/user/devices/{$currentId}/trust", ['trusted' => true])
+            ->assertStatus(422)
+            ->assertJson(['code' => 'PASSWORD_REQUIRED']);
+
+        $this->assertFalse(KnownDevice::find($currentId)->is_trusted);
+    }
+
+    public function test_trusting_a_device_with_the_wrong_password_is_refused(): void
+    {
+        $user = $this->verifiedUser('pw2@example.test');
+        $laptop = $this->signInFrom($user, 'laptop');
+
+        $currentId = $this->actingAsDevice($laptop)
+            ->getJson('/api/user/devices')->json('current_device_id');
+
+        $this->actingAsDevice($laptop)
+            ->patchJson("/api/user/devices/{$currentId}/trust", [
+                'trusted' => true,
+                'password' => 'NotThePassword1!',
+            ])
+            ->assertStatus(422)
+            ->assertJson(['code' => 'PASSWORD_REQUIRED']);
+
+        $this->assertFalse(KnownDevice::find($currentId)->is_trusted);
+    }
+
+    public function test_removing_trust_does_not_require_a_password(): void
+    {
+        $user = $this->verifiedUser('pw3@example.test');
+        $laptop = $this->signInFrom($user, 'laptop');
+
+        $currentId = $this->trustSelf($laptop);
+
+        // Only ever reduces privilege, so putting a password in the way would
+        // make the safer action the harder one.
+        $this->actingAsDevice($laptop)
+            ->patchJson("/api/user/devices/{$currentId}/trust", ['trusted' => false])
+            ->assertOk()
+            ->assertJson(['device' => ['is_trusted' => false]]);
+    }
+
+    // -----------------------------------------------------------------
+    // Sign out all other devices
+    // -----------------------------------------------------------------
+
+    public function test_signing_out_other_devices_clears_every_session_but_this_one(): void
+    {
+        $user = $this->verifiedUser('sweep1@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+        $tablet = $this->signInFrom($user, 'tablet', 'Mozilla/5.0 (iPad; CPU OS 17_0) Safari/605.1');
+
+        $this->trustSelf($laptop);
+
+        $this->actingAsDevice($laptop)
+            ->postJson('/api/user/devices/sign-out-others')
+            ->assertOk()
+            ->assertJson(['success' => true, 'devices_signed_out' => 2]);
+
+        $this->actingAsDevice($phone)->getJson('/api/user')->assertUnauthorized();
+        $this->actingAsDevice($tablet)->getJson('/api/user')->assertUnauthorized();
+        // The device that pulled the lever keeps working.
+        $this->actingAsDevice($laptop)->getJson('/api/user')->assertOk();
+
+        $this->assertSame(1, $user->fresh()->tokens()->count());
+    }
+
+    public function test_signing_out_other_devices_does_not_spare_trusted_ones(): void
+    {
+        $user = $this->verifiedUser('sweep2@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->trustSelf($laptop);
+        $this->trustSelf($phone);
+
+        // A panic button that leaves some sessions alive is a bad panic button:
+        // the moment you need it is the moment you cannot be sure which
+        // devices you still control.
+        $this->actingAsDevice($laptop)
+            ->postJson('/api/user/devices/sign-out-others')
+            ->assertOk();
+
+        $this->actingAsDevice($phone)->getJson('/api/user')->assertUnauthorized();
+        $this->actingAsDevice($laptop)->getJson('/api/user')->assertOk();
+    }
+
+    public function test_signing_out_other_devices_also_kills_sessions_with_no_device_link(): void
+    {
+        $user = $this->verifiedUser('sweep3@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $this->trustSelf($laptop);
+
+        // A token predating device tracking. In SQL `known_device_id != X` is
+        // NULL rather than true for these, so a naive query would leave behind
+        // exactly the session nothing on the devices screen can show.
+        $orphan = $user->createToken('legacy')->plainTextToken;
+        $this->actingAsDevice($orphan)->getJson('/api/user')->assertOk();
+
+        $this->actingAsDevice($laptop)
+            ->postJson('/api/user/devices/sign-out-others')
+            ->assertOk();
+
+        $this->actingAsDevice($orphan)->getJson('/api/user')->assertUnauthorized();
+        $this->actingAsDevice($laptop)->getJson('/api/user')->assertOk();
+    }
+
+    public function test_an_untrusted_device_cannot_sign_out_other_devices(): void
+    {
+        $user = $this->verifiedUser('sweep4@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->actingAsDevice($laptop)
+            ->postJson('/api/user/devices/sign-out-others')
+            ->assertForbidden()
+            ->assertJson(['code' => 'DEVICE_NOT_TRUSTED']);
+
+        $this->actingAsDevice($phone)->getJson('/api/user')->assertOk();
+    }
+
+    public function test_signing_out_other_devices_never_touches_another_account(): void
+    {
+        $alice = $this->verifiedUser('sweep5@example.test');
+        $bob = $this->verifiedUser('sweep6@example.test');
+
+        $aliceLaptop = $this->signInFrom($alice, 'alice-laptop');
+        $bobToken = $this->signInFrom($bob, 'bob-laptop');
+
+        $this->trustSelf($aliceLaptop);
+
+        $this->actingAsDevice($aliceLaptop)
+            ->postJson('/api/user/devices/sign-out-others')
+            ->assertOk();
+
         $this->actingAsDevice($bobToken)->getJson('/api/user')->assertOk();
     }
 

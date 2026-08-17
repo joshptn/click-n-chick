@@ -53,8 +53,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Known devices / active sessions (FR-01.13). Both routes resolve the
     // device through the authenticated user, so ownership is not optional.
     Route::get('/user/devices', [DeviceSessionController::class, 'index']);
-    Route::patch('/user/devices/{device}/trust', [DeviceSessionController::class, 'trust'])
+    Route::post('/user/devices/sign-out-others', [DeviceSessionController::class, 'signOutOthers'])
         ->middleware('throttle:user-update');
+    // Tighter budget than the rest: granting trust checks the account password,
+    // so this endpoint is brute-forceable from an already-stolen session.
+    Route::patch('/user/devices/{device}/trust', [DeviceSessionController::class, 'trust'])
+        ->middleware('throttle:device-trust');
     Route::delete('/user/devices/{device}', [DeviceSessionController::class, 'destroy'])
         ->middleware('throttle:user-update');
 

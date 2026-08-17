@@ -7,6 +7,7 @@ import {
   IconDeviceDesktop,
   IconDeviceMobile,
   IconDeviceTablet,
+  IconLogout,
   IconRefresh,
   IconShieldCheck,
   IconShieldLock,
@@ -17,7 +18,7 @@ import AppHeader from "../../components/app/AppHeader";
 import AuthContext from "../../context/AuthContext";
 import Button from "../../components/ui/Button";
 import toast from "../../components/app/Toast";
-import { fetchDevices, revokeDevice, setDeviceTrust } from "../../lib/devices";
+import { fetchDevices, revokeDevice, setDeviceTrust, signOutOtherDevices } from "../../lib/devices";
 
 /**
  * Known devices, trust, and remote sign-out (FR-01.11 / FR-01.13 / UC-AUTH-013).
@@ -183,6 +184,11 @@ function Devices() {
   const { logOut } = useContext(AuthContext);
 
   const [confirming, setConfirming] = useState(null);
+  // The device awaiting a password before it can be trusted.
+  const [trusting, setTrusting] = useState(null);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState(null);
+  const [confirmingSweep, setConfirmingSweep] = useState(false);
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["devices"],
@@ -214,23 +220,68 @@ function Devices() {
   });
 
   const trustMutation = useMutation({
-    mutationFn: (device) => setDeviceTrust(device.id, !device.is_trusted),
+    mutationFn: ({ device, password: secret }) =>
+      setDeviceTrust(device.id, !device.is_trusted, secret),
     onSuccess: (result) => {
+      closeTrustPrompt();
       toast.success(result?.message ?? "Trust updated.");
       queryClient.invalidateQueries({ queryKey: ["devices"] });
     },
     onError: (err) => {
+      // A wrong password keeps the dialog open with the message inline -
+      // bouncing it to a toast would close the form they need to correct.
+      if (err?.payload?.code === "PASSWORD_REQUIRED") {
+        setPasswordError(err.message);
+        return;
+      }
+
+      closeTrustPrompt();
       toast.error(err?.message ?? "Could not update trust for that device.");
     },
   });
 
+  const sweepMutation = useMutation({
+    mutationFn: signOutOtherDevices,
+    onSuccess: (result) => {
+      setConfirmingSweep(false);
+      toast.success(result?.message ?? "Your other devices have been signed out.");
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+    },
+    onError: (err) => {
+      setConfirmingSweep(false);
+      toast.error(err?.message ?? "Could not sign your other devices out.");
+    },
+  });
+
+  function closeTrustPrompt() {
+    setTrusting(null);
+    setPassword("");
+    setPasswordError(null);
+  }
+
+  /**
+   * Granting trust needs the password; removing it does not, so untrusting
+   * goes straight through rather than making the safer action the harder one.
+   */
+  const handleToggleTrust = (device) => {
+    if (device.is_trusted) {
+      trustMutation.mutate({ device });
+      return;
+    }
+
+    setPassword("");
+    setPasswordError(null);
+    setTrusting(device);
+  };
+
   const devices = data?.devices ?? [];
   const canActOnOthers = Boolean(data?.current_device_trusted);
+  const otherActiveDevices = devices.filter((d) => !d.is_current && d.is_active).length;
 
   /** Which action, if any, is in flight for a given row. */
   const pendingActionFor = (device) => {
     if (revokeMutation.isPending && revokeMutation.variables?.id === device.id) return "revoke";
-    if (trustMutation.isPending && trustMutation.variables?.id === device.id) return "trust";
+    if (trustMutation.isPending && trustMutation.variables?.device?.id === device.id) return "trust";
     return null;
   };
 
@@ -277,6 +328,35 @@ function Devices() {
             </button>
           </div>
 
+          {/* The panic button. Only offered when there is actually something
+              to sweep, and only enabled from a trusted device. */}
+          {otherActiveDevices > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f0e9df] bg-[#fffaf4] px-5 py-3.5">
+              <p className="m-0 font-display text-[12.5px] leading-relaxed text-[#7a5620]">
+                Signed in somewhere you do not recognise? Sign out every device except this one.
+              </p>
+
+              <MaybeTooltip
+                label={
+                  canActOnOthers
+                    ? null
+                    : "Only a trusted device can do this. Trust this device first."
+                }
+              >
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!canActOnOthers || sweepMutation.isPending}
+                  loading={sweepMutation.isPending}
+                  onClick={() => setConfirmingSweep(true)}
+                >
+                  <IconLogout size={15} stroke={1.9} aria-hidden="true" />
+                  Sign out all other devices
+                </Button>
+              </MaybeTooltip>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="grid place-items-center gap-3 px-5 py-14">
               <Loader size="sm" color="#ff8b2b" />
@@ -304,7 +384,7 @@ function Devices() {
                   device={device}
                   canActOnOthers={canActOnOthers}
                   onSignOut={setConfirming}
-                  onToggleTrust={trustMutation.mutate}
+                  onToggleTrust={handleToggleTrust}
                   pendingAction={pendingActionFor(device)}
                 />
               ))}
@@ -351,6 +431,115 @@ function Devices() {
             onClick={() => revokeMutation.mutate(confirming)}
           >
             Yes, sign out
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Trusting a device is a privilege escalation, so it re-checks the
+          account password. Removing trust never reaches this dialog. */}
+      <Modal
+        opened={trusting !== null}
+        onClose={closeTrustPrompt}
+        title="Trust this device?"
+        centered
+        radius="md"
+      >
+        <p className="m-0 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
+          A trusted device can sign your other devices out. Confirm your password so that someone who
+          gets hold of this session cannot grant themselves that power.
+        </p>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            trustMutation.mutate({ device: trusting, password });
+          }}
+        >
+          <label
+            htmlFor="trust-password"
+            className="mt-4 block font-display text-[12.5px] font-semibold text-ink"
+          >
+            Account password
+          </label>
+
+          <input
+            id="trust-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordError(null);
+            }}
+            aria-invalid={passwordError ? "true" : undefined}
+            aria-describedby={passwordError ? "trust-password-error" : undefined}
+            className={`mt-1.5 h-[46px] w-full rounded-[10px] border bg-white px-3.5 font-display text-[14px] text-ink outline-none transition-colors focus:border-brand-400 ${
+              passwordError ? "border-[#e5322d]" : "border-[#ece7e0]"
+            }`}
+          />
+
+          {passwordError && (
+            <p
+              id="trust-password-error"
+              className="m-0 mt-1.5 font-display text-[12.5px] text-[#e5322d]"
+            >
+              {passwordError}
+            </p>
+          )}
+
+          <div className="mt-5 flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={closeTrustPrompt}
+              disabled={trustMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              type="submit"
+              disabled={password.length === 0}
+              loading={trustMutation.isPending}
+              loadingLabel="Confirming&hellip;"
+            >
+              Trust this device
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        opened={confirmingSweep}
+        onClose={() => setConfirmingSweep(false)}
+        title="Sign out all other devices?"
+        centered
+        radius="md"
+      >
+        <p className="m-0 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
+          Every device except this one will be signed out immediately, <strong className="font-semibold text-ink">including
+          trusted ones</strong>. Each will need your password to sign in again. This device stays signed in.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setConfirmingSweep(false)}
+            disabled={sweepMutation.isPending}
+          >
+            No, cancel
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={sweepMutation.isPending}
+            loadingLabel="Signing out&hellip;"
+            onClick={() => sweepMutation.mutate()}
+          >
+            Yes, sign them out
           </Button>
         </div>
       </Modal>

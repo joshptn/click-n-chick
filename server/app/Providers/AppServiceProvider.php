@@ -68,6 +68,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('user-update', function (Request $request) {
             return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
         });
+        // Trusting a device re-checks the account password, which makes this a
+        // password oracle for anyone already holding a stolen session. The
+        // generic user-update budget (10/min) would allow ~14k guesses a day.
+        RateLimiter::for('device-trust', function (Request $request) {
+            return Limit::perMinutes(15, 5)->by('device-trust:'.($request->user()?->id ?: $request->ip()));
+        });
         RateLimiter::for('otp-send', function (Request $request) {
             $identifierKey = $this->otpIdentifierKey($request);
 

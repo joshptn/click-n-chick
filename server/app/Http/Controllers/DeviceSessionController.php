@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Events\SessionRevoked;
 use App\Models\KnownDevice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\PersonalAccessToken;
 use Throwable;
@@ -57,11 +58,22 @@ class DeviceSessionController extends Controller
      * is always allowed - that is the bootstrap, since a fresh account has no
      * trusted device and could otherwise never gain one. Changing trust on any
      * OTHER device requires the device you are holding to be trusted already.
+     *
+     * GRANTING trust additionally requires the account password. Without that,
+     * the trust gate is decorative: anyone holding a stolen session could trust
+     * themselves in one click and immediately sign out the real owner's
+     * devices. Re-confirming the password is what makes trust an actual
+     * boundary rather than a speed bump. Removing trust does not ask - it only
+     * ever reduces privilege, and making it harder to revoke would be backwards.
      */
     public function trust(Request $request, string $device)
     {
         $validated = $request->validate([
             'trusted' => ['required', 'boolean'],
+            // Checked by hand below rather than with required_if, which
+            // compares loosely against the string 'true' and is easy to get
+            // subtly wrong for a boolean field.
+            'password' => ['nullable', 'string'],
         ]);
 
         $target = $this->ownedDevice($request, $device);
@@ -74,6 +86,18 @@ class DeviceSessionController extends Controller
 
         if ($denied !== null) {
             return $denied;
+        }
+
+        if ($validated['trusted']) {
+            $password = $validated['password'] ?? '';
+
+            if ($password === '' || ! Hash::check($password, $request->user()->password)) {
+                return response()->json([
+                    'success' => false,
+                    'code' => 'PASSWORD_REQUIRED',
+                    'message' => 'Enter your account password to trust this device.',
+                ], 422);
+            }
         }
 
         $target->is_trusted = $validated['trusted'];
@@ -148,6 +172,73 @@ class DeviceSessionController extends Controller
             // the user to the login screen rather than looking signed in until
             // the next failed call.
             'current_device_revoked' => $isCurrent,
+        ]);
+    }
+
+    /**
+     * POST /api/user/devices/sign-out-others
+     *
+     * The panic button: end every session on the account except this one.
+     *
+     * Deliberately does NOT spare trusted devices. "Sign out everywhere else"
+     * that quietly leaves some sessions alive is a bad panic button - the
+     * moment you need it is the moment you cannot be sure which devices you
+     * still control. Trust decides who may pull it, not who survives it.
+     *
+     * A distinct POST path rather than DELETE /user/devices so it can never be
+     * confused with the {device} route by a stray id.
+     */
+    public function signOutOthers(Request $request)
+    {
+        $user = $request->user();
+        $current = $this->currentDevice($request);
+
+        if ($current === null || ! $current->is_trusted) {
+            return response()->json([
+                'success' => false,
+                'code' => 'DEVICE_NOT_TRUSTED',
+                'message' => 'Only a trusted device can sign out your other devices. Mark this device as trusted first.',
+            ], 403);
+        }
+
+        $currentDeviceId = (int) $current->getKey();
+
+        // Which devices are about to lose a session - captured before the
+        // delete, so the "leave now" broadcasts can name them afterwards.
+        $affected = $user->tokens()
+            ->whereNotNull('known_device_id')
+            ->where('known_device_id', '!=', $currentDeviceId)
+            ->pluck('known_device_id')
+            ->unique();
+
+        // The orWhereNull matters: in SQL, `known_device_id != X` is NULL - not
+        // true - for a NULL column, so a token with no device link would
+        // silently survive a "sign out everywhere else". That is precisely the
+        // token most worth killing, since nothing on the devices screen shows it.
+        $revoked = $user->tokens()
+            ->where(function ($query) use ($currentDeviceId) {
+                $query->whereNull('known_device_id')
+                    ->orWhere('known_device_id', '!=', $currentDeviceId);
+            })
+            ->delete();
+
+        foreach ($affected as $deviceId) {
+            try {
+                SessionRevoked::dispatch((int) $user->getKey(), (int) $deviceId);
+            } catch (Throwable $e) {
+                // Already revoked; a dead broadcast transport must not turn a
+                // completed security action into a failure.
+                Log::warning('Could not broadcast a session revocation.', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $revoked === 0
+                ? 'There were no other sessions to sign out.'
+                : 'Your other devices have been signed out.',
+            'revoked_sessions' => $revoked,
+            'devices_signed_out' => $affected->count(),
         ]);
     }
 
