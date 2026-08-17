@@ -8,6 +8,7 @@
  */
 
 import { deviceHeader } from "./deviceId";
+import { endSession } from "./session";
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -61,6 +62,16 @@ export async function apiFetch(path, { method = "GET", body, params, signal, aut
 
   // 204 and empty bodies are legitimate; treat an unparseable body as {}.
   const payload = await response.json().catch(() => ({}));
+
+  // The session died underneath us - most often because another device signed
+  // this one out (FR-01.13), or the token was revoked server-side. Every call
+  // through here is already authenticated, so a 401 can only mean the
+  // credential stopped working; there is nothing to retry and no signed-in UI
+  // left to render. This is the guaranteed exit: the realtime push is faster
+  // when Reverb is up, but this fires even when it is not.
+  if (response.status === 401 && auth && token) {
+    endSession({ reason: "session_ended" });
+  }
 
   if (!response.ok) {
     throw new ApiError(payload.message || "Something went wrong. Please try again.", response.status, payload);

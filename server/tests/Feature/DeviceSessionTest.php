@@ -2,11 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Events\NotificationBroadcast;
+use App\Events\SessionRevoked;
+use App\Mail\NewDeviceAlertMail;
+use App\Models\AuthEvent;
 use App\Models\KnownDevice;
+use App\Models\Notification;
 use App\Models\User;
 use App\Services\Auth\DeviceRegistrar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
@@ -74,6 +81,28 @@ class DeviceSessionTest extends TestCase
         $this->app['auth']->forgetGuards();
 
         return $this->withHeaders(['Authorization' => 'Bearer '.$token] + $extra);
+    }
+
+    /**
+     * Mark the caller's OWN device trusted.
+     *
+     * The bootstrap every remote action needs: a fresh account has no trusted
+     * device, and acting on any device other than the one you hold requires
+     * one. Trusting yourself is always permitted, which is what makes the
+     * first trusted device obtainable at all.
+     */
+    private function trustSelf(string $token): int
+    {
+        $currentId = $this->actingAsDevice($token)
+            ->getJson('/api/user/devices')
+            ->assertOk()
+            ->json('current_device_id');
+
+        $this->actingAsDevice($token)
+            ->patchJson("/api/user/devices/{$currentId}/trust", ['trusted' => true])
+            ->assertOk();
+
+        return $currentId;
     }
 
     // -----------------------------------------------------------------
@@ -243,6 +272,9 @@ class DeviceSessionTest extends TestCase
         // The phone's credential works right up until the revocation.
         $this->actingAsDevice($phone)->getJson('/api/user')->assertOk();
 
+        // Signing out a device other than your own is a trusted-device action.
+        $this->trustSelf($laptop);
+
         $phoneDevice = KnownDevice::where('user_id', $user->id)
             ->where('platform', 'iOS')
             ->sole();
@@ -267,6 +299,8 @@ class DeviceSessionTest extends TestCase
         $laptop = $this->signInFrom($user, 'laptop');
         $tablet = $this->signInFrom($user, 'tablet', 'Mozilla/5.0 (iPad; CPU OS 17_0) Safari/605.1');
         $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->trustSelf($laptop);
 
         $phoneDevice = KnownDevice::where('user_id', $user->id)
             ->where('platform', 'Android')
@@ -294,6 +328,8 @@ class DeviceSessionTest extends TestCase
         $second = $this->signInFrom($user, 'shared-laptop');
         $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
 
+        $this->trustSelf($phone);
+
         $laptopDevice = KnownDevice::where('user_id', $user->id)
             ->where('platform', 'Windows')
             ->sole();
@@ -314,6 +350,8 @@ class DeviceSessionTest extends TestCase
 
         $laptop = $this->signInFrom($user, 'laptop');
         $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->trustSelf($laptop);
 
         $phoneDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Android')->sole();
 
@@ -365,6 +403,8 @@ class DeviceSessionTest extends TestCase
         $laptop = $this->signInFrom($user, 'laptop');
         $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
 
+        $this->trustSelf($laptop);
+
         $phoneDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Android')->sole();
 
         $this->actingAsDevice($laptop)
@@ -387,6 +427,262 @@ class DeviceSessionTest extends TestCase
         $this->actingAsDevice($token)
             ->deleteJson('/api/user/devices/999999')
             ->assertNotFound();
+    }
+
+    // -----------------------------------------------------------------
+    // Trust (FR-01.13): only a trusted device may act on another device
+    // -----------------------------------------------------------------
+
+    public function test_an_untrusted_device_cannot_sign_out_another_device(): void
+    {
+        $user = $this->verifiedUser('trust1@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $phoneDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Android')->sole();
+
+        // No device has been trusted yet.
+        $this->actingAsDevice($laptop)
+            ->deleteJson('/api/user/devices/'.$phoneDevice->id)
+            ->assertForbidden()
+            ->assertJson(['code' => 'DEVICE_NOT_TRUSTED']);
+
+        // The refusal is real: the phone is still signed in.
+        $this->actingAsDevice($phone)->getJson('/api/user')->assertOk();
+        $this->assertSame(1, $phoneDevice->tokens()->count());
+    }
+
+    public function test_a_device_may_always_trust_itself_which_is_how_the_first_trust_is_obtained(): void
+    {
+        $user = $this->verifiedUser('trust2@example.test');
+        $laptop = $this->signInFrom($user, 'laptop');
+
+        $currentId = $this->actingAsDevice($laptop)
+            ->getJson('/api/user/devices')
+            ->assertOk()
+            ->assertJson(['current_device_trusted' => false])
+            ->json('current_device_id');
+
+        $this->actingAsDevice($laptop)
+            ->patchJson("/api/user/devices/{$currentId}/trust", ['trusted' => true])
+            ->assertOk()
+            ->assertJson(['device' => ['is_trusted' => true]]);
+
+        $this->actingAsDevice($laptop)
+            ->getJson('/api/user/devices')
+            ->assertOk()
+            ->assertJson(['current_device_trusted' => true]);
+    }
+
+    public function test_an_untrusted_device_cannot_trust_a_different_device(): void
+    {
+        $user = $this->verifiedUser('trust3@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $phoneDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Android')->sole();
+
+        // Otherwise an untrusted device could simply promote itself by proxy.
+        $this->actingAsDevice($laptop)
+            ->patchJson('/api/user/devices/'.$phoneDevice->id.'/trust', ['trusted' => true])
+            ->assertForbidden()
+            ->assertJson(['code' => 'DEVICE_NOT_TRUSTED']);
+
+        $this->assertFalse($phoneDevice->fresh()->is_trusted);
+    }
+
+    public function test_a_trusted_target_can_still_be_signed_out(): void
+    {
+        $user = $this->verifiedUser('trust4@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        // Both devices trusted. Trust must not make a device unremovable -
+        // otherwise marking a stolen device trusted would lock it in forever.
+        $this->trustSelf($laptop);
+        $this->trustSelf($phone);
+
+        $phoneDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Android')->sole();
+        $this->assertTrue($phoneDevice->is_trusted);
+
+        $this->actingAsDevice($laptop)
+            ->deleteJson('/api/user/devices/'.$phoneDevice->id)
+            ->assertOk()
+            ->assertJson(['revoked_sessions' => 1]);
+
+        $this->actingAsDevice($phone)->getJson('/api/user')->assertUnauthorized();
+        // Still trusted, just signed out - trust is about the device, not the session.
+        $this->assertTrue($phoneDevice->fresh()->is_trusted);
+    }
+
+    public function test_signing_yourself_out_never_requires_trust(): void
+    {
+        $user = $this->verifiedUser('trust5@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $laptopDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Windows')->sole();
+        $this->assertFalse($laptopDevice->is_trusted);
+
+        $this->actingAsDevice($laptop)
+            ->deleteJson('/api/user/devices/'.$laptopDevice->id)
+            ->assertOk()
+            ->assertJson(['current_device_revoked' => true]);
+    }
+
+    public function test_a_user_cannot_trust_another_accounts_device(): void
+    {
+        $alice = $this->verifiedUser('trust6@example.test');
+        $bob = $this->verifiedUser('trust7@example.test');
+
+        $aliceToken = $this->signInFrom($alice, 'alice-laptop');
+        $bobToken = $this->signInFrom($bob, 'bob-laptop');
+
+        // Even from a trusted device: ownership is checked before trust, so
+        // this 404s rather than leaking that the id exists elsewhere.
+        $this->trustSelf($aliceToken);
+
+        $bobDevice = KnownDevice::where('user_id', $bob->id)->sole();
+
+        $this->actingAsDevice($aliceToken)
+            ->patchJson('/api/user/devices/'.$bobDevice->id.'/trust', ['trusted' => true])
+            ->assertNotFound();
+
+        $this->assertFalse($bobDevice->fresh()->is_trusted);
+        $this->actingAsDevice($bobToken)->getJson('/api/user')->assertOk();
+    }
+
+    // -----------------------------------------------------------------
+    // FR-01.11: unrecognised-device login is recorded and alerted
+    // -----------------------------------------------------------------
+
+    public function test_a_first_ever_device_is_recorded_but_raises_no_alert(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('alert1@example.test');
+        $this->signInFrom($user, 'laptop');
+
+        // Recorded...
+        $this->assertDatabaseHas('auth_events', [
+            'user_id' => $user->id,
+            'event_type' => DeviceRegistrar::EVENT_NEW_DEVICE,
+        ]);
+
+        // ...but not alerted: there is no earlier device to compare against and
+        // the user is the one signing in.
+        Mail::assertNothingSent();
+        $this->assertSame(0, Notification::where('user_id', $user->id)->count());
+    }
+
+    public function test_a_second_unrecognised_device_records_an_event_and_alerts_the_account_holder(): void
+    {
+        Mail::fake();
+        Event::fake([NotificationBroadcast::class]);
+
+        $user = $this->verifiedUser('alert2@example.test');
+
+        $this->signInFrom($user, 'laptop');
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        // One event per unrecognised device, not per login.
+        $this->assertSame(2, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_NEW_DEVICE)
+            ->count());
+
+        // In-app notice naming the device.
+        $notification = Notification::where('user_id', $user->id)->sole();
+        $this->assertStringContainsString('New sign-in', $notification->title);
+        $this->assertStringContainsString('Chrome on Android', $notification->body);
+
+        // Pushed live, and emailed - the in-app notice is useless in the case
+        // that matters, where the attacker is the one holding the app.
+        Event::assertDispatched(NotificationBroadcast::class);
+        Mail::assertSent(NewDeviceAlertMail::class, fn ($mail) => $mail->hasTo($user->email));
+    }
+
+    public function test_returning_to_a_known_device_raises_nothing(): void
+    {
+        $user = $this->verifiedUser('alert3@example.test');
+
+        $this->signInFrom($user, 'laptop');
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        Mail::fake();
+
+        // Same two devices again: recognised, so silent.
+        $this->signInFrom($user, 'laptop');
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        Mail::assertNothingSent();
+        $this->assertSame(2, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_NEW_DEVICE)
+            ->count());
+    }
+
+    public function test_a_failing_alert_never_breaks_the_login(): void
+    {
+        $user = $this->verifiedUser('alert4@example.test');
+        $this->signInFrom($user, 'laptop');
+
+        // A mail transport that throws must not cost the user their sign-in:
+        // the password was correct and the session already exists.
+        Mail::shouldReceive('to')->andThrow(new \RuntimeException('SMTP is down'));
+
+        $token = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->assertNotEmpty($token);
+        $this->actingAsDevice($token)->getJson('/api/user')->assertOk();
+    }
+
+    // -----------------------------------------------------------------
+    // Revoked devices are told to leave
+    // -----------------------------------------------------------------
+
+    public function test_revoking_another_device_broadcasts_so_that_browser_can_leave(): void
+    {
+        Event::fake([SessionRevoked::class]);
+
+        $user = $this->verifiedUser('revoke-event@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->trustSelf($laptop);
+
+        $phoneDevice = KnownDevice::where('user_id', $user->id)->where('platform', 'Android')->sole();
+
+        $this->actingAsDevice($laptop)
+            ->deleteJson('/api/user/devices/'.$phoneDevice->id)
+            ->assertOk();
+
+        Event::assertDispatched(
+            SessionRevoked::class,
+            fn (SessionRevoked $event) => $event->deviceId === $phoneDevice->id
+                && $event->userId === $user->id
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // Ordinary sign-out ends ONE session, not the whole account
+    // -----------------------------------------------------------------
+
+    public function test_logging_out_leaves_the_users_other_devices_signed_in(): void
+    {
+        $user = $this->verifiedUser('logout@example.test');
+
+        $laptop = $this->signInFrom($user, 'laptop');
+        $phone = $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        $this->actingAsDevice($laptop)->postJson('/api/logout')->assertOk();
+
+        $this->actingAsDevice($laptop)->getJson('/api/user')->assertUnauthorized();
+        // The whole point: signing out here is not signing out everywhere.
+        $this->actingAsDevice($phone)->getJson('/api/user')->assertOk();
     }
 
     // -----------------------------------------------------------------

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -207,7 +208,10 @@ class AuthController extends Controller
 
         return [
             'user' => $user,
-            'token' => $token->plainTextToken
+            'token' => $token->plainTextToken,
+            // Lets this browser recognise itself in a session.revoked broadcast
+            // and leave immediately when another device signs it out.
+            'device_id' => $token->accessToken->known_device_id,
         ];
     }
 
@@ -217,7 +221,19 @@ class AuthController extends Controller
 
     public function logout(Request $request){
 
-        $request->user()->tokens()->delete();
+        $token = $request->user()->currentAccessToken();
+
+        // Only THIS session. Previously this deleted every token on the
+        // account, which signed the user out of every other device too - the
+        // exact opposite of what the devices screen (FR-01.13) promises, and
+        // indistinguishable from a bug once that screen exists. Signing out
+        // everywhere is what "Your devices" is for.
+        if ($token instanceof PersonalAccessToken) {
+            $token->delete();
+        } else {
+            // TransientToken (no persisted row) - nothing to revoke.
+            $request->user()->tokens()->delete();
+        }
 
         return [
             'message' => 'You are logged out'

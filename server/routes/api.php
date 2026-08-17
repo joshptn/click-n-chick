@@ -53,6 +53,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Known devices / active sessions (FR-01.13). Both routes resolve the
     // device through the authenticated user, so ownership is not optional.
     Route::get('/user/devices', [DeviceSessionController::class, 'index']);
+    Route::patch('/user/devices/{device}/trust', [DeviceSessionController::class, 'trust'])
+        ->middleware('throttle:user-update');
     Route::delete('/user/devices/{device}', [DeviceSessionController::class, 'destroy'])
         ->middleware('throttle:user-update');
 

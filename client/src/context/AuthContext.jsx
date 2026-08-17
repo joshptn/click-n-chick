@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 import { disconnectEcho } from '../lib/echo';
 import { deviceHeader } from '../lib/deviceId';
+import { clearStoredSession } from '../lib/session';
 
 const AuthContext = createContext();
 
@@ -29,6 +30,13 @@ export function AuthProvider({children}) {
 
         localStorage.setItem('token', JSON.stringify(data.token));
         localStorage.setItem('user', JSON.stringify(data.user));
+
+        // Which known_device this session belongs to. Stored so a
+        // session.revoked broadcast aimed at this device can be recognised -
+        // the event goes to the whole account, and only the named device acts.
+        if (data.device_id !== undefined && data.device_id !== null) {
+            localStorage.setItem('device_session_id', JSON.stringify(data.device_id));
+        }
 
         return data;
     };
@@ -76,15 +84,36 @@ export function AuthProvider({children}) {
         }
     };
     
-    const logoutUser = () => {
+    const logoutUser = async ({ revokeOnServer = true } = {}) => {
+        // Revoke the token server-side rather than only forgetting it locally.
+        // Without this the session stays valid forever and shows up on the
+        // devices screen as a live session for a device that has signed out.
+        //
+        // Best-effort and awaited before clearing: if the network is down the
+        // user must still get out of the app locally. POST /api/logout ends
+        // THIS session only - other devices are unaffected.
+        if (revokeOnServer && token) {
+            try {
+                await fetch(url + '/api/logout', {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        Authorization: `Bearer ${token}`,
+                        ...deviceHeader(),
+                    },
+                });
+            } catch {
+                // Offline or server unreachable - fall through and clear locally.
+            }
+        }
+
         // Before clearing the token: the socket authorized with it and would
         // otherwise keep the previous user's subscriptions alive.
         disconnectEcho();
 
         setUser(null);
         setToken(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        clearStoredSession();
     }
 
     var context = {
