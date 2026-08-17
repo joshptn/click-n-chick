@@ -1,62 +1,27 @@
-import { useContext, useEffect, useState } from "react";
-import { Navigate, Outlet, useNavigate } from "react-router-dom";
+import { useContext } from "react";
+import { Navigate, Outlet } from "react-router-dom";
+import { Center, Loader } from "@mantine/core";
 import AuthContext from "../context/AuthContext";
-import { Loader, Center } from "@mantine/core";
 import { ROLES } from "../lib/roles";
 
 const STAFF_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
 
+/**
+ * Staff-area gate.
+ *
+ * This used to run its own /api/user fetch, because the role in localStorage
+ * could not be trusted and something had to ask the server. AuthContext now
+ * does that for every signed-in page, so this is just the role check against
+ * the answer it already has - one request instead of two, and no second copy
+ * of the session-expiry handling to keep in sync.
+ *
+ * Still only a rendering decision. The staff endpoints are enforced by the
+ * role middleware regardless of what this component does.
+ */
 function AdminRoutes() {
-  const { user, setUser, token } = useContext(AuthContext);
-  const [loading, setLoading] = useState(true);
-  const nav = useNavigate();
-  const url = import.meta.env.VITE_API_URL;
+  const { user, token, isBootstrapping } = useContext(AuthContext);
 
-  const getUserDetails = async () => {
-    setLoading(true);
-
-    if (token) {
-      try {
-        const result = await fetch(`${url}/api/user`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (result.ok) {
-          const data = await result.json();
-          setUser(data);
-        } else {
-          console.error("User fetch failed");
-          setUser(null);
-          if (!["/login", "/register"].includes(window.location.pathname)) {
-            nav("/login");
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching user", err);
-        setUser(null);
-        if (!["/login", "/register"].includes(window.location.pathname)) {
-          nav("/login");
-        }
-      }
-    } else {
-      setUser(null);
-      if (!["/login", "/register"].includes(window.location.pathname)) {
-        nav("/login");
-      }
-    }
-
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    getUserDetails();
-  }, []);
-
-  
-  if (loading) {
+  if (token && isBootstrapping) {
     return (
       <Center style={{ height: "100vh" }}>
         <Loader color="orange" size="lg" />
@@ -64,7 +29,6 @@ function AdminRoutes() {
     );
   }
 
- 
   return STAFF_ROLES.includes(user?.role) ? <Outlet /> : <Navigate to="/unauthorized" replace />;
 }
 

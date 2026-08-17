@@ -2,6 +2,7 @@ import Echo from "laravel-echo";
 import Pusher from "pusher-js";
 
 import { authToken } from "./api";
+import { deviceHeader } from "./deviceId";
 
 /**
  * The Reverb connection.
@@ -65,6 +66,11 @@ function createEcho() {
             "Content-Type": "application/json",
             Accept: "application/json",
             Authorization: `Bearer ${token}`,
+            // This is an authenticated call like any other, so it has to carry
+            // the device hint - without it the server falls back to a
+            // user-agent fingerprint and reports a device mismatch against a
+            // perfectly legitimate session.
+            ...deviceHeader(),
           },
           body: JSON.stringify({ socket_id: socketId, channel_name: channel.name }),
         })

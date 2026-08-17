@@ -855,6 +855,232 @@ class DeviceSessionTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // Sessions expire
+    // -----------------------------------------------------------------
+
+    public function test_tokens_are_issued_with_an_expiry(): void
+    {
+        $user = $this->verifiedUser('exp1@example.test');
+        $token = $this->signInFrom($user, 'laptop');
+
+        // Was null forever: a token that leaked once stayed valid indefinitely.
+        $accessToken = PersonalAccessToken::findToken($token);
+        $this->assertNotNull($accessToken->expires_at);
+        $this->assertTrue($accessToken->expires_at->isFuture());
+    }
+
+    public function test_staff_sessions_are_much_shorter_than_customer_sessions(): void
+    {
+        $customer = $this->verifiedUser('exp2@example.test');
+        $staff = $this->verifiedUser('exp3@example.test');
+        $staff->role = User::ROLE_ADMIN;
+        $staff->save();
+
+        $customerToken = PersonalAccessToken::findToken($this->signInFrom($customer, 'c-laptop'));
+        $staffToken = PersonalAccessToken::findToken($this->signInFrom($staff, 's-laptop'));
+
+        // An admin token can reprice the catalogue and change roles, so one
+        // leaking costs far more than a customer's.
+        $this->assertTrue(
+            $staffToken->expires_at->lt($customerToken->expires_at),
+            'staff sessions should expire sooner than customer sessions'
+        );
+
+        $this->assertEqualsWithDelta(
+            DeviceRegistrar::STAFF_SESSION_MINUTES,
+            now()->diffInMinutes($staffToken->expires_at),
+            2
+        );
+    }
+
+    public function test_an_expired_token_no_longer_authenticates(): void
+    {
+        $user = $this->verifiedUser('exp4@example.test');
+        $token = $this->signInFrom($user, 'laptop');
+
+        $this->actingAsDevice($token)->getJson('/api/user')->assertOk();
+
+        // Wind the clock past the customer window.
+        $this->travel(DeviceRegistrar::CUSTOMER_SESSION_MINUTES + 10)->minutes();
+
+        $this->actingAsDevice($token)->getJson('/api/user')->assertUnauthorized();
+    }
+
+    // -----------------------------------------------------------------
+    // A token used from a device it was not issued to is noticed
+    // -----------------------------------------------------------------
+
+    public function test_a_token_used_from_a_different_device_is_recorded_and_alerted(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('mismatch1@example.test');
+        $token = $this->signInFrom($user, 'the-real-laptop');
+
+        // Exactly the copy-the-token-into-another-browser case: same token,
+        // different device id, different user agent.
+        $this->actingAsDevice($token, [
+            DeviceRegistrar::HINT_HEADER => 'a-completely-different-browser',
+            'User-Agent' => 'Mozilla/5.0 (X11; Linux) Firefox/121.0',
+        ])->getJson('/api/user')->assertOk();
+
+        $this->assertDatabaseHas('auth_events', [
+            'user_id' => $user->id,
+            'event_type' => DeviceRegistrar::EVENT_DEVICE_MISMATCH,
+        ]);
+
+        $this->assertSame(1, Notification::where('user_id', $user->id)
+            ->where('title', 'Session used from a new device')
+            ->count());
+
+        Mail::assertSent(NewDeviceAlertMail::class,
+            fn ($mail) => $mail->context === NewDeviceAlertMail::CONTEXT_SESSION_MOVED);
+    }
+
+    public function test_the_legitimate_device_is_never_flagged(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('mismatch2@example.test');
+        $token = $this->signInFrom($user, 'the-real-laptop');
+
+        // Several ordinary requests from the device that owns the token.
+        foreach (range(1, 3) as $ignored) {
+            $this->actingAsDevice($token, [
+                DeviceRegistrar::HINT_HEADER => 'the-real-laptop',
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0',
+            ])->getJson('/api/user')->assertOk();
+        }
+
+        $this->assertSame(0, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
+            ->count());
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_session_that_predates_the_device_hint_is_not_flagged(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('mismatch3@example.test');
+
+        // Signed in before the client could store a hint, so the device was
+        // fingerprinted from the user agent alone.
+        $response = $this->withHeaders(['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0'])
+            ->postJson('/api/login', ['login' => $user->email, 'password' => 'Password123!']);
+        $token = $response->json('token');
+
+        // The client updates and starts sending a hint. Same browser, same
+        // person - flagging this would train users to ignore the alerts.
+        $this->actingAsDevice($token, [
+            DeviceRegistrar::HINT_HEADER => 'newly-generated-id',
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0',
+        ])->getJson('/api/user')->assertOk();
+
+        $this->assertSame(0, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
+            ->count());
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_repeated_mismatches_do_not_spam_the_account_holder(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('mismatch4@example.test');
+        $token = $this->signInFrom($user, 'the-real-laptop');
+
+        $headers = [
+            DeviceRegistrar::HINT_HEADER => 'a-completely-different-browser',
+            'User-Agent' => 'Mozilla/5.0 (X11; Linux) Firefox/121.0',
+        ];
+
+        foreach (range(1, 4) as $ignored) {
+            $this->actingAsDevice($token, $headers)->getJson('/api/user')->assertOk();
+        }
+
+        // Every occurrence is recorded - the audit trail must be complete...
+        $this->assertSame(4, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
+            ->count());
+
+        // ...but an alert delivered four times is an alert nobody reads.
+        $this->assertSame(1, Notification::where('user_id', $user->id)
+            ->where('title', 'Session used from a new device')
+            ->count());
+        Mail::assertSentCount(1);
+    }
+
+    public function test_mismatch_can_be_configured_to_kill_the_session(): void
+    {
+        Mail::fake();
+        config(['services.session_security.revoke_on_device_mismatch' => true]);
+
+        $user = $this->verifiedUser('mismatch5@example.test');
+        $token = $this->signInFrom($user, 'the-real-laptop');
+
+        $stolen = [
+            DeviceRegistrar::HINT_HEADER => 'a-completely-different-browser',
+            'User-Agent' => 'Mozilla/5.0 (X11; Linux) Firefox/121.0',
+        ];
+
+        $this->actingAsDevice($token, $stolen)->getJson('/api/user')->assertUnauthorized();
+
+        // Off by default, but when armed the token is genuinely destroyed -
+        // the real device loses it too, which is the intended trade.
+        $this->actingAsDevice($token)->getJson('/api/user')->assertUnauthorized();
+    }
+
+    public function test_a_request_without_a_device_hint_is_never_flagged(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('mismatch7@example.test');
+        $token = $this->signInFrom($user, 'the-real-laptop');
+
+        // No X-Device-Id at all - a server-to-server call, an older client, or
+        // a path that forgot the header. It can only be fingerprinted by user
+        // agent, which will never match a hint-derived device, so treating it
+        // as a mismatch would flag ordinary traffic. Verified the hard way:
+        // this fired on real browser requests before the Echo authorizer
+        // started sending the header.
+        $this->actingAsDevice($token, ['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0'])
+            ->getJson('/api/user')
+            ->assertOk();
+
+        $this->assertSame(0, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
+            ->count());
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_token_with_no_device_link_passes_through_undisturbed(): void
+    {
+        Mail::fake();
+
+        $user = $this->verifiedUser('mismatch6@example.test');
+
+        // A token minted outside a request context - a legacy row, or one
+        // created by an artisan command. There is nothing to compare it
+        // against, so detection must let it alone rather than treating
+        // "unknown" as "suspicious" and locking the account holder out.
+        $orphan = $user->createToken('legacy')->plainTextToken;
+
+        $this->actingAsDevice($orphan, [
+            DeviceRegistrar::HINT_HEADER => 'whatever-browser',
+        ])->getJson('/api/user')->assertOk();
+
+        $this->assertSame(0, AuthEvent::where('user_id', $user->id)
+            ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
+            ->count());
+
+        Mail::assertNothingSent();
+    }
+
+    // -----------------------------------------------------------------
     // A client-supplied device id is not proof of anything
     // -----------------------------------------------------------------
 

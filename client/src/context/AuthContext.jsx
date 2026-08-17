@@ -1,5 +1,4 @@
-import React, { createContext, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom';
+import { createContext, useEffect, useState } from 'react'
 import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 import { disconnectEcho } from '../lib/echo';
 import { deviceHeader } from '../lib/deviceId';
@@ -16,20 +15,75 @@ export function AuthProvider({children}) {
         JSON.parse(localStorage.getItem('token')) || null
     );
 
-    const [user, setUser] = useState(
-        JSON.parse(localStorage.getItem('user')) || null
+    // Deliberately NOT read from localStorage. The user object carries real
+    // PII - email, phone number, legal name - and storing it put all of that
+    // at rest in the browser for no benefit beyond skipping one request. It
+    // also made the role client-editable, which let anyone render the admin
+    // shell by hand. It is now fetched from /api/user, which is the only
+    // authority on who this token belongs to.
+    const [user, setUser] = useState(null);
+
+    // True while the boot-time /api/user call is in flight. Route guards must
+    // wait for it: without this a signed-in user is bounced to /login on every
+    // refresh, because `user` is briefly null before the fetch resolves.
+    const [isBootstrapping, setIsBootstrapping] = useState(
+        Boolean(JSON.parse(localStorage.getItem('token')) || null)
     );
 
-    const nav = useNavigate()
-
     const url = import.meta.env.VITE_API_URL
+
+    // Purge the key written by older builds so existing installs stop carrying
+    // that PII around after this deploy.
+    useEffect(() => {
+        localStorage.removeItem('user');
+    }, []);
+
+    useEffect(() => {
+        if (!token) {
+            setUser(null);
+            setIsBootstrapping(false);
+            return undefined;
+        }
+
+        // Guards against a late response from a token that has since changed.
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const response = await fetch(url + '/api/user', {
+                    headers: {
+                        Accept: 'application/json',
+                        Authorization: `Bearer ${token}`,
+                        ...deviceHeader(),
+                    },
+                });
+
+                if (!response.ok) throw new Error('This session is no longer valid.');
+
+                const data = await response.json();
+
+                if (!cancelled) setUser(data);
+            } catch {
+                // Expired, revoked, or signed out from another device. Drop it
+                // rather than leaving a dead token in storage.
+                if (!cancelled) {
+                    setUser(null);
+                    setToken(null);
+                    clearStoredSession();
+                }
+            } finally {
+                if (!cancelled) setIsBootstrapping(false);
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [token, url]);
 
     const adoptSession = (data) => {
         setToken(data.token);
         setUser(data.user);
 
         localStorage.setItem('token', JSON.stringify(data.token));
-        localStorage.setItem('user', JSON.stringify(data.user));
 
         // Which known_device this session belongs to. Stored so a
         // session.revoked broadcast aimed at this device can be recognised -
@@ -45,7 +99,6 @@ export function AuthProvider({children}) {
         e.preventDefault();
         const url = import.meta.env.VITE_API_URL;
 
-        try {
         const body = await withRecaptcha({
             login: e.target.login.value,
             password: e.target.password.value,
@@ -71,17 +124,13 @@ export function AuthProvider({children}) {
             return data;
         }
 
-        if(data.token != undefined){
+        if (data.token != undefined) {
             adoptSession(data);
 
             return data;
-        }else{
-            throw new Error(data.message || 'Login failed. Check credentials.');
         }
 
-        } catch (err) {
-        throw err; 
-        }
+        throw new Error(data.message || 'Login failed. Check credentials.');
     };
     
     const logoutUser = async ({ revokeOnServer = true } = {}) => {
@@ -122,7 +171,8 @@ export function AuthProvider({children}) {
         logOut:logoutUser,
         user:user,
         token:token,
-        setUser:setUser
+        setUser:setUser,
+        isBootstrapping:isBootstrapping
     }
     return (
         <AuthContext.Provider value={context}>
