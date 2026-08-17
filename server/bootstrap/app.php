@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Http\Middleware\DetectDeviceMismatch;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\VerifyRecaptcha;
 use Illuminate\Http\Middleware\HandleCors;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
             'recaptcha' => VerifyRecaptcha::class,
+            'device-check' => DetectDeviceMismatch::class,
         ]);
 
         $middleware->throttleApi();

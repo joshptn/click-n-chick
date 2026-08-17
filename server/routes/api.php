@@ -41,7 +41,7 @@ Route::get('/category/{category}', [CategoryController::class, 'show']);
 Route::get('/posters', [PosterController::class, 'index']);
 
 // Customer
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
     Route::get('/user', [AuthController::class, 'userDetails']);
     Route::put('/user/update', [AuthController::class, 'updateUser'])->middleware('throttle:user-update');
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -85,20 +85,20 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 //Superadmin and Admin
-Route::middleware(['auth:sanctum', 'role:admin,super_admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'role:admin,super_admin'])->group(function () {
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
     Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
 });
 
 //Store Agent
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'role:admin'])->group(function () {
     Route::patch('/foods/{food}/stock', [FoodController::class, 'updateStock']);
     Route::patch('/foods/{food}/availability', [FoodController::class, 'updateAvailability']);
 });
 
 //Store Manager
-Route::middleware(['auth:sanctum', 'role:super_admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'role:super_admin'])->group(function () {
     Route::post('/foods', [FoodController::class, 'store']);
     Route::put('/foods/{food}', [FoodController::class, 'update']);
     Route::patch('/foods/{food}', [FoodController::class, 'update']);
