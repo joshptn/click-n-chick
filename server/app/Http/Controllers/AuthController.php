@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Rules\StrongPassword;
+use App\Services\Auth\DeviceRegistrar;
 use App\Services\Otp\OtpService;
 use App\Services\Verification\Channel;
 use App\Services\Verification\ChannelRegistry;
@@ -200,7 +201,9 @@ class AuthController extends Controller
             );
         }
 
-        $token = $user->createToken(self::TOKEN_NAME);
+        // Attributed to the requesting device so the account holder can see and
+        // revoke this session later (FR-01.13). Same Sanctum token as before.
+        $token = app(DeviceRegistrar::class)->issueToken($user, $request, self::TOKEN_NAME);
 
         return [
             'user' => $user,

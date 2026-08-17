@@ -2,6 +2,7 @@ import React, { createContext, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 import { disconnectEcho } from '../lib/echo';
+import { deviceHeader } from '../lib/deviceId';
 
 const AuthContext = createContext();
 
@@ -44,7 +45,7 @@ export function AuthProvider({children}) {
 
         const response = await fetch(url + '/api/login', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...deviceHeader() },
             body: JSON.stringify(body),
             credentials: 'include',
         });

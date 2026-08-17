@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\OtpCode;
 use App\Rules\StrongPassword;
+use App\Services\Auth\DeviceRegistrar;
 use App\Services\Otp\OtpService;
 use App\Services\Otp\OtpVerificationResult;
 use App\Services\Verification\ChannelRegistry;
@@ -119,7 +120,7 @@ class PasswordResetController extends Controller
             ), 200);
         }
 
-        $token = $user->createToken(self::TOKEN_NAME);
+        $token = app(DeviceRegistrar::class)->issueToken($user, $request, self::TOKEN_NAME);
 
         return response()->json([
             'message' => 'Your password has been reset.',
