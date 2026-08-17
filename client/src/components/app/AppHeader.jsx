@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Indicator, Menu } from "@mantine/core";
+import { Indicator, Menu, Modal } from "@mantine/core";
 import {
   IconBell,
   IconLogout,
@@ -13,6 +13,7 @@ import {
 } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import Button from "../ui/Button";
 import LogoIcon from "../../assets/logo-icon.png";
 import { useCart } from "../../context/useCart";
 import { useRealtime } from "../../context/useRealtime";
@@ -50,9 +51,21 @@ function AppHeader({
 
   const initials = `${user?.first_name?.charAt(0) ?? ""}${user?.last_name?.charAt(0) ?? ""}`.toUpperCase() || "G";
 
-  const handleSignOut = () => {
-    logOut();
-    nav("/login", { replace: true });
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    // logOut revokes the token server-side before clearing local state, so
+    // this awaits rather than navigating straight away.
+    setSigningOut(true);
+
+    try {
+      await logOut();
+    } finally {
+      setSigningOut(false);
+      setConfirmingSignOut(false);
+      nav("/login", { replace: true });
+    }
   };
 
   return (
@@ -221,13 +234,49 @@ function AppHeader({
                 Your devices
               </Menu.Item>
               <Menu.Divider />
-              <Menu.Item color="red" leftSection={<IconLogout size={16} stroke={1.9} />} onClick={handleSignOut}>
+              <Menu.Item
+                color="red"
+                leftSection={<IconLogout size={16} stroke={1.9} />}
+                onClick={() => setConfirmingSignOut(true)}
+              >
                 Sign out
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         </div>
       </div>
+
+      <Modal
+        opened={confirmingSignOut}
+        onClose={() => setConfirmingSignOut(false)}
+        title="Are you sure you want to log out?"
+        centered
+        radius="md"
+      >
+        <p className="m-0 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
+          You will need to sign in again on this device. Your other devices stay signed in.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setConfirmingSignOut(false)}
+            disabled={signingOut}
+          >
+            No
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={signingOut}
+            loadingLabel="Logging out&hellip;"
+            onClick={handleSignOut}
+          >
+            Yes, log out
+          </Button>
+        </div>
+      </Modal>
     </header>
   );
 }

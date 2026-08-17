@@ -20,12 +20,18 @@
                     <tr>
                         <td style="padding:32px;">
                             <p style="margin:0 0 8px; font-size:18px; font-weight:600; color:#292929;">
-                                New sign-in to your account
+                                {{ ($sessionMoved ?? false) ? 'Your session was used somewhere new' : 'New sign-in to your account' }}
                             </p>
 
                             <p style="margin:0 0 24px; font-size:14px; line-height:1.6; color:#6f6b68;">
-                                @if ($firstName)Hi {{ $firstName }}, someone @else Someone @endif just signed in
-                                to your Click n Chick account from a device we have not seen before.
+                                @if ($sessionMoved ?? false)
+                                    @if ($firstName)Hi {{ $firstName }}, an @else An @endif existing sign-in on your
+                                    Click n Chick account was just used from a browser it was not created on. Nobody
+                                    entered your password to do this, which can mean the sign-in was copied.
+                                @else
+                                    @if ($firstName)Hi {{ $firstName }}, someone @else Someone @endif just signed in
+                                    to your Click n Chick account from a device we have not seen before.
+                                @endif
                             </p>
 
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf6f0; border:1px solid #f0e6da; border-radius:12px; padding:16px 20px;">

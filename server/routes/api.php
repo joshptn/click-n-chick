@@ -41,7 +41,7 @@ Route::get('/category/{category}', [CategoryController::class, 'show']);
 Route::get('/posters', [PosterController::class, 'index']);
 
 // Customer
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
     Route::get('/user', [AuthController::class, 'userDetails']);
     Route::put('/user/update', [AuthController::class, 'updateUser'])->middleware('throttle:user-update');
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -53,6 +53,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Known devices / active sessions (FR-01.13). Both routes resolve the
     // device through the authenticated user, so ownership is not optional.
     Route::get('/user/devices', [DeviceSessionController::class, 'index']);
+    Route::post('/user/devices/sign-out-others', [DeviceSessionController::class, 'signOutOthers'])
+        ->middleware('throttle:user-update');
+    // Tighter budget than the rest: granting trust checks the account password,
+    // so this endpoint is brute-forceable from an already-stolen session.
+    Route::patch('/user/devices/{device}/trust', [DeviceSessionController::class, 'trust'])
+        ->middleware('throttle:device-trust');
     Route::delete('/user/devices/{device}', [DeviceSessionController::class, 'destroy'])
         ->middleware('throttle:user-update');
 
@@ -79,20 +85,20 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 //Superadmin and Admin
-Route::middleware(['auth:sanctum', 'role:admin,super_admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'role:admin,super_admin'])->group(function () {
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
     Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
 });
 
 //Store Agent
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'role:admin'])->group(function () {
     Route::patch('/foods/{food}/stock', [FoodController::class, 'updateStock']);
     Route::patch('/foods/{food}/availability', [FoodController::class, 'updateAvailability']);
 });
 
 //Store Manager
-Route::middleware(['auth:sanctum', 'role:super_admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'role:super_admin'])->group(function () {
     Route::post('/foods', [FoodController::class, 'store']);
     Route::put('/foods/{food}', [FoodController::class, 'update']);
     Route::patch('/foods/{food}', [FoodController::class, 'update']);

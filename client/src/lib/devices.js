@@ -22,3 +22,31 @@ export function fetchDevices({ signal } = {}) {
 export function revokeDevice(deviceId) {
   return api.delete(`/api/user/devices/${deviceId}`);
 }
+
+/**
+ * Mark a device trusted or untrusted.
+ *
+ * Only a trusted device may act on another device, so the first call a user
+ * makes is always against their own device - the server permits that
+ * unconditionally, which is what makes the first trust obtainable.
+ *
+ * GRANTING trust requires the account password; removing it does not. The
+ * password is passed straight through and never stored.
+ */
+export function setDeviceTrust(deviceId, trusted, password) {
+  return api.patch(`/api/user/devices/${deviceId}/trust`, {
+    trusted,
+    ...(trusted ? { password } : {}),
+  });
+}
+
+/**
+ * End every session on the account except this one.
+ *
+ * Does not spare trusted devices - this is the panic button, and one that
+ * leaves some sessions alive is not much of a panic button. Requires the
+ * current device to be trusted.
+ */
+export function signOutOtherDevices() {
+  return api.post("/api/user/devices/sign-out-others");
+}

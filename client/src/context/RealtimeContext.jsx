@@ -5,6 +5,7 @@ import AuthContext from "./AuthContext";
 import toast from "../components/app/Toast";
 import { ROLES } from "../lib/roles";
 import { disconnectEcho, getEcho, isRealtimeConfigured } from "../lib/echo";
+import { endSession, sessionDeviceId } from "../lib/session";
 
 const RealtimeContext = createContext(null);
 
@@ -81,7 +82,18 @@ export function RealtimeProvider({ children }) {
         // The bell reads the same endpoint; let it refetch rather than
         // trusting this payload to be the whole story.
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      });
+      })
+        // Another device signed THIS one out (FR-01.13). The event goes to the
+        // whole account, so act only if it names this device. The token is
+        // already dead server-side either way; this just gets the browser off
+        // a signed-in screen immediately instead of at the next request.
+        .listen(".session.revoked", (payload) => {
+          const mine = sessionDeviceId();
+
+          if (mine === null || Number(payload?.device_id) !== Number(mine)) return;
+
+          endSession({ reason: "signed_out_remotely" });
+        });
 
       channels.push(name);
     }

@@ -109,6 +109,7 @@ class OtpController extends Controller
         return response()->json([
             'user' => $user->fresh(),
             'token' => $token->plainTextToken,
+            'device_id' => $token->accessToken->known_device_id,
         ]);
     }
 

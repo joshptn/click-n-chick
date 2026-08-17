@@ -63,4 +63,18 @@ return [
         'sender_name' => env('SEMAPHORE_SENDER_NAME'),
     ],
 
+    'session_security' => [
+        /*
+         * Kill a session outright when a token is presented by a device it was
+         * not issued to, rather than only recording and alerting.
+         *
+         * Off by default on purpose: any authenticated request that arrives
+         * without the X-Device-Id header falls back to a user-agent
+         * fingerprint, so turning this on before every client call sends the
+         * header would log people out for no reason. Turn it on once you are
+         * satisfied the alerts in auth_events are only ever real.
+         */
+        'revoke_on_device_mismatch' => (bool) env('SESSION_REVOKE_ON_DEVICE_MISMATCH', false),
+    ],
+
 ];

@@ -126,6 +126,7 @@ class PasswordResetController extends Controller
             'message' => 'Your password has been reset.',
             'user' => $user->fresh(),
             'token' => $token->plainTextToken,
+            'device_id' => $token->accessToken->known_device_id,
         ]);
     }
 }
