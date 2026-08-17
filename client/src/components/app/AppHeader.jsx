@@ -6,6 +6,7 @@ import {
   IconLogout,
   IconReceipt,
   IconSearch,
+  IconShieldLock,
   IconShoppingBag,
   IconUser,
   IconX,
@@ -212,6 +213,12 @@ function AppHeader({
               </Menu.Item>
               <Menu.Item leftSection={<IconReceipt size={16} stroke={1.9} />} onClick={() => nav("/home")}>
                 My orders
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconShieldLock size={16} stroke={1.9} />}
+                onClick={() => nav("/account/devices")}
+              >
+                Your devices
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item color="red" leftSection={<IconLogout size={16} stroke={1.9} />} onClick={handleSignOut}>

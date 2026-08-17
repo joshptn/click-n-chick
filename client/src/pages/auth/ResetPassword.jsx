@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { IconAlertCircle, IconLock, IconShieldLock } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import { deviceHeader } from "../../lib/deviceId";
 import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
@@ -74,7 +75,7 @@ function ResetPassword() {
     try {
       const response = await fetch(`${url}/api/password/reset`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
         body: JSON.stringify(
           await withRecaptcha(
             {
@@ -125,7 +126,7 @@ function ResetPassword() {
     try {
       const response = await fetch(`${url}/api/password/forgot`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
         body: JSON.stringify(await withRecaptcha({ identifier }, RECAPTCHA_ACTIONS.PASSWORD_FORGOT)),
         credentials: "include",
       });

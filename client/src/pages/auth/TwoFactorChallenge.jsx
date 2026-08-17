@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { IconAlertCircle, IconShieldLock } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import { deviceHeader } from "../../lib/deviceId";
 import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
@@ -44,7 +45,7 @@ function TwoFactorChallenge() {
     try {
       const response = await fetch(`${url}/api/2fa/challenge`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
         body: JSON.stringify(
           await withRecaptcha(
             { challenge_token: challengeToken, code: e.target.code.value.trim() },

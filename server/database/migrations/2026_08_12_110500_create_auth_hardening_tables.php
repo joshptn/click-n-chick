@@ -56,18 +56,47 @@ return new class extends Migration
         Schema::create('known_devices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            // Derived server-side from the request (UA + an opaque client hint),
+            // never accepted verbatim from the client. Scoped per user, so a
+            // guessed fingerprint can only ever collide with the guesser's own
+            // device row - it is an identity, not a credential.
             $table->string('device_fingerprint');
             $table->string('device_name')->nullable();
+            // Coarse UA facts, kept for display only ("Chrome on Windows").
+            $table->string('platform')->nullable();
+            $table->string('last_ip_address', 45)->nullable();
             $table->boolean('is_trusted')->default(false);
             $table->timestamp('last_seen_at')->nullable();
             $table->timestamps();
 
             $table->unique(['user_id', 'device_fingerprint']);
         });
+
+        // The device<->session join (FR-01.13). A Sanctum token IS the session,
+        // so the device link belongs on the token rather than in a second
+        // session store that could disagree with it. Nullable because tokens
+        // minted outside a request context have no device to attribute.
+        //
+        // Added here rather than in the Sanctum migration because that one runs
+        // first and the referenced table would not exist yet.
+        Schema::table('personal_access_tokens', function (Blueprint $table) {
+            $table->foreignId('known_device_id')
+                ->nullable()
+                ->after('tokenable_type')
+                ->constrained('known_devices')
+                // Revoking a device deletes its rows; the tokens must go with
+                // it, otherwise revocation would leave the session usable.
+                ->cascadeOnDelete();
+        });
     }
 
     public function down(): void
     {
+        Schema::table('personal_access_tokens', function (Blueprint $table) {
+            $table->dropForeign(['known_device_id']);
+            $table->dropColumn('known_device_id');
+        });
+
         Schema::dropIfExists('known_devices');
         Schema::dropIfExists('auth_events');
         Schema::dropIfExists('otp_codes');

@@ -12,6 +12,7 @@ import AdminRoutes from './providers/AdminRoutes'
 import LandingPage from './pages/LandingPage'
 import Unauthorized from './pages/Unauthorized'
 import Home from './pages/customer/Home'
+import Devices from './pages/account/Devices'
 import AdminDashboard from './pages/admin/Dashboard'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
 import UserManagement from './pages/superadmin/UserManagement'
@@ -37,6 +38,9 @@ function App() {
         {/* Signed-in customer area. Staff roles may view it too. */}
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route path="/home" element={<Home />} />
+          {/* Account security. Every authenticated role manages its own
+              devices (UC-AUTH-013 lists all three actors). */}
+          <Route path="/account/devices" element={<Devices />} />
         </Route>
 
         {/* Staff area. PrivateRoutes gates on the localStorage role for UX;

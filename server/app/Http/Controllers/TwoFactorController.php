@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\Auth\DeviceRegistrar;
 use App\Services\Otp\OtpService;
 use App\Services\Otp\OtpVerificationResult;
 use App\Services\Verification\Channel;
@@ -182,7 +183,7 @@ class TwoFactorController extends Controller
         // Single use: the challenge cannot be replayed with another code.
         Cache::forget($cacheKey);
 
-        $token = $user->createToken(self::TOKEN_NAME);
+        $token = app(DeviceRegistrar::class)->issueToken($user, $request, self::TOKEN_NAME);
 
         return response()->json([
             'user' => $user->fresh(),

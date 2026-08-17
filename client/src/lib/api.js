@@ -7,6 +7,8 @@
  * before a session exists; everything after sign-in should come through here.
  */
 
+import { deviceHeader } from "./deviceId";
+
 const BASE_URL = import.meta.env.VITE_API_URL;
 
 /** The token AuthContext persisted, or null. */
@@ -48,6 +50,9 @@ export async function apiFetch(path, { method = "GET", body, params, signal, aut
       Accept: "application/json",
       ...(body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // Lets the server keep this install's device row current, and tell the
+      // device list which entry is "this device".
+      ...deviceHeader(),
     },
     body: body ? JSON.stringify(body) : undefined,
     credentials: "include",

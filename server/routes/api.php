@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\DeviceSessionController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
@@ -48,6 +49,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_ENABLE]);
     Route::post('/2fa/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:otp-verify');
+
+    // Known devices / active sessions (FR-01.13). Both routes resolve the
+    // device through the authenticated user, so ownership is not optional.
+    Route::get('/user/devices', [DeviceSessionController::class, 'index']);
+    Route::delete('/user/devices/{device}', [DeviceSessionController::class, 'destroy'])
+        ->middleware('throttle:user-update');
 
     Route::post('/user/password/request-code', [PasswordChangeController::class, 'requestCode'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::PASSWORD_CHANGE]);
     Route::post('/user/password', [PasswordChangeController::class, 'update'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_CHANGE]);
