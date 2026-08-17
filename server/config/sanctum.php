@@ -47,7 +47,16 @@ return [
     |
     */
 
-    'expiration' => null,
+    /*
+     * Backstop expiry for every token (14 days).
+     *
+     * Was null - tokens never expired, so a token that leaked once was valid
+     * forever. Sanctum ANDs this against the token's own expires_at
+     * (Guard.php:150-151), so the SHORTER of the two wins and the per-role
+     * windows set in DeviceRegistrar still apply. Setting this to 0 disables
+     * expiry entirely; do not.
+     */
+    'expiration' => (int) env('SANCTUM_TOKEN_EXPIRATION_MINUTES', 20160),
 
     /*
     |--------------------------------------------------------------------------

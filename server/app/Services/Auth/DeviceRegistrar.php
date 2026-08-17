@@ -40,6 +40,21 @@ class DeviceRegistrar
     /** auth_events.event_type written when an account is used from a new device. */
     public const EVENT_NEW_DEVICE = 'login_new_device';
 
+    /** auth_events.event_type written when a token is presented by a device it was not issued to. */
+    public const EVENT_DEVICE_MISMATCH = 'session_device_mismatch';
+
+    /**
+     * How long a session lasts before it must be re-established.
+     *
+     * Staff get a much shorter window on purpose: an admin token can reprice
+     * the catalogue, read every order, and change roles, so the cost of one
+     * leaking is far higher than a customer's. There is no refresh-token
+     * mechanism, so these are the intervals at which people actually re-login.
+     */
+    public const CUSTOMER_SESSION_MINUTES = 20160; // 14 days
+
+    public const STAFF_SESSION_MINUTES = 720; // 12 hours
+
     /**
      * Record this request's device against the user and stamp it as seen.
      *
@@ -145,12 +160,22 @@ class DeviceRegistrar
     {
         $device = $this->register($user, $request);
 
-        $token = $user->createToken($tokenName);
+        // Explicit per-token expiry as well as the global backstop in
+        // config/sanctum.php, so the window is visible on the row itself
+        // rather than depending on how the two settings interact.
+        $token = $user->createToken($tokenName, ['*'], now()->addMinutes($this->sessionMinutesFor($user)));
 
         // Not fillable on Sanctum's model, and it must not be client-settable.
         $token->accessToken->forceFill(['known_device_id' => $device->getKey()])->save();
 
         return $token;
+    }
+
+    public function sessionMinutesFor(User $user): int
+    {
+        return $user->hasRole(User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN)
+            ? self::STAFF_SESSION_MINUTES
+            : self::CUSTOMER_SESSION_MINUTES;
     }
 
     /**
@@ -172,6 +197,37 @@ class DeviceRegistrar
             ? 'hint:'.$hint
             : 'ua:'.(string) $request->userAgent();
 
+        return $this->hash($seed);
+    }
+
+    /**
+     * Every fingerprint this request could legitimately be presenting.
+     *
+     * Used to decide whether a token is being used by the device it was issued
+     * to. The user-agent value is ALWAYS included, even when a hint is present:
+     * a session that began before the client could store a hint is legitimately
+     * identified by its user agent, and treating that as theft would flag
+     * honest users.
+     *
+     * @return list<string>
+     */
+    public function fingerprintCandidates(Request $request): array
+    {
+        $candidates = [];
+
+        $hint = trim((string) $request->header(self::HINT_HEADER, ''));
+
+        if ($hint !== '') {
+            $candidates[] = $this->hash('hint:'.$hint);
+        }
+
+        $candidates[] = $this->hash('ua:'.(string) $request->userAgent());
+
+        return $candidates;
+    }
+
+    private function hash(string $seed): string
+    {
         return hash_hmac('sha256', $seed, (string) config('app.key'));
     }
 
