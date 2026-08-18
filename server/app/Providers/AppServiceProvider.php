@@ -26,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
                 && filled(config('services.semaphore.key'));
 
             if (! $usesProvider || $app->runningUnitTests()) {
-                return new LogSmsSender();
+                return new LogSmsSender;
             }
 
             return new SemaphoreClient(
@@ -39,7 +39,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ChannelRegistry::class, function ($app) {
             return new ChannelRegistry([
                 Channel::Sms->value => new SmsVerificationChannel($app->make(SmsSender::class)),
-                Channel::Email->value => new EmailVerificationChannel(),
+                Channel::Email->value => new EmailVerificationChannel,
             ]);
         });
     }
@@ -109,6 +109,12 @@ class AppServiceProvider extends ServiceProvider
                 Limit::perMinutes(15, 5)->by('pwreset:ip:'.$request->ip()),
                 Limit::perMinutes(1440, 20)->by('pwreset:ip-day:'.$request->ip()),
             ];
+        });
+
+        // Each application uploads an image and fans a notification out to
+        // every staff account, so it is worth more than the generic budget.
+        RateLimiter::for('discount-apply', function (Request $request) {
+            return Limit::perMinutes(60, 5)->by('discount-apply:'.($request->user()?->id ?: $request->ip()));
         });
 
         RateLimiter::for('place-order', function (Request $request) {
