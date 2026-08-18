@@ -42,9 +42,7 @@ class DetectDeviceMismatch
     /** One alert per token+fingerprint pair per this many minutes. */
     private const ALERT_COOLDOWN_MINUTES = 360;
 
-    public function __construct(private DeviceRegistrar $devices)
-    {
-    }
+    public function __construct(private DeviceRegistrar $devices) {}
 
     public function handle(Request $request, Closure $next): Response
     {

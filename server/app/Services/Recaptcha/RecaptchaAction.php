@@ -18,6 +18,16 @@ final class RecaptchaAction
 
     public const OTP_RESEND = 'otp_resend';
 
+    /**
+     * Registration OTP redemption.
+     *
+     * Guarded like every other public endpoint that hands back a token. The
+     * per-code attempt cap and the throttle already make brute force
+     * impractical; this closes the gap of being the one unguarded door in a set
+     * where every neighbour is watched.
+     */
+    public const OTP_VERIFY = 'otp_verify';
+
     public const TWO_FACTOR_CHALLENGE = 'two_factor_challenge';
 
     public const TWO_FACTOR_ENABLE = 'two_factor_enable';
@@ -35,6 +45,7 @@ final class RecaptchaAction
             'register' => self::REGISTER,
             'login' => self::LOGIN,
             'otpResend' => self::OTP_RESEND,
+            'otpVerify' => self::OTP_VERIFY,
             'twoFactorChallenge' => self::TWO_FACTOR_CHALLENGE,
             'twoFactorEnable' => self::TWO_FACTOR_ENABLE,
             'passwordForgot' => self::PASSWORD_FORGOT,
