@@ -229,9 +229,9 @@ function AppHeader({
               </Menu.Item>
               <Menu.Item
                 leftSection={<IconShieldLock size={16} stroke={1.9} />}
-                onClick={() => nav("/account/devices")}
+                onClick={() => nav("/account/security")}
               >
-                Your devices
+                Your Security
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item

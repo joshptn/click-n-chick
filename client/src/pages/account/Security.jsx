@@ -18,10 +18,16 @@ import AppHeader from "../../components/app/AppHeader";
 import AuthContext from "../../context/AuthContext";
 import Button from "../../components/ui/Button";
 import toast from "../../components/app/Toast";
+import TwoFactorCard from "../../components/account/TwoFactorCard";
 import { fetchDevices, revokeDevice, setDeviceTrust, signOutOtherDevices } from "../../lib/devices";
 
 /**
- * Known devices, trust, and remote sign-out (FR-01.11 / FR-01.13 / UC-AUTH-013).
+ * Account security: two-step verification and known devices.
+ *
+ * Two features on one screen because they answer the same question - "who can
+ * get into this account, and from where". 2FA guards the front door
+ * (UC-PROF-006 / BR-31); the device list is what you reach for once someone is
+ * already inside (FR-01.11 / FR-01.13 / UC-AUTH-013).
  *
  * The user thinks in devices; each row's "Sign out" revokes the Sanctum
  * token(s) that device holds, server-side. Nothing here decides ownership or
@@ -178,7 +184,7 @@ function DeviceRow({ device, canActOnOthers, onSignOut, onToggleTrust, pendingAc
   );
 }
 
-function Devices() {
+function Security() {
   const nav = useNavigate();
   const queryClient = useQueryClient();
   const { logOut } = useContext(AuthContext);
@@ -293,13 +299,22 @@ function Devices() {
         <header className="mb-6">
           <h1 className="m-0 flex items-center gap-2.5 font-display text-[24px] font-bold tracking-[-0.4px] text-ink">
             <IconShieldLock size={24} stroke={1.9} className="text-brand-600" aria-hidden="true" />
-            Your devices
+            Security
           </h1>
           <p className="m-0 mt-1.5 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
+            How your account is protected at sign-in, and every device currently signed in to it.
+          </p>
+        </header>
+
+        <TwoFactorCard />
+
+        <div className="mb-3 mt-8">
+          <h2 className="m-0 font-display text-[17px] font-bold tracking-[-0.2px] text-ink">Your devices</h2>
+          <p className="m-0 mt-1 font-display text-[13px] leading-relaxed text-[#6f6b68]">
             Every device that has signed in to your account. If you do not recognise one, sign it out &mdash;
             it will need your password to get back in.
           </p>
-        </header>
+        </div>
 
         {!canActOnOthers && devices.length > 1 && (
           <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#ffe3bf] bg-[#fff8ef] px-4 py-3.5">
@@ -313,9 +328,11 @@ function Devices() {
 
         <section className="overflow-hidden rounded-2xl border border-[#f0e9df] bg-white">
           <div className="flex items-center justify-between gap-3 border-b border-[#f0e9df] px-5 py-3">
-            <h2 className="m-0 font-display text-[13px] font-bold uppercase tracking-[0.5px] text-[#8d8884]">
+            {/* h3, not h2: this is a count under the "Your devices" heading,
+                not a sibling section of it. */}
+            <h3 className="m-0 font-display text-[13px] font-bold uppercase tracking-[0.5px] text-[#8d8884]">
               {devices.length} device{devices.length === 1 ? "" : "s"}
-            </h2>
+            </h3>
 
             <button
               type="button"
@@ -547,4 +564,4 @@ function Devices() {
   );
 }
 
-export default Devices;
+export default Security;

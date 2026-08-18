@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuthEvent;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\Auth\DeviceRegistrar;
@@ -11,8 +12,11 @@ use App\Services\Verification\Channel;
 use App\Services\Verification\ChannelRegistry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 class TwoFactorController extends Controller
 {
@@ -99,6 +103,8 @@ class TwoFactorController extends Controller
         $user->two_factor_confirmed_at = now();
         $user->save();
 
+        $this->record($user, AuthEvent::TWO_FACTOR_ENABLED, $request);
+
         return response()->json([
             'message' => $channel === Channel::Email
                 ? 'Two-factor authentication is on. Codes will go to your email address.'
@@ -107,6 +113,98 @@ class TwoFactorController extends Controller
             'two_factor_channel' => $channel->value,
             'user' => $user->fresh(),
         ]);
+    }
+
+    /**
+     * POST /api/2fa/disable - turn the second factor off (UC-PROF-006).
+     *
+     * Gated on the account password, not on an OTP. Two reasons, and they pull
+     * in the same direction:
+     *
+     * - The threat this guards against is someone who already holds a live
+     *   session and wants to strip the second factor before the owner notices.
+     *   A stolen token does not carry the password, so the password is the
+     *   check that actually costs an attacker something. An OTP would not: it
+     *   goes to the account's own channel, which a session thief often cannot
+     *   read anyway, so it would mostly just inconvenience the real owner.
+     *
+     * - Requiring a code from the 2FA channel to switch 2FA OFF is the classic
+     *   lockout trap. Lose the phone and the account is permanently stuck with
+     *   a factor it can no longer satisfy, with no way out short of support.
+     *
+     * The password is checked BEFORE the already-off short-circuit, so no
+     * request can come back successful on a wrong password.
+     */
+    public function disable(Request $request)
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($validated['password'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'code' => 'PASSWORD_REQUIRED',
+                'message' => 'That password is not correct.',
+            ], 422);
+        }
+
+        // Already off. Report the end state rather than an error - the caller
+        // asked for 2FA to be off and it is, and a second tab that raced this
+        // one should not see a failure.
+        if (! $user->hasTwoFactorEnabled()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Two-factor authentication is already off.',
+                'two_factor_enabled' => false,
+                'two_factor_channel' => null,
+                'user' => $user->fresh(),
+            ]);
+        }
+
+        // All three cleared together. Leaving two_factor_channel set behind a
+        // false flag would leave the next enable() with a stale channel to
+        // disagree with, and hasTwoFactorEnabled() reads both.
+        $user->two_factor_enabled = false;
+        $user->two_factor_channel = null;
+        $user->two_factor_confirmed_at = null;
+        $user->save();
+
+        $this->record($user, AuthEvent::TWO_FACTOR_DISABLED, $request);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Two-factor authentication is off. You will not be asked for a code at sign-in.',
+            'two_factor_enabled' => false,
+            'two_factor_channel' => null,
+            'user' => $user->fresh(),
+        ]);
+    }
+
+    /**
+     * Append to the audit trail.
+     *
+     * Guarded: the security change is already committed by the time this runs,
+     * so a failure to write the log must not turn a completed action into a
+     * 500 that tells the user it did not happen.
+     */
+    private function record(User $user, string $eventType, Request $request): void
+    {
+        try {
+            AuthEvent::create([
+                'user_id' => $user->getKey(),
+                'event_type' => $eventType,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('Could not record a two-factor auth event.', [
+                'event' => $eventType,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
