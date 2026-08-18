@@ -49,6 +49,10 @@ Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
 
     Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_ENABLE]);
     Route::post('/2fa/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:otp-verify');
+    // Tighter budget than the rest of this group: disabling re-checks the
+    // account password, so the endpoint is a password oracle for anyone
+    // already holding a stolen session.
+    Route::post('/2fa/disable', [TwoFactorController::class, 'disable'])->middleware('throttle:two-factor-disable');
 
     // Known devices / active sessions (FR-01.13). Both routes resolve the
     // device through the authenticated user, so ownership is not optional.

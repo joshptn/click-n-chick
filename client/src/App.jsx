@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import VerifyCode from './pages/auth/VerifyCode'
@@ -12,7 +12,7 @@ import AdminRoutes from './providers/AdminRoutes'
 import LandingPage from './pages/LandingPage'
 import Unauthorized from './pages/Unauthorized'
 import Home from './pages/customer/Home'
-import Devices from './pages/account/Devices'
+import Security from './pages/account/Security'
 import AdminDashboard from './pages/admin/Dashboard'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
 import UserManagement from './pages/superadmin/UserManagement'
@@ -38,9 +38,12 @@ function App() {
         {/* Signed-in customer area. Staff roles may view it too. */}
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route path="/home" element={<Home />} />
-          {/* Account security. Every authenticated role manages its own
-              devices (UC-AUTH-013 lists all three actors). */}
-          <Route path="/account/devices" element={<Devices />} />
+          {/* Account security: two-step verification (UC-PROF-006) and known
+              devices (UC-AUTH-013). Every authenticated role manages its own. */}
+          <Route path="/account/security" element={<Security />} />
+          {/* The screen was devices-only before 2FA moved in. Kept so an open
+              tab or a bookmark from that build still lands somewhere. */}
+          <Route path="/account/devices" element={<Navigate to="/account/security" replace />} />
         </Route>
 
         {/* Staff area. PrivateRoutes gates on the localStorage role for UX;
