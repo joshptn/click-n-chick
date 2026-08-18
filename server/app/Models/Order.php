@@ -36,7 +36,6 @@ class Order extends Model
     protected function casts(): array
     {
         return [
-            // Set means this is an advance order.
             'scheduled_for' => 'datetime',
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -66,12 +65,6 @@ class Order extends Model
     public function payments()
     {
         return $this->hasMany(Payment::class);
-    }
-
-    /** ORDERS ||--o| DISCOUNTS: at most one discount claim per order. */
-    public function discount()
-    {
-        return $this->hasOne(Discount::class);
     }
 
     public function notifications()
