@@ -12,6 +12,7 @@ import AdminRoutes from './providers/AdminRoutes'
 import LandingPage from './pages/LandingPage'
 import Unauthorized from './pages/Unauthorized'
 import Home from './pages/customer/Home'
+import Profile from './pages/account/Profile'
 import Security from './pages/account/Security'
 import AdminDashboard from './pages/admin/Dashboard'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
@@ -38,6 +39,10 @@ function App() {
         {/* Signed-in customer area. Staff roles may view it too. */}
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route path="/home" element={<Home />} />
+          {/* Account settings (UC-PROF-001 / UC-PROF-002). Staff see it too -
+              they have a profile like anyone else, minus the customer-only
+              discount section, which the server omits from their payload. */}
+          <Route path="/account/profile" element={<Profile />} />
           {/* Account security: two-step verification (UC-PROF-006) and known
               devices (UC-AUTH-013). Every authenticated role manages its own. */}
           <Route path="/account/security" element={<Security />} />
