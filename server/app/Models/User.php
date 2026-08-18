@@ -3,8 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Services\Verification\Channel;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -12,7 +12,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-     use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -70,6 +70,7 @@ class User extends Authenticatable
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_CUSTOMER = 'customer';
+
     public const ROLES = [
         self::ROLE_SUPER_ADMIN,
         self::ROLE_ADMIN,
@@ -157,12 +158,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(CartItem::class);
     }
+
     public function Orders()
     {
         return $this->hasMany(Order::class);
     }
 
-    public function notifications(){
+    public function notifications()
+    {
         return $this->hasMany(Notification::class);
     }
 
@@ -184,6 +187,31 @@ class User extends Authenticatable
     public function discounts()
     {
         return $this->hasMany(Discount::class);
+    }
+
+    /**
+     * The claim that represents this account's current standing.
+     *
+     * Latest by id, so a customer who was rejected and applied again is judged
+     * on the new attempt rather than the old refusal.
+     */
+    public function latestDiscountClaim()
+    {
+        return $this->hasOne(Discount::class)->latestOfMany();
+    }
+
+    /**
+     * Entitled to a statutory discount right now.
+     *
+     * Derived from the claim rather than mirrored onto a users column: a
+     * denormalised flag is one more thing that can disagree with the row an
+     * agent actually approved, and this is read on profile load, not per item.
+     */
+    public function isDiscountEligible(): bool
+    {
+        return $this->discounts()
+            ->where('discount_status', Discount::STATUS_APPROVED)
+            ->exists();
     }
 
     public function loyaltyTransactions()
