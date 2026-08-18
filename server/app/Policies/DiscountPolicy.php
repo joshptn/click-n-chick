@@ -32,14 +32,19 @@ class DiscountPolicy
         return $user->hasRole(User::ROLE_CUSTOMER);
     }
 
+    /**
+     * Reviewing an ID is the Store Agent's job, and the Store Manager outranks
+     * them. Agent-only would mean a queue that stalls entirely whenever the one
+     * agent is away, with no one able to unblock it.
+     */
     public function approve(User $user, Discount $discount): bool
     {
-        return $user->hasRole(User::ROLE_ADMIN);
+        return $this->isStaff($user);
     }
 
     public function reject(User $user, Discount $discount): bool
     {
-        return $user->hasRole(User::ROLE_ADMIN);
+        return $this->isStaff($user);
     }
 
     public function update(User $user, Discount $discount): bool
