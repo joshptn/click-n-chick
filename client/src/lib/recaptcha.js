@@ -137,6 +137,7 @@ export const RECAPTCHA_ACTIONS = {
   REGISTER: "register",
   LOGIN: "login",
   OTP_RESEND: "otp_resend",
+  OTP_VERIFY: "otp_verify",
   TWO_FACTOR_CHALLENGE: "two_factor_challenge",
   TWO_FACTOR_ENABLE: "two_factor_enable",
   PASSWORD_FORGOT: "password_forgot",

@@ -27,8 +27,7 @@ class TwoFactorController extends Controller
     public function __construct(
         private OtpService $otp,
         private ChannelRegistry $channels,
-    ) {
-    }
+    ) {}
 
     public function enable(Request $request)
     {

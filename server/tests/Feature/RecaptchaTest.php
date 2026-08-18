@@ -292,6 +292,10 @@ class RecaptchaTest extends TestCase
             'POST api/register' => RecaptchaAction::REGISTER,
             'POST api/login' => RecaptchaAction::LOGIN,
             'POST api/otp/resend' => RecaptchaAction::OTP_RESEND,
+            // Redeeming the registration code hands back a Sanctum token, which
+            // makes it an authentication endpoint like login - guarded for the
+            // same reason, and so it is not the one unwatched door in the set.
+            'POST api/otp/verify' => RecaptchaAction::OTP_VERIFY,
             'POST api/2fa/challenge' => RecaptchaAction::TWO_FACTOR_CHALLENGE,
             'POST api/2fa/enable' => RecaptchaAction::TWO_FACTOR_ENABLE,
             'POST api/password/forgot' => RecaptchaAction::PASSWORD_FORGOT,

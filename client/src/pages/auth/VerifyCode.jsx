@@ -60,7 +60,12 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
       const response = await fetch(`${url}/api/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
-        body: JSON.stringify({ [copy.field]: identifier, code: e.target.code.value.trim() }),
+        body: JSON.stringify(
+          await withRecaptcha(
+            { [copy.field]: identifier, code: e.target.code.value.trim() },
+            RECAPTCHA_ACTIONS.OTP_VERIFY
+          )
+        ),
         credentials: "include",
       });
 
