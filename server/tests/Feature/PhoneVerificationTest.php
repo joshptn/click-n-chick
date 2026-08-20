@@ -21,6 +21,10 @@ class PhoneVerificationTest extends TestCase
     {
         parent::setUp();
 
+        // Every test here registers and verifies over the phone channel, which
+        // the app only offers where a provider is configured.
+        $this->enableSmsChannel();
+
         $this->sent = [];
 
         $this->app->bind(SmsSender::class, fn () => new class($this->sent) implements SmsSender {

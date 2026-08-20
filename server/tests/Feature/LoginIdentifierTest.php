@@ -133,6 +133,11 @@ class LoginIdentifierTest extends TestCase
 
     public function test_registering_populates_the_hash_so_phone_login_works_immediately(): void
     {
+        // The signup below omits the channel, which resolves to sms only where
+        // sms can deliver - and this test then verifies the phone and logs in
+        // with it, so it is describing that deployment.
+        $this->enableSmsChannel();
+
         $this->postJson('/api/register', [
             'first_name' => 'New',
             'last_name' => 'Rider',

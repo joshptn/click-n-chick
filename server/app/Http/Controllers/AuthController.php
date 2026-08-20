@@ -46,11 +46,29 @@ class AuthController extends Controller
             ],
             // PRD §6.2: the user picks which channel blocks registration. Both
             // identifiers are always collected (FR-01.1); only the chosen one is
-            // verified now. Defaults to sms when a caller omits it.
+            // verified now. Omitting it defaults to sms - see below.
             'verification_channel' => ['sometimes', 'string', Rule::in(Channel::values())],
         ]);
 
-        $channel = Channel::tryFromValue($validated['verification_channel'] ?? null) ?? Channel::Sms;
+        $registry = app(ChannelRegistry::class);
+
+        // An omitted channel resolves to sms, or to whatever can deliver when
+        // sms cannot - see ChannelRegistry::defaultChannel().
+        $channel = Channel::tryFromValue($validated['verification_channel'] ?? null)
+            ?? $registry->defaultChannel();
+
+        $transport = $registry->for($channel);
+
+        // A channel the deployment cannot deliver on is refused here rather
+        // than at the send, which would otherwise leave a pending account
+        // waiting on a code nobody receives. Same shape as the 2FA enrolment
+        // and password change guards.
+        if (! $transport->isAvailable()) {
+            return response()->json([
+                'message' => $transport->unavailableReason(),
+                'reason' => 'channel_unavailable',
+            ], 422);
+        }
 
         $phoneHash = User::hashPhoneNumber($validated['phone_number']);
 
@@ -100,7 +118,6 @@ class AuthController extends Controller
 
         $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $channel);
 
-        $transport = app(ChannelRegistry::class)->for($channel);
         $identifier = $transport->identifierFor($user);
 
         return response()->json([

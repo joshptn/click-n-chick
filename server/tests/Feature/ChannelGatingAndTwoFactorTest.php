@@ -138,6 +138,7 @@ class ChannelGatingAndTwoFactorTest extends TestCase
     public function test_a_registration_code_cannot_be_redeemed_on_the_unchosen_channel(): void
     {
         Mail::fake();
+        $this->enableSmsChannel();
 
         // Registered on sms, so the sms code is the only one that exists. Even
         // if an email code were somehow present, the channel guard rejects it.

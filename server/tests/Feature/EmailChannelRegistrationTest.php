@@ -95,6 +95,8 @@ class EmailChannelRegistrationTest extends TestCase
 
     public function test_the_sms_channel_still_stamps_the_phone_column(): void
     {
+        $this->enableSmsChannel();
+
         $this->postJson('/api/register', $this->payload(['verification_channel' => 'sms']))
             ->assertCreated()
             ->assertJsonPath('verification_channel', 'sms');
@@ -105,12 +107,43 @@ class EmailChannelRegistrationTest extends TestCase
 
     public function test_an_omitted_channel_defaults_to_sms(): void
     {
+        $this->enableSmsChannel();
+
         $payload = $this->payload();
         unset($payload['verification_channel']);
 
         $this->postJson('/api/register', $payload)
             ->assertCreated()
             ->assertJsonPath('verification_channel', 'sms');
+    }
+
+    public function test_an_omitted_channel_falls_back_to_one_that_can_deliver(): void
+    {
+        Mail::fake();
+
+        // SMS_DRIVER stays at its 'log' default, so sms cannot deliver. The
+        // documented default must not hand back an account whose code goes
+        // nowhere - it steps aside for the channel that works.
+        $payload = $this->payload();
+        unset($payload['verification_channel']);
+
+        $this->postJson('/api/register', $payload)
+            ->assertCreated()
+            ->assertJsonPath('verification_channel', 'email');
+
+        Mail::assertSent(VerificationCodeMail::class);
+    }
+
+    public function test_a_channel_that_cannot_deliver_is_refused(): void
+    {
+        // Asking for sms while no provider is configured. Refused outright
+        // rather than accepted into a pending account nobody can verify.
+        $this->postJson('/api/register', $this->payload(['verification_channel' => 'sms']))
+            ->assertStatus(422)
+            ->assertJsonPath('reason', 'channel_unavailable');
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('otp_codes', 0);
     }
 
     public function test_an_unknown_channel_is_rejected(): void

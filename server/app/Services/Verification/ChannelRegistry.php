@@ -60,6 +60,30 @@ class ChannelRegistry
         return $this->for($channel)->isAvailable();
     }
 
+    /**
+     * The channel to use when a caller does not name one.
+     *
+     * Channel::Sms is still the default; it is skipped only when this
+     * deployment cannot deliver on it, which is the one case where honouring
+     * the default would hand back an account whose code goes nowhere. Returns
+     * Sms when nothing can deliver, so the caller still gets a channel to
+     * report as unavailable rather than a null to branch on.
+     */
+    public function defaultChannel(): Channel
+    {
+        if ($this->isAvailable(Channel::Sms)) {
+            return Channel::Sms;
+        }
+
+        foreach ($this->channels as $transport) {
+            if ($transport->isAvailable()) {
+                return $transport->channel();
+            }
+        }
+
+        return Channel::Sms;
+    }
+
     /** The channel implied by the shape of a submitted identifier. */
     public function forIdentifier(?string $identifier): ?VerificationChannel
     {
