@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Indicator, Menu, Modal } from "@mantine/core";
 import {
@@ -50,6 +50,22 @@ function AppHeader({
     : "Guest";
 
   const initials = `${user?.first_name?.charAt(0) ?? ""}${user?.last_name?.charAt(0) ?? ""}`.toUpperCase() || "G";
+
+  // Straight off AuthContext, which every avatar mutation writes back to - so
+  // a new picture is on the header the moment the upload resolves, without
+  // this component fetching anything of its own.
+  const avatar = user?.avatar ?? null;
+
+  // A picture that cannot load falls back to the initials rather than leaving
+  // a broken image in the header. Reset per URL: each upload is a new
+  // Cloudinary address, so a failure on the old one must not stick.
+  const [avatarBroken, setAvatarBroken] = useState(false);
+
+  useEffect(() => {
+    setAvatarBroken(false);
+  }, [avatar]);
+
+  const showAvatar = Boolean(avatar) && !avatarBroken;
 
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -211,9 +227,19 @@ function AppHeader({
                 type="button"
                 className="flex items-center gap-2 rounded-full bg-transparent py-1 pl-1 pr-1 transition-colors hover:bg-[#f7f4f0] sm:pr-3"
               >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500 font-display text-[12.5px] font-bold text-white">
-                  {initials}
-                </span>
+                {showAvatar ? (
+                  <img
+                    src={avatar}
+                    alt=""
+                    draggable={false}
+                    onError={() => setAvatarBroken(true)}
+                    className="h-9 w-9 shrink-0 select-none rounded-full border border-[#f0e9df] object-cover"
+                  />
+                ) : (
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500 font-display text-[12.5px] font-bold text-white">
+                    {initials}
+                  </span>
+                )}
                 <span className="hidden font-display text-[13.5px] font-semibold text-ink sm:inline">
                   {displayName}
                 </span>
