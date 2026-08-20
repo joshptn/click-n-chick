@@ -79,7 +79,6 @@ class DiscountController extends Controller
         $claim = Discount::create([
             'user_id' => $user->getKey(),
             'discount_type' => $validated['discount_type'],
-            'discount_percentage' => Discount::STATUTORY_PERCENTAGE,
             'vat_exempt' => true,
             'id_image' => $url,
             'discount_status' => Discount::STATUS_PENDING,
@@ -267,7 +266,9 @@ class DiscountController extends Controller
             'is_eligible' => $claim?->isApproved() ?? false,
             'can_apply' => $claim === null || $claim->isRejected(),
             'types' => Discount::types(),
-            'percentage' => Discount::STATUTORY_PERCENTAGE,
+            // Read live, so a rate change is reflected the next time any
+            // customer opens the page - not frozen at approval time.
+            'percentage' => Discount::currentPercentage(),
         ];
     }
 }

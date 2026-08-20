@@ -15,6 +15,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecaptchaConfigController;
+use App\Http\Controllers\SystemSettingController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\VerificationChannelController;
 use App\Services\Recaptcha\RecaptchaAction;
@@ -128,4 +129,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'role:super_admin'])->group(f
     Route::delete('/admin/posters/{poster}', [PosterController::class, 'destroy']);
 
     Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])->middleware('throttle:user-update');
+
+    // System configuration (UC-ADMIN-003 / UC-ADMIN-007). Store Manager only -
+    // BR-27 and FR-05.5 put the statutory rate in this role's hands alone.
+    Route::get('/admin/settings/discount', [SystemSettingController::class, 'showDiscount']);
+    Route::put('/admin/settings/discount', [SystemSettingController::class, 'updateDiscount'])
+        ->middleware('throttle:user-update');
 });

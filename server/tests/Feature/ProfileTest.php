@@ -364,7 +364,6 @@ class ProfileTest extends TestCase
         Discount::create([
             'user_id' => $user->id,
             'discount_type' => Discount::TYPE_SENIOR,
-            'discount_percentage' => 20,
             'id_image' => 'https://example.test/id.jpg',
             'discount_status' => Discount::STATUS_APPROVED,
         ]);
@@ -382,7 +381,6 @@ class ProfileTest extends TestCase
         Discount::create([
             'user_id' => $user->id,
             'discount_type' => Discount::TYPE_SENIOR,
-            'discount_percentage' => 20,
             'id_image' => 'https://example.test/id.jpg',
             'discount_status' => Discount::STATUS_REJECTED,
             'rejection_reason' => 'The photo was too blurry to read.',
@@ -439,7 +437,6 @@ class ProfileTest extends TestCase
         return Discount::create([
             'user_id' => $user->id,
             'discount_type' => Discount::TYPE_SENIOR,
-            'discount_percentage' => 20,
             'id_image' => 'https://example.test/id.jpg',
             'discount_status' => Discount::STATUS_PENDING,
         ]);
