@@ -13,18 +13,6 @@ import {
 
 import { fetchFood, formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
-/**
- * Item detail, with add-on selection.
- *
- * Opened from a card, which already has the list payload, so `food` seeds the
- * content immediately and the full record (with add-on groups) is fetched
- * behind it. That keeps the modal from flashing a spinner over data the page
- * already had.
- *
- * The running total is computed here for display only. What is sent is the
- * food id, a quantity and a list of add-on ids - the server prices it, so a
- * stale price on this screen cannot become a stale price on an order.
- */
 function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
   const [quantity, setQuantity] = useState(1);
   const [selectedAddons, setSelectedAddons] = useState([]);
@@ -36,12 +24,8 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
     staleTime: 60 * 1000,
   });
 
-  // The fetched record wins once it lands; the card's copy carries the modal
-  // until then.
   const detail = data?.data ?? food;
 
-  // Reset per item, not per open: reopening a different dish must not inherit
-  // the previous dish's add-ons.
   useEffect(() => {
     setQuantity(1);
     setSelectedAddons([]);
@@ -65,7 +49,6 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
   const label = stockLabel(detail);
   const lineTotal = (Number(detail.price) + addonsTotal) * quantity;
 
-  // Never let the stepper exceed what the kitchen has; the server clamps too.
   const maxQuantity = detail.stock_quantity ?? 99;
 
   const toggleAddon = (id) =>
@@ -82,12 +65,13 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
       size="min(980px, 94vw)"
       centered
       padding={0}
-      radius="20px"
+      radius="5px"
       withCloseButton={false}
       overlayProps={{ backgroundOpacity: 0.5, blur: 3 }}
+      styles={{ content: { overflow: "hidden" } }}
       classNames={{ body: "p-0" }}
     >
-      <div className="grid max-h-[88vh] grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
+      <div className="grid max-h-[88dvh] grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
 
         <div className="relative hidden min-h-[260px] bg-[#f4f1ec] md:block">
           {detail.thumbnail ? (
@@ -115,8 +99,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
             </span>
           ) : null}
         </div>
-
-        <div className="flex max-h-[88vh] flex-col overflow-y-auto bg-white px-6 pb-6 pt-5 sm:px-8">
+        <div className="flex max-h-[88dvh] min-h-0 flex-col overflow-y-auto overflow-x-hidden bg-white px-6 pb-6 pt-5 contain-paint sm:px-8">
 
           <div className="mb-4 flex items-center justify-between gap-3">
             <button
