@@ -22,8 +22,7 @@ final class RecaptchaResult
         public readonly bool $passed,
         public readonly string $reason,
         public readonly ?float $score = null,
-    ) {
-    }
+    ) {}
 
     public static function pass(string $reason = self::OK, ?float $score = null): self
     {

@@ -26,7 +26,10 @@ Route::post('/register', [AuthController::class, 'register'])->middleware(['thro
 
 Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::OTP_VERIFY]);
 Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::OTP_RESEND]);
-Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware(['throttle:login', 'recaptcha:'.RecaptchaAction::LOGIN]);
+// `step-up` lets a LOW SCORE through to the controller, which answers with an
+// OTP challenge instead of a refusal (FR-01.15 / BR-35). Every other reCAPTCHA
+// failure is still refused outright by the middleware.
+Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware(['throttle:login', 'recaptcha:'.RecaptchaAction::LOGIN.',step-up']);
 Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware(['throttle:password-reset', 'recaptcha:'.RecaptchaAction::PASSWORD_FORGOT]);
 Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_RESET]);
 Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_CHALLENGE]);
@@ -90,7 +93,11 @@ Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
 
-    Route::post('/order/place', [OrderController::class, 'placeOrder'])->middleware('throttle:place-order');
+    // FR-02.11: final order submission is a human-initiated, high-risk action,
+    // so it carries its own reCAPTCHA action. Guest checkout will reuse this
+    // action when that flow is built (BR-32, UC-GUEST-005).
+    Route::post('/order/place', [OrderController::class, 'placeOrder'])
+        ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
     Route::get('/orders', [OrderController::class, 'getUserOrder']);
     Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder']);
 });

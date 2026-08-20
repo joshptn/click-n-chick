@@ -176,12 +176,23 @@ class RecaptchaTest extends TestCase
             ->assertJsonPath('reason', 'invalid');
     }
 
+    /**
+     * Asserted on password recovery rather than login.
+     *
+     * Login is the one route where a low score is deliberately NOT refused -
+     * it answers with an OTP step-up instead (FR-01.15 / BR-35), which
+     * RecaptchaStepUpTest owns. Everywhere else a low score is still turned
+     * away, and this is what pins that.
+     */
     public function test_a_token_scoring_below_the_threshold_is_refused(): void
     {
         $this->enableRecaptcha(0.5);
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN, 'score' => 0.1]);
+        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::PASSWORD_FORGOT, 'score' => 0.1]);
 
-        $this->login(['recaptcha_token' => 'bot-token'])
+        $this->postJson('/api/password/forgot', [
+            'identifier' => $this->user->email,
+            'recaptcha_token' => 'bot-token',
+        ])
             ->assertStatus(422)
             ->assertJsonPath('reason', 'low_score');
     }
@@ -217,6 +228,14 @@ class RecaptchaTest extends TestCase
             ->assertJsonPath('reason', 'action_mismatch');
     }
 
+    /**
+     * A scoreless verdict is 'invalid', not 'low_score'.
+     *
+     * Only v2 tokens and malformed responses arrive without a score, and since
+     * a low score now earns an OTP step-up at login (FR-01.15), calling this
+     * one "low score" would hand that concession to something that was never
+     * scored as a human at all.
+     */
     public function test_a_verdict_with_no_score_is_refused(): void
     {
         $this->enableRecaptcha();
@@ -224,7 +243,7 @@ class RecaptchaTest extends TestCase
 
         $this->login(['recaptcha_token' => 'scoreless'])
             ->assertStatus(422)
-            ->assertJsonPath('reason', 'low_score');
+            ->assertJsonPath('reason', 'invalid');
     }
 
     public function test_the_secret_and_caller_ip_are_sent_to_google_and_the_secret_never_returns(): void
@@ -302,14 +321,27 @@ class RecaptchaTest extends TestCase
             'POST api/password/reset' => RecaptchaAction::PASSWORD_RESET,
             'POST api/user/password/request-code' => RecaptchaAction::PASSWORD_CHANGE,
             'POST api/user/password' => RecaptchaAction::PASSWORD_CHANGE,
+            // FR-02.11 - final order submission.
+            'POST api/order/place' => RecaptchaAction::PLACE_ORDER,
         ];
 
         $actual = [];
+        $stepUp = [];
 
         foreach (Route::getRoutes() as $route) {
             foreach ($route->gatherMiddleware() as $middleware) {
-                if (is_string($middleware) && str_starts_with($middleware, 'recaptcha:')) {
-                    $actual[$route->methods()[0].' '.$route->uri()] = substr($middleware, strlen('recaptcha:'));
+                if (! is_string($middleware) || ! str_starts_with($middleware, 'recaptcha:')) {
+                    continue;
+                }
+
+                $key = $route->methods()[0].' '.$route->uri();
+                // The parameter is `action` or `action,mode`.
+                $parameters = explode(',', substr($middleware, strlen('recaptcha:')));
+
+                $actual[$key] = $parameters[0];
+
+                if (($parameters[1] ?? null) === 'step-up') {
+                    $stepUp[] = $key;
                 }
             }
         }
@@ -318,6 +350,11 @@ class RecaptchaTest extends TestCase
         ksort($actual);
 
         $this->assertSame($expected, $actual);
+
+        // FR-01.15 / BR-35 is a login-only concession. Anywhere else, a low
+        // score must still be refused outright - and in particular the OTP
+        // endpoints must never grant a way to demand more OTPs.
+        $this->assertSame(['POST api/login'], $stepUp, 'Step-up leaked onto a route that should refuse a low score.');
     }
 
     public function test_each_route_enforces_its_own_action_not_a_shared_one(): void

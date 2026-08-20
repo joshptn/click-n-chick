@@ -38,6 +38,14 @@ final class RecaptchaAction
 
     public const PASSWORD_CHANGE = 'password_change';
 
+    /**
+     * Final order submission (FR-02.11, BR-32, UC-GUEST-005).
+     *
+     * Its own action rather than reusing LOGIN, so a token minted on the
+     * sign-in form cannot be replayed to place orders.
+     */
+    public const PLACE_ORDER = 'place_order';
+
     /** @return array<string, string> */
     public static function all(): array
     {
@@ -51,6 +59,7 @@ final class RecaptchaAction
             'passwordForgot' => self::PASSWORD_FORGOT,
             'passwordReset' => self::PASSWORD_RESET,
             'passwordChange' => self::PASSWORD_CHANGE,
+            'placeOrder' => self::PLACE_ORDER,
         ];
     }
 }

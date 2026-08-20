@@ -31,6 +31,15 @@ class OtpCode extends Model
 
     public const PURPOSE_PASSWORD_RESET = 'password_reset';
 
+    /**
+     * Identity step-up after a low reCAPTCHA score at login (FR-01.15, BR-35).
+     *
+     * Deliberately not PURPOSE_TWO_FACTOR_LOGIN. They are issued for different
+     * reasons and redeemed through different gates, and sharing a purpose would
+     * let a code minted for one be spent on the other.
+     */
+    public const PURPOSE_STEP_UP = 'step_up';
+
     protected $hidden = [
         'code_hash',
     ];
