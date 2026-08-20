@@ -1,8 +1,8 @@
-import { createContext, useCallback, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import AuthContext from "./AuthContext";
-import { api } from "../lib/api";
+import { api, apiFetch } from "../lib/api";
 import toast from "../components/app/Toast";
 
 const CartContext = createContext(null);
@@ -18,14 +18,6 @@ const EMPTY = {
   has_unavailable_items: false,
 };
 
-/**
- * The cart, with the server as the source of truth.
- *
- * Every mutation returns the whole recalculated cart and that response is
- * written straight into the query cache, so prices and stock always come from
- * the server rather than being re-derived here. Totals shown to a customer are
- * never computed on the client.
- */
 export function CartProvider({ children }) {
   const { token } = useContext(AuthContext);
   const queryClient = useQueryClient();
@@ -33,14 +25,12 @@ export function CartProvider({ children }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: CART_QUERY_KEY,
     queryFn: () => api.get("/api/cart"),
-    // No token means no cart to fetch. Signing out clears it below.
     enabled: Boolean(token),
     staleTime: 30 * 1000,
   });
 
   const write = useCallback(
     (payload) => {
-      // Mutations answer with the full cart; adopt it rather than refetching.
       if (payload?.cart) {
         queryClient.setQueryData(CART_QUERY_KEY, {
           cart: payload.cart,
@@ -88,7 +78,51 @@ export function CartProvider({ children }) {
     onError,
   });
 
+  const removeSelected = useMutation({
+    mutationFn: (ids) => apiFetch("/api/cart/items", { method: "DELETE", body: { ids } }),
+    onSuccess: write,
+    onError,
+  });
+
   const cart = data ?? EMPTY;
+  const lines = cart.cart;
+
+
+  const [deselectedIds, setDeselectedIds] = useState(() => new Set());
+
+  const selection = useMemo(() => {
+    const selectedLines = lines.filter((line) => !deselectedIds.has(line.id));
+
+    return {
+      selectedIds: selectedLines.map((line) => line.id),
+      selectedCount: selectedLines.length,
+      selectedItemCount: selectedLines.reduce((sum, line) => sum + line.quantity, 0),
+      selectedSubtotal: selectedLines.reduce((sum, line) => sum + Number(line.subtotal ?? 0), 0),
+      hasUnavailableSelected: selectedLines.some((line) => !line.is_orderable),
+      allSelected: lines.length > 0 && selectedLines.length === lines.length,
+    };
+  }, [lines, deselectedIds]);
+
+  const toggleSelected = useCallback((id) => {
+    setDeselectedIds((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => setDeselectedIds(new Set()), []);
+
+  const deselectAll = useCallback(
+    () => setDeselectedIds(new Set(lines.map((line) => line.id))),
+    [lines]
+  );
 
   const value = useMemo(
     () => ({
@@ -102,13 +136,40 @@ export function CartProvider({ children }) {
       removeItem: (input) => removeItem.mutateAsync(input),
       clearCart: () => clearCart.mutateAsync(),
 
+      ...selection,
+      isSelected: (id) => !deselectedIds.has(id),
+      toggleSelected,
+      selectAll,
+      deselectAll,
+      removeSelected: () => removeSelected.mutateAsync(selection.selectedIds),
+
       isAdding: addItem.isPending,
-      // Which line is mid-update, so only that row's controls disable.
       pendingLineId:
-        setQuantity.variables?.cartItemId ?? removeItem.variables?.cartItemId ?? null,
-      isMutating: setQuantity.isPending || removeItem.isPending || clearCart.isPending,
+        (setQuantity.isPending ? setQuantity.variables?.cartItemId : null) ??
+        (removeItem.isPending ? removeItem.variables?.cartItemId : null) ??
+        null,
+      isMutating:
+        setQuantity.isPending ||
+        removeItem.isPending ||
+        removeSelected.isPending ||
+        clearCart.isPending,
     }),
-    [cart, token, isLoading, isError, addItem, setQuantity, removeItem, clearCart]
+    [
+      cart,
+      token,
+      isLoading,
+      isError,
+      addItem,
+      setQuantity,
+      removeItem,
+      removeSelected,
+      clearCart,
+      selection,
+      deselectedIds,
+      toggleSelected,
+      selectAll,
+      deselectAll,
+    ]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

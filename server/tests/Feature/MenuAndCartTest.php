@@ -325,6 +325,86 @@ class MenuAndCartTest extends TestCase
         $this->assertCount(1, $response->json('cart'), 'The line stays so the customer can see what happened.');
     }
 
+    public function test_the_newest_line_is_listed_first_and_stays_put_when_edited(): void
+    {
+        $user = $this->customer();
+        $first = $this->food(['food_name' => 'Added first', 'stock_quantity' => 50]);
+        $second = $this->food(['food_name' => 'Added second', 'stock_quantity' => 50]);
+
+        $firstLine = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $first->id])->json('cart_item_id');
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $second->id])->assertStatus(201);
+
+        $this->assertSame(
+            ['Added second', 'Added first'],
+            array_column($this->actingAs($user, 'sanctum')->getJson('/api/cart')->json('cart'), 'food_name'),
+            'The most recently added line is at the top.'
+        );
+
+        // Changing a quantity must not reshuffle the list. Without an explicit
+        // order this passed on SQLite and failed on Postgres, where an UPDATE
+        // rewrites the row at the end of the heap and the edited line dropped
+        // to the bottom of the customer's cart.
+        $this->actingAs($user, 'sanctum')
+            ->patchJson("/api/cart/items/{$firstLine}", ['quantity' => 4])->assertOk();
+
+        $this->assertSame(
+            ['Added second', 'Added first'],
+            array_column($this->actingAs($user, 'sanctum')->getJson('/api/cart')->json('cart'), 'food_name'),
+            'Editing a line leaves it where the customer last saw it.'
+        );
+    }
+
+    public function test_selected_lines_can_be_deleted_in_one_request(): void
+    {
+        $user = $this->customer();
+
+        $keep = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $this->food()->id])->json('cart_item_id');
+        $dropA = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $this->food()->id])->json('cart_item_id');
+        $dropB = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $this->food()->id])->json('cart_item_id');
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->deleteJson('/api/cart/items', ['ids' => [$dropA, $dropB]])
+            ->assertOk()
+            ->assertJsonPath('line_count', 1);
+
+        $this->assertSame([$keep], array_column($response->json('cart'), 'id'));
+        $this->assertDatabaseMissing('cart_items', ['id' => $dropA]);
+    }
+
+    public function test_a_bulk_delete_cannot_reach_another_customers_line(): void
+    {
+        $owner = $this->customer();
+        $ownerLine = $this->actingAs($owner, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $this->food()->id])->json('cart_item_id');
+
+        $intruder = User::factory()->create(['role' => User::ROLE_CUSTOMER]);
+        $intruderLine = $this->actingAs($intruder, 'sanctum')
+            ->postJson('/api/cart/items', ['food_id' => $this->food()->id])->json('cart_item_id');
+
+        // Naming somebody else's line is not an error, it simply does nothing:
+        // the query never leaves the caller's own cart.
+        $this->actingAs($intruder, 'sanctum')
+            ->deleteJson('/api/cart/items', ['ids' => [$ownerLine, $intruderLine]])
+            ->assertOk()
+            ->assertJsonPath('line_count', 0);
+
+        $this->assertDatabaseHas('cart_items', ['id' => $ownerLine]);
+    }
+
+    public function test_a_bulk_delete_needs_at_least_one_id(): void
+    {
+        $this->actingAs($this->customer(), 'sanctum')
+            ->deleteJson('/api/cart/items', ['ids' => []])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('ids');
+    }
+
     public function test_clearing_empties_the_cart(): void
     {
         $user = $this->customer();

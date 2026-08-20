@@ -86,6 +86,7 @@ Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
     Route::get('/cart', [CartController::class, 'index']);
     Route::post('/cart/items', [CartController::class, 'store']);
     Route::patch('/cart/items/{cartItem}', [CartController::class, 'updateQuantity']);
+    Route::delete('/cart/items', [CartController::class, 'destroyMany']);
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
 
@@ -130,8 +131,6 @@ Route::middleware(['auth:sanctum', 'device-check', 'role:super_admin'])->group(f
 
     Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])->middleware('throttle:user-update');
 
-    // System configuration (UC-ADMIN-003 / UC-ADMIN-007). Store Manager only -
-    // BR-27 and FR-05.5 put the statutory rate in this role's hands alone.
     Route::get('/admin/settings/discount', [SystemSettingController::class, 'showDiscount']);
     Route::put('/admin/settings/discount', [SystemSettingController::class, 'updateDiscount'])
         ->middleware('throttle:user-update');

@@ -9,23 +9,8 @@ use App\Models\Food;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-/**
- * The customer's cart.
- *
- * Built on the ERD relationships - cart -> cart_items -> cart_item_addons -
- * rather than the older mechanism where an add-on was itself a cart_item
- * pointing at a parent row. That older shape could not represent "one Chicken
- * Spaghetti with Iced Tea, quantity 2" without the add-on quantity drifting
- * away from its parent's.
- *
- * Two lines for the same food are kept SEPARATE when their add-ons differ, and
- * merged when they match. The prototype shows two Herb Chicken lines at once,
- * which is only meaningful if a line is identified by food + add-ons rather
- * than by food alone.
- */
 class CartController extends Controller
 {
-    /** The user's live cart, created on first use. */
     private function cartFor(Request $request): Cart
     {
         return Cart::firstOrCreate(
@@ -38,13 +23,6 @@ class CartController extends Controller
         return response()->json($this->payload($this->cartFor($request)));
     }
 
-    /**
-     * Add a food item, with any selected add-ons.
-     *
-     * Refuses anything the menu would have greyed out. The card disables its
-     * own button, but that is a convenience: this is the check that counts,
-     * because the button is not what the request has to get past.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -67,7 +45,6 @@ class CartController extends Controller
 
         $quantity = (int) ($validated['quantity'] ?? 1);
 
-        // Only add-ons this dish actually offers, and only ones still on.
         $addonIds = $food->addons()
             ->whereIn('addons.id', $validated['addon_ids'] ?? [])
             ->where('availability', true)
@@ -105,12 +82,6 @@ class CartController extends Controller
         ), 201);
     }
 
-    /**
-     * Set an absolute quantity on one line. Zero removes it.
-     *
-     * Absolute rather than a delta so the +/- buttons cannot double-apply if a
-     * response is slow and the customer taps twice.
-     */
     public function updateQuantity(Request $request, CartItem $cartItem)
     {
         $this->assertOwned($request, $cartItem);
@@ -155,7 +126,27 @@ class CartController extends Controller
         return response()->json(array_merge(['message' => 'Item removed.'], $this->payload($cart->fresh())));
     }
 
-    /** Empty the cart. Used by "Select All" -> remove, and after checkout. */
+    public function destroyMany(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $cart = $this->cartFor($request);
+
+        DB::transaction(function () use ($cart, $validated) {
+            $items = $cart->items()->whereIn('id', $validated['ids'])->get();
+
+            foreach ($items as $item) {
+                $item->selectedAddons()->detach();
+                $item->delete();
+            }
+        });
+
+        return response()->json(array_merge(['message' => 'Items removed.'], $this->payload($cart->fresh())));
+    }
+
     public function clear(Request $request)
     {
         $cart = $this->cartFor($request);
@@ -170,12 +161,6 @@ class CartController extends Controller
         return response()->json(array_merge(['message' => 'Your order is empty.'], $this->payload($cart->fresh())));
     }
 
-    /**
-     * A line whose food AND add-on set match exactly.
-     *
-     * Comparison is on the sorted id list, so selecting the same add-ons in a
-     * different order still merges into one line.
-     */
     private function matchingLine(Cart $cart, int $foodId, array $addonIds): ?CartItem
     {
         return $cart->items()
@@ -186,7 +171,6 @@ class CartController extends Controller
                 ->pluck('id')->sort()->values()->all() === $addonIds);
     }
 
-    /** Never let a line exceed what the kitchen actually has. */
     private function clampToStock(?Food $food, int $quantity): int
     {
         if ($food === null || $food->stock_quantity === null) {
@@ -201,15 +185,9 @@ class CartController extends Controller
         abort_unless($cartItem->user_id === $request->user()->id, 403, 'That item is not in your cart.');
     }
 
-    /**
-     * The whole cart, priced.
-     *
-     * Totals are computed here rather than trusted from the client, and add-on
-     * prices are read live so a price change is reflected before checkout.
-     */
     private function payload(Cart $cart): array
     {
-        $items = $cart->items()->with(['food.category', 'selectedAddons'])->get();
+        $items = $cart->items()->with(['food.category', 'selectedAddons'])->orderByDesc('id')->get();
 
         $lines = $items->map(function (CartItem $item) {
             $food = $item->food;
@@ -234,8 +212,6 @@ class CartController extends Controller
                 'unit_price' => $unitPrice,
                 'subtotal' => $unitPrice * $item->quantity,
 
-                // Carried through so the cart can flag a line that went out of
-                // stock after it was added, rather than failing at checkout.
                 'is_orderable' => $food?->is_orderable ?? false,
                 'stock_status' => $food?->stock_status,
                 'stock_quantity' => $food?->stock_quantity,
@@ -247,8 +223,6 @@ class CartController extends Controller
             'item_count' => (int) $items->sum('quantity'),
             'line_count' => $lines->count(),
             'subtotal' => (float) $lines->sum('subtotal'),
-            // Separate from subtotal because discounts and delivery fees land
-            // between them once those modules exist.
             'total' => (float) $lines->sum('subtotal'),
             'has_unavailable_items' => $lines->contains(fn ($line) => ! $line['is_orderable']),
         ];

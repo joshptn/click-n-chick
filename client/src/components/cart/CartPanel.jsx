@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { IconAlertTriangle, IconMinus, IconPhotoOff, IconPlus, IconShoppingCart, IconTrash } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -6,29 +7,37 @@ import { useCart } from "../../context/useCart";
 
 const MotionLi = motion.li;
 
-/**
- * "My Orders" - the cart body.
- *
- * One component for both presentations: docked in the home page grid on wide
- * screens, and inside CartModal everywhere else. Splitting them would mean
- * maintaining the quantity controls twice.
- */
 function CartPanel({ onCheckout, className = "" }) {
   const {
     cart,
     item_count: itemCount,
-    subtotal,
-    total,
-    has_unavailable_items: hasUnavailable,
     isLoading,
     setQuantity,
     removeItem,
-    clearCart,
     pendingLineId,
     isMutating,
+    isSelected,
+    toggleSelected,
+    selectAll,
+    deselectAll,
+    removeSelected,
+    selectedIds,
+    selectedCount,
+    selectedItemCount,
+    selectedSubtotal,
+    hasUnavailableSelected,
+    allSelected,
   } = useCart();
 
   const isEmpty = !isLoading && cart.length === 0;
+
+  const repeatedFoods = useMemo(() => {
+    const counts = new Map();
+
+    cart.forEach((line) => counts.set(line.food_id, (counts.get(line.food_id) ?? 0) + 1));
+
+    return new Set([...counts].filter(([, count]) => count > 1).map(([foodId]) => foodId));
+  }, [cart]);
 
   return (
     <section
@@ -44,26 +53,36 @@ function CartPanel({ onCheckout, className = "" }) {
       </header>
 
       {cart.length > 0 && (
-        <div className="flex shrink-0 items-center justify-between border-b border-[#f5f0e9] bg-[#faf7f3] px-5 py-2.5">
-          <span className="font-display text-[12.5px] font-semibold text-[#6f6b68]">
-            {cart.length} line{cart.length === 1 ? "" : "s"}
-          </span>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#f5f0e9] bg-[#faf7f3] px-5 py-2.5">
+          <label className="flex cursor-pointer items-center gap-2.5 font-display text-[12.5px] font-semibold text-[#6f6b68]">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = !allSelected && selectedCount > 0;
+              }}
+              onChange={() => (allSelected ? deselectAll() : selectAll())}
+              className="h-[17px] w-[17px] shrink-0 cursor-pointer accent-brand-500"
+            />
+            {allSelected ? "Deselect All" : "Select All"}
+          </label>
 
           <button
             type="button"
-            onClick={() => clearCart()}
-            disabled={isMutating}
-            className="bg-transparent font-display text-[12.5px] font-bold text-[#e5322d] transition-opacity hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => removeSelected()}
+            disabled={selectedCount === 0 || isMutating}
+            className="inline-flex items-center gap-1.5 bg-transparent font-display text-[12.5px] font-bold text-[#e5322d] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
           >
-            Clear all
+            <IconTrash size={14} stroke={2.2} aria-hidden="true" />
+            Delete ({selectedCount})
           </button>
         </div>
       )}
 
-      {hasUnavailable && (
+      {hasUnavailableSelected && (
         <p className="m-0 flex shrink-0 items-start gap-2 border-b border-[#ffe6a8] bg-[#fff9e8] px-5 py-3 font-display text-[12.5px] leading-snug text-[#8a6206]">
           <IconAlertTriangle size={15} stroke={2.2} aria-hidden="true" className="mt-px shrink-0" />
-          Something in your order sold out. Remove it before checking out.
+          Something you selected sold out. Untick or remove it before checking out.
         </p>
       )}
 
@@ -101,6 +120,14 @@ function CartPanel({ onCheckout, className = "" }) {
                   transition={{ duration: 0.2 }}
                   className={`flex items-start gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-[#faf7f3] ${busy ? "opacity-60" : ""}`}
                 >
+                  <input
+                    type="checkbox"
+                    checked={isSelected(line.id)}
+                    onChange={() => toggleSelected(line.id)}
+                    aria-label={`Include ${line.food_name} in checkout`}
+                    className="mt-3.5 h-[17px] w-[17px] shrink-0 cursor-pointer accent-brand-500"
+                  />
+
                   <span className="h-11 w-11 shrink-0 overflow-hidden rounded-[9px] bg-[#f4f1ec]">
                     {line.thumbnail ? (
                       <img
@@ -120,10 +147,16 @@ function CartPanel({ onCheckout, className = "" }) {
                       {line.food_name}
                     </p>
 
-                    {line.addons.length > 0 && (
+                    {line.addons.length > 0 ? (
                       <p className="m-0 truncate font-display text-[11px] text-[#8d8884]">
-                        {line.addons.map((addon) => addon.addon_name).join(", ")}
+                        + {line.addons.map((addon) => addon.addon_name).join(", ")}
                       </p>
+                    ) : (
+                      repeatedFoods.has(line.food_id) && (
+                        <p className="m-0 truncate font-display text-[11px] italic text-[#a39f9b]">
+                          No add-ons
+                        </p>
+                      )
                     )}
 
                     <p className="m-0 font-display text-[13px] font-bold text-brand-600">
@@ -172,22 +205,27 @@ function CartPanel({ onCheckout, className = "" }) {
       </div>
 
       <footer className="shrink-0 border-t border-[#f0e9df] px-5 pb-5 pt-4">
-        <div className="flex items-center justify-between font-display text-[13px] text-[#6f6b68]">
-          <span>Subtotal</span>
-          <span className="font-semibold text-ink">{formatPeso(subtotal)}</span>
+        <div className="flex items-center justify-between gap-3 font-display text-[13px] text-[#6f6b68]">
+          <span>
+            Subtotal{" "}
+            <span className="text-[11.5px] text-[#a39f9b]">
+              ({selectedItemCount} item{selectedItemCount === 1 ? "" : "s"} selected)
+            </span>
+          </span>
+          <span className="font-semibold text-ink">{formatPeso(selectedSubtotal)}</span>
         </div>
 
         <div className="mt-1.5 flex items-center justify-between">
           <span className="font-display text-[15px] font-extrabold text-ink">Total</span>
           <span className="font-display text-[19px] font-extrabold leading-none text-brand-600">
-            {formatPeso(total)}
+            {formatPeso(selectedSubtotal)}
           </span>
         </div>
 
         <button
           type="button"
-          onClick={onCheckout}
-          disabled={cart.length === 0 || hasUnavailable || isMutating}
+          onClick={() => onCheckout?.(selectedIds)}
+          disabled={selectedCount === 0 || hasUnavailableSelected || isMutating}
           className="mt-4 inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-brand-500 font-display text-[15px] font-bold text-white transition-all duration-150 hover:bg-brand-600 active:translate-y-px disabled:cursor-not-allowed disabled:bg-brand-200"
         >
           <IconShoppingCart size={18} stroke={2} aria-hidden="true" />
@@ -195,7 +233,9 @@ function CartPanel({ onCheckout, className = "" }) {
         </button>
 
         <p className="m-0 mt-2.5 text-center font-display text-[10.5px] leading-snug text-[#a39f9b]">
-          🔒 Secure checkout &middot; Orders can&rsquo;t be cancelled once confirmed
+          {cart.length > 0 && selectedCount === 0
+            ? "Tick at least one item to check out"
+            : "🔒 Secure checkout · Orders can’t be cancelled once confirmed"}
         </p>
       </footer>
     </section>
