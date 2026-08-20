@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
+use App\Http\Middleware\VerifyRecaptcha;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Rules\StrongPassword;
@@ -35,7 +35,7 @@ class AuthController extends Controller
         // instead of being rejected as a duplicate.
         $validated = $request->validate([
             'email' => 'required|string|email|max:255',
-            'password' => ['required', 'string', 'confirmed', new StrongPassword()],
+            'password' => ['required', 'string', 'confirmed', new StrongPassword],
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'phone_number' => [
@@ -113,7 +113,7 @@ class AuthController extends Controller
                 ]);
             }
 
-            return $this->fillRegistration(new User(), $validated, $phoneHash, $channel);
+            return $this->fillRegistration(new User, $validated, $phoneHash, $channel);
         });
 
         $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $channel);
@@ -138,18 +138,18 @@ class AuthController extends Controller
     /** Apply a registration submission to a new or reused pending row. */
     private function fillRegistration(User $user, array $validated, string $phoneHash, Channel $channel): User
     {
-        $user->email                = $validated['email'];
-        $user->password             = Hash::make($validated['password']);
-        $user->first_name           = $validated['first_name'];
-        $user->last_name            = $validated['last_name'];
-        $user->phone_number         = $validated['phone_number'];
-        $user->phone_number_hash    = $phoneHash;
+        $user->email = $validated['email'];
+        $user->password = Hash::make($validated['password']);
+        $user->first_name = $validated['first_name'];
+        $user->last_name = $validated['last_name'];
+        $user->phone_number = $validated['phone_number'];
+        $user->phone_number_hash = $phoneHash;
         $user->verification_channel = $channel->value;
-        $user->account_status       = User::STATUS_PENDING_VERIFICATION;
+        $user->account_status = User::STATUS_PENDING_VERIFICATION;
         // Both cleared: a re-used pending row must not carry a stale
         // verification from an earlier attempt on the other channel.
-        $user->phone_verified_at    = null;
-        $user->email_verified_at    = null;
+        $user->phone_verified_at = null;
+        $user->email_verified_at = null;
         $user->save();
 
         return $user->refresh();
@@ -185,7 +185,7 @@ class AuthController extends Controller
                 : User::where('phone_number_hash', $phoneHash)->first();
         }
 
-        if (!$user || !Hash::check($validated['password'], $user->password)) {
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
             return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
@@ -219,6 +219,25 @@ class AuthController extends Controller
             );
         }
 
+        /**
+         * FR-01.15 / BR-35: this browser scored below the reCAPTCHA threshold,
+         * so prove the human another way rather than refusing outright.
+         *
+         * Deliberately after the credential check. Issuing a challenge before
+         * knowing the password was right would turn this into an account
+         * enumeration oracle - and would send an OTP to someone whose account
+         * is merely being guessed at.
+         *
+         * An account with 2FA on never reaches here: it was already challenged
+         * above, which is the same proof.
+         */
+        if ($request->attributes->get(VerifyRecaptcha::LOW_SCORE_ATTRIBUTE) === true) {
+            return response()->json(
+                app(TwoFactorController::class)->issueStepUpChallenge($user, $request->ip()),
+                200
+            );
+        }
+
         // Attributed to the requesting device so the account holder can see and
         // revoke this session later (FR-01.13). Same Sanctum token as before.
         $token = app(DeviceRegistrar::class)->issueToken($user, $request, self::TOKEN_NAME);
@@ -232,11 +251,13 @@ class AuthController extends Controller
         ];
     }
 
-    public function userDetails(Request $request){
+    public function userDetails(Request $request)
+    {
         return $request->user();
     }
 
-    public function logout(Request $request){
+    public function logout(Request $request)
+    {
 
         $token = $request->user()->currentAccessToken();
 
@@ -253,7 +274,7 @@ class AuthController extends Controller
         }
 
         return [
-            'message' => 'You are logged out'
+            'message' => 'You are logged out',
         ];
     }
 
@@ -262,10 +283,10 @@ class AuthController extends Controller
         try {
             $user = $request->user();
 
-            if (!$user) {
+            if (! $user) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthorized access. Please log in again.'
+                    'message' => 'Unauthorized access. Please log in again.',
                 ], 401);
             }
 
@@ -306,7 +327,7 @@ class AuthController extends Controller
                 $user->phone_number_hash = $phoneHash;
                 $changed = true;
             }
-            if (!$changed) {
+            if (! $changed) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No data provided to update.',

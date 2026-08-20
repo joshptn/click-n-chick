@@ -26,6 +26,18 @@
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="SMS_DRIVER" value="log"/>
+        <!--
+            reCAPTCHA off by default under test, and pinned here rather than
+            left to .env. Without this the suite's result depends on whether a
+            developer happens to have real credentials pasted in: the moment
+            they do, every test that posts to a guarded route starts failing on
+            a missing token. Tests that exercise reCAPTCHA turn it on themselves
+            with fake keys and a faked verdict, so no real key is ever needed
+            and no live call is ever made.
+        -->
+        <env name="RECAPTCHA_ENABLED" value="false"/>
+        <env name="RECAPTCHA_SITE_KEY" value=""/>
+        <env name="RECAPTCHA_SECRET_KEY" value=""/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

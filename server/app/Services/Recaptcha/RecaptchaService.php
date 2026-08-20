@@ -108,9 +108,17 @@ class RecaptchaService
             return RecaptchaResult::fail(RecaptchaResult::ACTION_MISMATCH);
         }
 
-        $score = isset($body['score']) ? (float) $body['score'] : null;
+        // A v3 verdict always carries a score. One without is a v2 token or a
+        // malformed response, and it is NOT the same thing as a real browser
+        // that scored badly - which matters now that a low score earns an OTP
+        // step-up (FR-01.15) and this must not.
+        if (! isset($body['score']) || ! is_numeric($body['score'])) {
+            return RecaptchaResult::fail(RecaptchaResult::INVALID);
+        }
 
-        if ($score === null || $score < $this->minScore()) {
+        $score = (float) $body['score'];
+
+        if ($score < $this->minScore()) {
             return RecaptchaResult::fail(RecaptchaResult::LOW_SCORE, $score);
         }
 
