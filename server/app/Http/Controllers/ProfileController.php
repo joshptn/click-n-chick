@@ -209,7 +209,7 @@ class ProfileController extends Controller
                 'is_eligible' => $claim?->isApproved() ?? false,
                 'can_apply' => $claim === null || $claim->isRejected(),
                 'types' => Discount::types(),
-                'percentage' => Discount::STATUTORY_PERCENTAGE,
+                'percentage' => Discount::currentPercentage(),
             ],
             // UI only for now - the earning/redeeming ledger is a later module.
             'loyalty_points' => (int) $user->loyalty_points,

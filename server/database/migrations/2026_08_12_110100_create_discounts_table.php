@@ -31,9 +31,13 @@ return new class extends Migration
 
             // senior, pwd
             $table->string('discount_type');
-            // The statutory rate this entitlement carries (20% for both today).
-            // Stored rather than hardcoded so a rate change is data, not a deploy.
-            $table->decimal('discount_percentage', 5, 2)->default(0);
+
+            // No discount_percentage here, deliberately. Copying the rate onto
+            // each claim froze it: a customer approved today would keep today's
+            // rate forever, which directly contradicts BR-27 ("changes float to
+            // affected carts"). The rate is one Store-Manager-governed system
+            // setting - see Setting::DISCOUNT_PERCENTAGE - and the checkout
+            // calculation reads it live.
 
             // Both senior and PWD entitlements are VAT-exempt by law. The peso
             // amount exempted is per-basket and is NOT stored here.

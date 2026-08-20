@@ -34,18 +34,49 @@ class Discount extends Model
     public const STATUS_REJECTED = 'rejected';
 
     /**
-     * The statutory rate, in percent.
+     * The statutory floor, in percent.
      *
-     * RA 9994 (senior citizens) and RA 10754 (PWD) both set 20%. Written into
-     * the row at claim time so a future rate change does not silently restate
-     * what an already-approved customer was granted.
+     * RA 9994 (senior citizens) and RA 10754 (PWD) both set 20%. The Store
+     * Manager may raise the configured rate but never lower it past this
+     * (BR-34), so this is a floor, not the rate itself.
      */
-    public const STATUTORY_PERCENTAGE = 20.00;
+    public const MINIMUM_PERCENTAGE = 20.00;
+
+    /**
+     * The rate in force right now, in percent.
+     *
+     * Read live on every use rather than copied onto the claim, so a rate
+     * change reaches everyone at once - including customers approved long
+     * before it (BR-27).
+     *
+     * Clamped to the statutory floor on READ as well as on write. The write
+     * path validates, but a value can also arrive by seed, migration, or a
+     * direct database edit, and none of those go through validation. Clamping
+     * here means no code path can compute a discount below the legal rate.
+     */
+    public static function currentPercentage(): float
+    {
+        return max(
+            self::MINIMUM_PERCENTAGE,
+            Setting::number(Setting::DISCOUNT_PERCENTAGE, self::MINIMUM_PERCENTAGE)
+        );
+    }
+
+    /**
+     * BR-09 / FR-05.3, recorded here for the checkout work that will enforce it.
+     *
+     * The benefit is once per calendar day in Asia/Manila, and a cancelled or
+     * refunded order STILL consumes that day (confirmed decision). So the check
+     * is "does this account have any order dated today carrying a discount",
+     * regardless of that order's final status - not "any *completed* order".
+     * Deriving it that way needs no extra column: orders.discount_amount and
+     * orders.created_at are enough.
+     */
+    public const USAGE_TIMEZONE = 'Asia/Manila';
 
     protected $fillable = [
         'user_id',
         'discount_type',
-        'discount_percentage',
         'vat_exempt',
         'id_image',
         'discount_status',
@@ -57,7 +88,6 @@ class Discount extends Model
     protected function casts(): array
     {
         return [
-            'discount_percentage' => 'decimal:2',
             'vat_exempt' => 'boolean',
             'verified_at' => 'datetime',
         ];
