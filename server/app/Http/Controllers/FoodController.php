@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
+use App\Events\MenuBroadcast;
 use App\Http\Resources\FoodResource;
 use App\Models\Food;
+use App\Services\Auth\PasswordConfirmation;
 use App\Utils\Image;
-use App\Events\MenuBroadcast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class FoodController extends Controller implements HasMiddleware
@@ -21,24 +20,10 @@ class FoodController extends Controller implements HasMiddleware
     public static function middleware()
     {
         return [
-            new Middleware('auth:sanctum', except: ['index', 'show', 'drinks', 'sides'])
+            new Middleware('auth:sanctum', except: ['index', 'show', 'drinks', 'sides']),
         ];
     }
 
-    /**
-     * The customer-facing menu, filtered and searched.
-     *
-     * Query parameters, all optional:
-     *   category    category id, or its name ('Combos'). 'all' means no filter.
-     *   search      matches the name or description
-     *   best_seller '1' to return only the Popular Dishes rail
-     *   orderable   '1' to hide sold-out items entirely
-     *
-     * Sold-out items are INCLUDED by default and flagged rather than removed:
-     * the design greys them out in place, which tells a customer the dish
-     * exists and is worth coming back for. Filtering them out silently would
-     * make the menu look shorter than it is.
-     */
     public function index(Request $request)
     {
         $validated = $request->validate([
@@ -53,7 +38,6 @@ class FoodController extends Controller implements HasMiddleware
         $foods = Food::query()
             ->with(['category', 'addons'])
             ->when($category !== null && $category !== '' && $category !== 'all', function ($query) use ($category) {
-                // Accepts an id or a name so the chips can be driven by either.
                 is_numeric($category)
                     ? $query->where('category_id', (int) $category)
                     : $query->whereRelation('category', 'name', $category);
@@ -61,7 +45,6 @@ class FoodController extends Controller implements HasMiddleware
             ->search($validated['search'] ?? null)
             ->when($request->boolean('best_seller'), fn ($query) => $query->where('is_best_seller', true))
             ->when($request->boolean('orderable'), fn ($query) => $query->orderable())
-            // Orderable first: a sold-out dish should not head the grid.
             ->orderByDesc('is_available')
             ->orderByRaw('CASE WHEN stock_quantity IS NULL THEN 1 WHEN stock_quantity > 0 THEN 1 ELSE 0 END DESC')
             ->orderByDesc('is_best_seller')
@@ -83,9 +66,9 @@ class FoodController extends Controller implements HasMiddleware
             $this->authorize('isSuperAdmin', Food::class);
 
             $validated = $request->validate([
-                'thumbnail'   => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
-                'food_name'   => ['required', 'string', 'max:255'],
-                'price'       => ['required', 'numeric', 'min:0'],
+                'thumbnail' => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
+                'food_name' => ['required', 'string', 'max:255'],
+                'price' => ['required', 'numeric', 'min:0'],
                 'is_available' => ['sometimes', 'boolean'],
                 'description' => ['required', 'string', 'max:255'],
                 'category_id' => ['nullable', 'integer', 'exists:categories,id'],
@@ -114,7 +97,8 @@ class FoodController extends Controller implements HasMiddleware
                 'message' => 'Unauthorized: only admins can perform this action',
             ], 403);
         } catch (\Exception $e) {
-            Log::error('Food store error: ' . $e->getMessage());
+            Log::error('Food store error: '.$e->getMessage());
+
             return response()->json([
                 'message' => 'An unexpected error occurred.',
                 'error' => $e->getMessage(),
@@ -127,8 +111,6 @@ class FoodController extends Controller implements HasMiddleware
      */
     public function show(Food $food)
     {
-        // Add-ons are loaded here specifically: this is what backs the item
-        // detail modal, which is the only place they are selectable.
         return response()->json([
             'data' => new FoodResource($food->load(['category', 'addons'])),
             'meta' => FoodResource::meta(),
@@ -142,36 +124,39 @@ class FoodController extends Controller implements HasMiddleware
     {
         try {
             $this->authorize('isSuperAdmin', Food::class);
-            
+
             $validated = $request->validate([
-                'thumbnail'   => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'], 
-                'food_name'   => ['required', 'string', 'max:255'],
-                'price'       => ['required', 'numeric', 'min:0'], 
-                'is_available' => ['sometimes', 'boolean'], 
+                'thumbnail' => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
+                'food_name' => ['required', 'string', 'max:255'],
+                'price' => ['required', 'numeric', 'min:0'],
+                'is_available' => ['sometimes', 'boolean'],
                 'description' => ['required', 'string', 'max:255'],
                 'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             ]);
 
+            if (round((float) $validated['price'], 2) !== round((float) $food->price, 2)) {
+                $failure = app(PasswordConfirmation::class)->challenge($request, 'change a menu price');
+
+                if ($failure !== null) {
+                    return $failure;
+                }
+            }
+
             if ($request->hasFile('thumbnail')) {
                 $file = $request->file('thumbnail');
 
-                if (!$file->isValid()) {
+                if (! $file->isValid()) {
                     return response()->json(['message' => 'Invalid file upload.'], 400);
                 }
 
                 try {
-                    
+
                     Image::deleteImage($food->thumbnail, 'food');
-
-                    // // Upload new image
-                    // $result = $cloudinary->uploadApi()->upload($file->getRealPath(), [
-                    //     'folder' => 'foods',
-                    // ]);
-
                     $validated['thumbnail'] = Image::uploadImage($file, 'food');
 
                 } catch (\Throwable $e) {
-                    Log::error('Cloudinary upload failed: ' . $e->getMessage());
+                    Log::error('Cloudinary upload failed: '.$e->getMessage());
+
                     return response()->json([
                         'message' => 'Failed to upload image.',
                         'error' => $e->getMessage(),
@@ -198,7 +183,8 @@ class FoodController extends Controller implements HasMiddleware
                 'message' => 'Unauthorized: only admins can perform this action',
             ], 403);
         } catch (\Exception $e) {
-            Log::error('Food update error: ' . $e->getMessage());
+            Log::error('Food update error: '.$e->getMessage());
+
             return response()->json([
                 'message' => 'An unexpected error occurred.',
                 'error' => $e->getMessage(),
@@ -221,7 +207,7 @@ class FoodController extends Controller implements HasMiddleware
 
             $foodData = $food->load('category');
             $food->delete();
-            
+
             MenuBroadcast::dispatch($foodData, 'deleted');
 
             return response()->json(['message' => 'Food deleted successfully'], 200);
@@ -231,7 +217,8 @@ class FoodController extends Controller implements HasMiddleware
                 'message' => 'Unauthorized: only admins can perform this action',
             ], 403);
         } catch (\Exception $e) {
-            Log::error('Food destroy error: ' . $e->getMessage());
+            Log::error('Food destroy error: '.$e->getMessage());
+
             return response()->json([
                 'message' => 'An unexpected error occurred.',
                 'error' => $e->getMessage(),
@@ -282,8 +269,6 @@ class FoodController extends Controller implements HasMiddleware
 
     public function drinks(Request $request)
     {
-        // Was: foods sitting in BOTH 'Drinks' and 'Addons'. A food now has a
-        // single category, so this matches on 'Drinks' alone.
         $drinks = Food::whereRelation('category', 'name', 'Drinks')
             ->with('category')
             ->get();
@@ -293,8 +278,6 @@ class FoodController extends Controller implements HasMiddleware
 
     public function sides(Request $request)
     {
-        // Was: foods sitting in BOTH 'Sides' and 'Addons'. A food now has a
-        // single category, so this matches on 'Sides' alone.
         $sides = Food::whereRelation('category', 'name', 'Sides')
             ->with('category')
             ->get();

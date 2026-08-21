@@ -1,16 +1,18 @@
 <?php
 
+use App\Http\Middleware\DetectDeviceMismatch;
+use App\Http\Middleware\EnforceStaffIdleTimeout;
+use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\RequirePasswordConfirmation;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\VerifyRecaptcha;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use App\Http\Middleware\DetectDeviceMismatch;
-use App\Http\Middleware\EnsureUserHasRole;
-use App\Http\Middleware\VerifyRecaptcha;
-use Illuminate\Http\Middleware\HandleCors;
-use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
-
+use Illuminate\Http\Middleware\HandleCors;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -21,15 +23,18 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withBroadcasting(
         __DIR__.'/../routes/channels.php',
-        ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum']],
+        ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum', 'device-check']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(HandleCors::class);
+        $middleware->append(SecurityHeaders::class);
 
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
             'recaptcha' => VerifyRecaptcha::class,
             'device-check' => DetectDeviceMismatch::class,
+            'staff-idle' => EnforceStaffIdleTimeout::class,
+            'confirm-password' => RequirePasswordConfirmation::class,
         ]);
 
         $middleware->throttleApi();

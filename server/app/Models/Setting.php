@@ -6,21 +6,21 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 
-/**
- * One row of Store-Manager-governed configuration.
- *
- * Read through the static accessors rather than the query builder: they cache,
- * and settings are read on request paths that run far more often than they are
- * written. Every write invalidates its own key, so a change is visible
- * immediately rather than after a TTL - which matters for BR-27, where a rate
- * change is supposed to float to carts already open.
- */
 class Setting extends Model
 {
     use HasFactory;
 
-    /** The statutory discount rate, in percent (BR-10, BR-27, BR-34). */
     public const DISCOUNT_PERCENTAGE = 'discount.percentage';
+
+    public const DELIVERY_BASE_KM = 'delivery.base_km';
+
+    public const DELIVERY_BASE_FEE = 'delivery.base_fee';
+
+    public const DELIVERY_EXTRA_FEE_PER_KM = 'delivery.extra_fee_per_km';
+
+    public const LOYALTY_POINTS_PER_PESO = 'loyalty.points_per_peso';
+
+    public const LOYALTY_PESO_PER_POINT = 'loyalty.peso_per_point';
 
     protected $fillable = [
         'key',
@@ -33,15 +33,6 @@ class Setting extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
-    /**
-     * Keep the cache honest however a row is written.
-     *
-     * put() invalidates its own key, but a row can also be created or changed
-     * through plain Eloquent - a seeder, a console command, a future admin
-     * screen. Because the cache never expires, a write that skipped put() would
-     * be invisible until something else happened to clear it. Hooking the model
-     * means the invalidation cannot be forgotten at the call site.
-     */
     protected static function booted(): void
     {
         static::saved(fn (self $setting) => Cache::forget(self::cacheKey($setting->key)));
@@ -53,25 +44,16 @@ class Setting extends Model
         return "setting:{$key}";
     }
 
-    /**
-     * The raw stored value, or $default when the key has never been set.
-     *
-     * Cached forever and invalidated on write - a setting that is read on
-     * every profile load should not be a database round trip each time.
-     */
     public static function get(string $key, ?string $default = null): ?string
     {
         $value = Cache::rememberForever(
             self::cacheKey($key),
-            // Sentinel, because a genuine null and "no row" must be
-            // distinguishable - caching null would re-query forever.
             fn () => static::query()->where('key', $key)->value('value') ?? '__unset__'
         );
 
         return $value === '__unset__' ? $default : $value;
     }
 
-    /** Numeric read. Non-numeric stored text falls back to $default. */
     public static function number(string $key, float $default): float
     {
         $raw = static::get($key);
@@ -89,7 +71,6 @@ class Setting extends Model
         Cache::forget(self::cacheKey($key));
     }
 
-    /** Drop a cached value without writing - used by tests and by seeding. */
     public static function forget(string $key): void
     {
         Cache::forget(self::cacheKey($key));

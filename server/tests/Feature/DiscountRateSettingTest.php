@@ -84,7 +84,7 @@ class DiscountRateSettingTest extends TestCase
         $manager = $this->user(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 25])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 25, 'password' => self::PASSWORD])
             ->assertOk()
             ->assertJsonPath('percentage', 25);
 
@@ -94,7 +94,7 @@ class DiscountRateSettingTest extends TestCase
     public function test_a_store_agent_cannot_change_the_rate(): void
     {
         $this->actingAs($this->user(User::ROLE_ADMIN), 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 30])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 30, 'password' => self::PASSWORD])
             ->assertStatus(403);
 
         $this->assertSame(20.00, Discount::currentPercentage());
@@ -111,7 +111,7 @@ class DiscountRateSettingTest extends TestCase
         $this->app['auth']->forgetGuards();
 
         $this->actingAs($customer, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 90])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 90, 'password' => self::PASSWORD])
             ->assertStatus(403);
     }
 
@@ -124,7 +124,7 @@ class DiscountRateSettingTest extends TestCase
         $manager = $this->user(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 15])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 15, 'password' => self::PASSWORD])
             ->assertStatus(422)
             ->assertJsonValidationErrors('percentage');
 
@@ -137,7 +137,7 @@ class DiscountRateSettingTest extends TestCase
         Setting::put(Setting::DISCOUNT_PERCENTAGE, 30);
 
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 20])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 20, 'password' => self::PASSWORD])
             ->assertOk();
 
         $this->assertSame(20.00, Discount::currentPercentage());
@@ -146,7 +146,7 @@ class DiscountRateSettingTest extends TestCase
     public function test_a_rate_above_one_hundred_percent_is_refused(): void
     {
         $this->actingAs($this->user(User::ROLE_SUPER_ADMIN), 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 150])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 150, 'password' => self::PASSWORD])
             ->assertStatus(422)
             ->assertJsonValidationErrors('percentage');
     }
@@ -180,7 +180,7 @@ class DiscountRateSettingTest extends TestCase
 
         $this->app['auth']->forgetGuards();
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 25])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 25, 'password' => self::PASSWORD])
             ->assertOk();
 
         $this->app['auth']->forgetGuards();
@@ -208,7 +208,7 @@ class DiscountRateSettingTest extends TestCase
         $manager = $this->user(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 25])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 25, 'password' => self::PASSWORD])
             ->assertOk();
 
         foreach ([$customer, $agent, $manager] as $user) {
@@ -225,7 +225,7 @@ class DiscountRateSettingTest extends TestCase
         $manager = $this->user(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 20])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 20, 'password' => self::PASSWORD])
             ->assertOk();
 
         $this->assertDatabaseMissing('notifications', ['title' => 'Discount rate updated']);
@@ -236,7 +236,7 @@ class DiscountRateSettingTest extends TestCase
         $manager = $this->user(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($manager, 'sanctum')
-            ->putJson('/api/admin/settings/discount', ['percentage' => 25])
+            ->putJson('/api/admin/settings/discount', ['percentage' => 25, 'password' => self::PASSWORD])
             ->assertOk()
             ->assertJsonPath('updated_by.id', $manager->id);
 

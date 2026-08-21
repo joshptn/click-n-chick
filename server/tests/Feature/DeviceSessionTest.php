@@ -51,6 +51,17 @@ class DeviceSessionTest extends TestCase
         return $user->fresh();
     }
 
+    /**
+     * The device each issued token was minted on.
+     *
+     * Requests now have to prove which device they come from, so a replay has
+     * to carry the same hint the token was born with. Recording it here means
+     * every existing call site keeps working without repeating the headers.
+     *
+     * @var array<string, array{id: string, agent: string}>
+     */
+    private array $tokenDevice = [];
+
     /** Sign in as if from a distinct physical device. Returns the bearer token. */
     private function signInFrom(User $user, string $deviceId, string $agent = 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0'): string
     {
@@ -64,7 +75,11 @@ class DeviceSessionTest extends TestCase
 
         $response->assertOk();
 
-        return $response->json('token');
+        $token = $response->json('token');
+
+        $this->tokenDevice[$token] = ['id' => $deviceId, 'agent' => $agent];
+
+        return $token;
     }
 
     /**
@@ -80,7 +95,19 @@ class DeviceSessionTest extends TestCase
     {
         $this->app['auth']->forgetGuards();
 
-        return $this->withHeaders(['Authorization' => 'Bearer '.$token] + $extra);
+        $headers = ['Authorization' => 'Bearer '.$token];
+
+        // Replay from the device the token was issued to, unless the test is
+        // deliberately doing otherwise. Without the hint the device check now
+        // refuses the request outright, which is the whole point of it.
+        if (isset($this->tokenDevice[$token])) {
+            $headers[DeviceRegistrar::HINT_HEADER] = $this->tokenDevice[$token]['id'];
+            $headers['User-Agent'] = $this->tokenDevice[$token]['agent'];
+        }
+
+        // Array union keeps the LEFT side's keys, so an explicit override in
+        // $extra wins over the recorded device.
+        return $this->withHeaders($extra + $headers);
     }
 
     /**
@@ -910,7 +937,7 @@ class DeviceSessionTest extends TestCase
     // A token used from a device it was not issued to is noticed
     // -----------------------------------------------------------------
 
-    public function test_a_token_used_from_a_different_device_is_recorded_and_alerted(): void
+    public function test_a_token_used_from_a_different_device_is_refused_recorded_and_alerted(): void
     {
         Mail::fake();
 
@@ -918,11 +945,15 @@ class DeviceSessionTest extends TestCase
         $token = $this->signInFrom($user, 'the-real-laptop');
 
         // Exactly the copy-the-token-into-another-browser case: same token,
-        // different device id, different user agent.
+        // different device id, different user agent. Refused outright - this
+        // used to be allowed through with only an alert raised.
         $this->actingAsDevice($token, [
             DeviceRegistrar::HINT_HEADER => 'a-completely-different-browser',
             'User-Agent' => 'Mozilla/5.0 (X11; Linux) Firefox/121.0',
-        ])->getJson('/api/user')->assertOk();
+        ])
+            ->getJson('/api/user')
+            ->assertUnauthorized()
+            ->assertJsonPath('error_code', 'DEVICE_MISMATCH');
 
         $this->assertDatabaseHas('auth_events', [
             'user_id' => $user->id,
@@ -997,8 +1028,11 @@ class DeviceSessionTest extends TestCase
             'User-Agent' => 'Mozilla/5.0 (X11; Linux) Firefox/121.0',
         ];
 
+        // Refused every time. Revocation is off in this test (the phpunit
+        // baseline), so the token survives and the attempt can repeat - which
+        // is precisely the case the alert cooldown exists for.
         foreach (range(1, 4) as $ignored) {
-            $this->actingAsDevice($token, $headers)->getJson('/api/user')->assertOk();
+            $this->actingAsDevice($token, $headers)->getJson('/api/user')->assertUnauthorized();
         }
 
         // Every occurrence is recorded - the audit trail must be complete...
@@ -1033,28 +1067,68 @@ class DeviceSessionTest extends TestCase
         $this->actingAsDevice($token)->getJson('/api/user')->assertUnauthorized();
     }
 
-    public function test_a_request_without_a_device_hint_is_never_flagged(): void
+    /**
+     * The evasion this check used to have.
+     *
+     * A request with no X-Device-Id was previously treated as inconclusive and
+     * allowed through, which made the entire device check opt-in by the caller:
+     * a bare `curl` carrying nothing but a copied bearer token skipped it
+     * completely. A session that HAS a device must now name one.
+     *
+     * Deliberately NOT revoked. A client that momentarily fails to send the
+     * header is a bug, not a theft, and destroying the session over it would
+     * lock honest users out - refusing the request is enough to close the hole.
+     */
+    public function test_a_request_without_a_device_hint_is_refused_but_not_revoked(): void
     {
         Mail::fake();
 
         $user = $this->verifiedUser('mismatch7@example.test');
         $token = $this->signInFrom($user, 'the-real-laptop');
 
-        // No X-Device-Id at all - a server-to-server call, an older client, or
-        // a path that forgot the header. It can only be fingerprinted by user
-        // agent, which will never match a hint-derived device, so treating it
-        // as a mismatch would flag ordinary traffic. Verified the hard way:
-        // this fired on real browser requests before the Echo authorizer
-        // started sending the header.
-        $this->actingAsDevice($token, ['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0'])
-            ->getJson('/api/user')
-            ->assertOk();
+        // flushHeaders matters: withHeaders() persists for the rest of the test
+        // method, so the hint sent during sign-in would otherwise still be
+        // attached and this would not be testing a headerless request at all.
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
 
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0',
+        ])
+            ->getJson('/api/user')
+            ->assertUnauthorized()
+            ->assertJsonPath('error_code', 'DEVICE_HEADER_REQUIRED');
+
+        // Not a mismatch: there was no competing device evidence, only absent
+        // evidence. Recording it as one would poison the audit trail.
         $this->assertSame(0, AuthEvent::where('user_id', $user->id)
             ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
             ->count());
 
         Mail::assertNothingSent();
+
+        // The session itself is untouched - the legitimate device still works.
+        $this->actingAsDevice($token)->getJson('/api/user')->assertOk();
+    }
+
+    /** Even with revocation armed, a missing header must not destroy a session. */
+    public function test_a_missing_device_hint_never_destroys_the_session(): void
+    {
+        Mail::fake();
+        config()->set('services.session_security.revoke_on_device_mismatch', true);
+
+        $user = $this->verifiedUser('mismatch8@example.test');
+        $token = $this->signInFrom($user, 'the-real-laptop');
+
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/user')
+            ->assertUnauthorized();
+
+        $this->actingAsDevice($token)->getJson('/api/user')->assertOk();
     }
 
     public function test_a_token_with_no_device_link_passes_through_undisturbed(): void

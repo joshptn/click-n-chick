@@ -2,31 +2,28 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
+use App\Events\OrderBroadcast;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\Orders\DeliveryPricing;
 use App\Utils\Distance;
 use App\Utils\Image;
 use App\Utils\Notification;
-use App\Events\OrderBroadcast;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
-
 
 class OrderController extends Controller implements HasMiddleware
 {
     use AuthorizesRequests;
-    
+
     public static function middleware()
     {
         return [
-            new Middleware('auth:sanctum')
+            new Middleware('auth:sanctum'),
         ];
     }
 
@@ -41,7 +38,7 @@ class OrderController extends Controller implements HasMiddleware
             'proof_of_payment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,gif', 'max:5120'],
             'reference_id' => 'nullable|string|max:255',
         ]);
-    
+
         $cartItems = CartItem::with('food')->where('user_id', $user->id)->get();
 
         if ($cartItems->isEmpty()) {
@@ -50,7 +47,7 @@ class OrderController extends Controller implements HasMiddleware
 
         DB::beginTransaction();
         try {
-            $total = $cartItems->sum(fn($item) => ($item->food->price * $item->quantity));
+            $total = $cartItems->sum(fn ($item) => ($item->food->price * $item->quantity));
 
             $validated['user_id'] = $user->id;
             $validated['total_price'] = $total;
@@ -66,9 +63,9 @@ class OrderController extends Controller implements HasMiddleware
             foreach ($cartItems as $item) {
                 OrderItem::create([
                     'order_id' => $order->id,
-                    'food_id'  => $item->food_id,
+                    'food_id' => $item->food_id,
                     'quantity' => $item->quantity,
-                    'price'    => $item->food->price,
+                    'price' => $item->food->price,
                 ]);
             }
 
@@ -77,24 +74,15 @@ class OrderController extends Controller implements HasMiddleware
 
             $dis = Distance::getDistance($order->latitude, $order->longitude);
 
-            if ($order->type == "pickup") {
+            if ($order->type == 'pickup') {
                 $dis_price = 0;
             } else {
-                $base_km = 3;
-                $base_price = 55;
-                $extra_price = 10;
-
-                if ($dis <= $base_km) {
-                    $dis_price = $base_price;
-                } else {
-                    $extra_km = ceil($dis - $base_km);
-                    $dis_price = $base_price + ($extra_km * $extra_price);
-                }
+                $dis_price = app(DeliveryPricing::class)->feeFor((float) $dis);
             }
 
             $order->total_price = $order->total_price + $dis_price;
             $order->save();
-            
+
             OrderBroadcast::dispatch($order->load('items.food', 'items.food.category', 'user'), 'create');
             Notification::notify('order', 'create', $order->user->id, $order);
 
@@ -102,13 +90,13 @@ class OrderController extends Controller implements HasMiddleware
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'message' => 'Failed to place order',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     public function getUserOrder(Request $request)
     {
@@ -121,7 +109,7 @@ class OrderController extends Controller implements HasMiddleware
         }
 
         return response()->json([
-            'orders' => $orders
+            'orders' => $orders,
         ], 200);
     }
 
@@ -130,7 +118,7 @@ class OrderController extends Controller implements HasMiddleware
         $user = $request->user();
         $order = $user->Orders()->where('id', $orderId)->first();
 
-        if (!$order) {
+        if (! $order) {
             return response()->json(['message' => 'Order not found'], 404);
         }
 
@@ -152,12 +140,12 @@ class OrderController extends Controller implements HasMiddleware
         $this->authorize('isAdmin', Order::class);
 
         $request->validate([
-            'status' => 'required|in:pending,approved,declined,completed'
+            'status' => 'required|in:pending,approved,declined,completed',
         ]);
 
         $order = Order::find($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json(['message' => 'Order not found'], 404);
         }
 
@@ -175,12 +163,12 @@ class OrderController extends Controller implements HasMiddleware
         $this->authorize('isAdmin', Order::class);
 
         $request->validate([
-            'etc' => 'required|numeric'
+            'etc' => 'required|numeric',
         ]);
 
         $order = Order::find($orderId);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json(['message' => 'Order not found'], 404);
         }
 
@@ -198,7 +186,7 @@ class OrderController extends Controller implements HasMiddleware
         $this->authorize('isAdmin', Order::class);
 
         $user = $request->user();
-        if (!$user || !in_array($user->role, ['admin', 'super_admin'], true)) {
+        if (! $user || ! in_array($user->role, ['admin', 'super_admin'], true)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -208,17 +196,17 @@ class OrderController extends Controller implements HasMiddleware
 
         $query = Order::with(['items.food.category', 'user']);
 
-        if ($status && $status !== "all") {
-            $query->where("status", $status);
+        if ($status && $status !== 'all') {
+            $query->where('status', $status);
         }
 
-        if ($category && $category !== "all") {
-            $query->whereHas("items.food.category", function ($q) use ($category) {
-                $q->where("name", "LIKE", "%{$category}%");
+        if ($category && $category !== 'all') {
+            $query->whereHas('items.food.category', function ($q) use ($category) {
+                $q->where('name', 'LIKE', "%{$category}%");
             });
         }
 
-        $orders = $query->orderBy("created_at", "desc")->paginate($perPage);
+        $orders = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
             'orders' => $orders->items(),

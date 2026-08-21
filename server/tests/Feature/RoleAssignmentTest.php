@@ -146,7 +146,7 @@ class RoleAssignmentTest extends TestCase
         $target = $this->makeUser('customer');
 
         $this->actingAs($actor, 'sanctum')
-            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'admin'])
+            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'admin', 'password' => 'password'])
             ->assertOk();
 
         $this->assertSame('admin', $target->fresh()->role);
@@ -158,7 +158,7 @@ class RoleAssignmentTest extends TestCase
         $target = $this->makeUser('customer');
 
         $this->actingAs($actor, 'sanctum')
-            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'super_admin'])
+            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'super_admin', 'password' => 'password'])
             ->assertForbidden();
 
         $this->assertSame('customer', $target->fresh()->role);
@@ -170,7 +170,7 @@ class RoleAssignmentTest extends TestCase
         $target = $this->makeUser('customer');
 
         $this->actingAs($actor, 'sanctum')
-            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'admin'])
+            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'admin', 'password' => 'password'])
             ->assertForbidden();
 
         $this->assertSame('customer', $target->fresh()->role);
@@ -180,7 +180,7 @@ class RoleAssignmentTest extends TestCase
     {
         $target = $this->makeUser('customer');
 
-        $this->patchJson("/api/admin/users/{$target->id}", ['role' => 'admin'])
+        $this->patchJson("/api/admin/users/{$target->id}", ['role' => 'admin', 'password' => 'password'])
             ->assertUnauthorized();
     }
 
@@ -190,7 +190,7 @@ class RoleAssignmentTest extends TestCase
         $this->makeUser('super_admin'); // a second one, so "last super admin" is not the blocker
 
         $this->actingAs($actor, 'sanctum')
-            ->patchJson("/api/admin/users/{$actor->id}", ['role' => 'customer'])
+            ->patchJson("/api/admin/users/{$actor->id}", ['role' => 'customer', 'password' => 'password'])
             ->assertStatus(422);
 
         $this->assertSame('super_admin', $actor->fresh()->role);
@@ -203,7 +203,7 @@ class RoleAssignmentTest extends TestCase
 
         // Demoting the second one is fine while the actor still holds the role.
         $this->actingAs($actor, 'sanctum')
-            ->patchJson("/api/admin/users/{$other->id}", ['role' => 'admin'])
+            ->patchJson("/api/admin/users/{$other->id}", ['role' => 'admin', 'password' => 'password'])
             ->assertOk();
 
         $this->assertSame('admin', $other->fresh()->role);
@@ -216,7 +216,7 @@ class RoleAssignmentTest extends TestCase
         $target = $this->makeUser('customer');
 
         $this->actingAs($actor, 'sanctum')
-            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'wizard'])
+            ->patchJson("/api/admin/users/{$target->id}", ['role' => 'wizard', 'password' => 'password'])
             ->assertStatus(422);
 
         $this->assertSame('customer', $target->fresh()->role);
