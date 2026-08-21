@@ -143,6 +143,9 @@ export const RECAPTCHA_ACTIONS = {
   PASSWORD_FORGOT: "password_forgot",
   PASSWORD_RESET: "password_reset",
   PASSWORD_CHANGE: "password_change",
+  // Final order submission (FR-02.11). The checkout screen is not built yet;
+  // when it is, it must mint a token under this action or the API refuses it.
+  PLACE_ORDER: "place_order",
 };
 
 export default executeRecaptcha;

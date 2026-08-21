@@ -7,42 +7,19 @@ use App\Models\Discount;
 use App\Models\Notification;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Orders\DeliveryPricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/**
- * Store-Manager-governed system configuration (UC-ADMIN-003, UC-ADMIN-007).
- *
- * Route-gated to super_admin, which is the whole of "Store Manager only"
- * (BR-27, BR-14, FR-05.5) - there is no per-resource question to ask here, so
- * there is no policy, only the route group.
- *
- * Today this governs the statutory discount rate. Delivery rates, operating
- * hours, and the sales-performance thresholds land here too when their modules
- * arrive; the settings table is already shaped for them.
- */
+
 class SystemSettingController extends Controller
 {
-    /** GET /api/admin/settings/discount */
     public function showDiscount()
     {
         return response()->json($this->discountPayload());
     }
 
-    /**
-     * PUT /api/admin/settings/discount
-     *
-     * The 20% floor (BR-34) is enforced by the validation rule, so a value
-     * below the statutory rate is refused with a field error the Manager can
-     * read - rather than being silently clamped, which would tell them the save
-     * worked while storing something else.
-     *
-     * Discount::currentPercentage() clamps on read as well. That is not
-     * redundancy for its own sake: this endpoint is not the only way a row can
-     * reach the table, and a seed or a direct database edit bypasses every rule
-     * written here.
-     */
     public function updateDiscount(Request $request)
     {
         $validated = $request->validate([
@@ -77,19 +54,56 @@ class SystemSettingController extends Controller
         ] + $this->discountPayload());
     }
 
-    /**
-     * BR-27: every user is told when the rate changes.
-     *
-     * Chunked rather than loaded at once, because this is one row per account
-     * and the query would otherwise grow with the user table. It runs inline:
-     * at this store's scale that is a short loop, and a queued job would need a
-     * worker running to be reliable. Worth moving behind the queue if the user
-     * count ever makes this a slow request.
-     *
-     * Wrapped whole: the setting is already saved by the time this runs, so a
-     * failure to announce must not turn a completed change into a 500 that
-     * tells the Manager it did not happen.
-     */
+    public function showDelivery()
+    {
+        return response()->json($this->deliveryPayload());
+    }
+
+
+    public function updateDelivery(Request $request)
+    {
+        $validated = $request->validate([
+            'base_km' => ['required', 'numeric', 'min:0', 'max:100'],
+            'base_fee' => ['required', 'numeric', 'min:0', 'max:10000'],
+            'extra_fee_per_km' => ['required', 'numeric', 'min:0', 'max:10000'],
+        ]);
+
+        $actor = (int) $request->user()->getKey();
+
+        Setting::put(Setting::DELIVERY_BASE_KM, round((float) $validated['base_km'], 2), $actor);
+        Setting::put(Setting::DELIVERY_BASE_FEE, round((float) $validated['base_fee'], 2), $actor);
+        Setting::put(Setting::DELIVERY_EXTRA_FEE_PER_KM, round((float) $validated['extra_fee_per_km'], 2), $actor);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Delivery pricing updated.',
+        ] + $this->deliveryPayload());
+    }
+
+    public function showLoyalty()
+    {
+        return response()->json($this->loyaltyPayload());
+    }
+
+
+    public function updateLoyalty(Request $request)
+    {
+        $validated = $request->validate([
+            'points_per_peso' => ['required', 'numeric', 'min:0', 'max:100'],
+            'peso_per_point' => ['required', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $actor = (int) $request->user()->getKey();
+
+        Setting::put(Setting::LOYALTY_POINTS_PER_PESO, round((float) $validated['points_per_peso'], 4), $actor);
+        Setting::put(Setting::LOYALTY_PESO_PER_POINT, round((float) $validated['peso_per_point'], 4), $actor);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Loyalty rates updated.',
+        ] + $this->loyaltyPayload());
+    }
+
     private function announceRateChange(float $previous, float $next): void
     {
         $title = 'Discount rate updated';
@@ -111,9 +125,6 @@ class SystemSettingController extends Controller
                         try {
                             NotificationBroadcast::dispatch($notification, (int) $user->id);
                         } catch (Throwable $e) {
-                            // One dead socket must not stop the rest of the
-                            // announcement; the row is already written and the
-                            // bell will show it on next load.
                             Log::warning('Could not broadcast a discount rate change.', [
                                 'user_id' => $user->id,
                                 'error' => $e->getMessage(),
@@ -126,7 +137,6 @@ class SystemSettingController extends Controller
         }
     }
 
-    /** Trims a trailing '.00' so the copy reads "20%", not "20.00%". */
     private function format(float $value): string
     {
         return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
@@ -143,6 +153,54 @@ class SystemSettingController extends Controller
         return [
             'percentage' => Discount::currentPercentage(),
             'minimum_percentage' => Discount::MINIMUM_PERCENTAGE,
+            'updated_at' => $setting?->updated_at?->toIso8601String(),
+            'updated_by' => $setting?->updatedBy,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function deliveryPayload(): array
+    {
+        $pricing = app(DeliveryPricing::class);
+
+        return [
+            'base_km' => $pricing->baseKm(),
+            'base_fee' => $pricing->baseFee(),
+            'extra_fee_per_km' => $pricing->extraFeePerKm(),
+            'defaults' => [
+                'base_km' => DeliveryPricing::DEFAULT_BASE_KM,
+                'base_fee' => DeliveryPricing::DEFAULT_BASE_FEE,
+                'extra_fee_per_km' => DeliveryPricing::DEFAULT_EXTRA_FEE_PER_KM,
+            ],
+        ] + $this->provenance(Setting::DELIVERY_BASE_FEE);
+    }
+
+    /** @return array<string, mixed> */
+    private function loyaltyPayload(): array
+    {
+        return [
+            'points_per_peso' => Setting::number(Setting::LOYALTY_POINTS_PER_PESO, 0.0),
+            'peso_per_point' => Setting::number(Setting::LOYALTY_PESO_PER_POINT, 0.0),
+            'active' => false,
+        ] + $this->provenance(Setting::LOYALTY_POINTS_PER_PESO);
+    }
+
+    /**
+     * Who last changed a setting, and when.
+     *
+     * Takes one representative key for groups written together - they are
+     * always saved in the same request, so their provenance is identical.
+     *
+     * @return array<string, mixed>
+     */
+    private function provenance(string $key): array
+    {
+        $setting = Setting::query()
+            ->with('updatedBy:id,first_name,last_name')
+            ->where('key', $key)
+            ->first();
+
+        return [
             'updated_at' => $setting?->updated_at?->toIso8601String(),
             'updated_by' => $setting?->updatedBy,
         ];

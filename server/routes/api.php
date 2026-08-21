@@ -26,9 +26,6 @@ Route::post('/register', [AuthController::class, 'register'])->middleware(['thro
 
 Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::OTP_VERIFY]);
 Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::OTP_RESEND]);
-// `step-up` lets a LOW SCORE through to the controller, which answers with an
-// OTP challenge instead of a refusal (FR-01.15 / BR-35). Every other reCAPTCHA
-// failure is still refused outright by the middleware.
 Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware(['throttle:login', 'recaptcha:'.RecaptchaAction::LOGIN.',step-up']);
 Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware(['throttle:password-reset', 'recaptcha:'.RecaptchaAction::PASSWORD_FORGOT]);
 Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_RESET]);
@@ -46,7 +43,7 @@ Route::get('/category/{category}', [CategoryController::class, 'show']);
 Route::get('/posters', [PosterController::class, 'index']);
 
 // Customer
-Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(function () {
     Route::get('/user', [AuthController::class, 'userDetails']);
     Route::put('/user/update', [AuthController::class, 'updateUser'])->middleware('throttle:user-update');
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -92,10 +89,6 @@ Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
     Route::delete('/cart/items', [CartController::class, 'destroyMany']);
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
-
-    // FR-02.11: final order submission is a human-initiated, high-risk action,
-    // so it carries its own reCAPTCHA action. Guest checkout will reuse this
-    // action when that flow is built (BR-32, UC-GUEST-005).
     Route::post('/order/place', [OrderController::class, 'placeOrder'])
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
     Route::get('/orders', [OrderController::class, 'getUserOrder']);
@@ -103,7 +96,7 @@ Route::middleware(['auth:sanctum', 'device-check'])->group(function () {
 });
 
 // Superadmin and Admin
-Route::middleware(['auth:sanctum', 'device-check', 'role:admin,super_admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,super_admin'])->group(function () {
     Route::get('/admin/discount-claims', [DiscountController::class, 'index']);
     Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
     Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
@@ -114,13 +107,13 @@ Route::middleware(['auth:sanctum', 'device-check', 'role:admin,super_admin'])->g
 });
 
 // Store Agent
-Route::middleware(['auth:sanctum', 'device-check', 'role:admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
     Route::patch('/foods/{food}/stock', [FoodController::class, 'updateStock']);
     Route::patch('/foods/{food}/availability', [FoodController::class, 'updateAvailability']);
 });
 
 // Store Manager
-Route::middleware(['auth:sanctum', 'device-check', 'role:super_admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_admin'])->group(function () {
     Route::post('/foods', [FoodController::class, 'store']);
     Route::put('/foods/{food}', [FoodController::class, 'update']);
     Route::patch('/foods/{food}', [FoodController::class, 'update']);
@@ -136,9 +129,18 @@ Route::middleware(['auth:sanctum', 'device-check', 'role:super_admin'])->group(f
     Route::post('/admin/posters/{poster}', [PosterController::class, 'update']);
     Route::delete('/admin/posters/{poster}', [PosterController::class, 'destroy']);
 
-    Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])->middleware('throttle:user-update');
+    Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])
+        ->middleware(['throttle:user-update', 'confirm-password:change a user role']);
 
     Route::get('/admin/settings/discount', [SystemSettingController::class, 'showDiscount']);
     Route::put('/admin/settings/discount', [SystemSettingController::class, 'updateDiscount'])
-        ->middleware('throttle:user-update');
+        ->middleware(['throttle:user-update', 'confirm-password:change the statutory discount rate']);
+
+    Route::get('/admin/settings/delivery', [SystemSettingController::class, 'showDelivery']);
+    Route::put('/admin/settings/delivery', [SystemSettingController::class, 'updateDelivery'])
+        ->middleware(['throttle:user-update', 'confirm-password:change delivery pricing']);
+
+    Route::get('/admin/settings/loyalty', [SystemSettingController::class, 'showLoyalty']);
+    Route::put('/admin/settings/loyalty', [SystemSettingController::class, 'updateLoyalty'])
+        ->middleware(['throttle:user-update', 'confirm-password:change loyalty rates']);
 });

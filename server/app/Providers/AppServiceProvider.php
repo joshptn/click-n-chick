@@ -68,18 +68,15 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('user-update', function (Request $request) {
             return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
         });
-        // Trusting a device re-checks the account password, which makes this a
-        // password oracle for anyone already holding a stolen session. The
-        // generic user-update budget (10/min) would allow ~14k guesses a day.
+
         RateLimiter::for('device-trust', function (Request $request) {
             return Limit::perMinutes(15, 5)->by('device-trust:'.($request->user()?->id ?: $request->ip()));
         });
-        // Same threat model as device-trust - a password check reachable from an
-        // already-stolen session - but its own bucket, so exhausting one cannot
-        // lock the account holder out of the other.
+
         RateLimiter::for('two-factor-disable', function (Request $request) {
             return Limit::perMinutes(15, 5)->by('2fa-disable:'.($request->user()?->id ?: $request->ip()));
         });
+
         RateLimiter::for('otp-send', function (Request $request) {
             $identifierKey = $this->otpIdentifierKey($request);
 
@@ -111,8 +108,6 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
-        // Each application uploads an image and fans a notification out to
-        // every staff account, so it is worth more than the generic budget.
         RateLimiter::for('discount-apply', function (Request $request) {
             return Limit::perMinutes(60, 5)->by('discount-apply:'.($request->user()?->id ?: $request->ip()));
         });
@@ -129,14 +124,6 @@ class AppServiceProvider extends ServiceProvider
             ?? $request->input('identifier');
 
         if (! is_string($raw) || trim($raw) === '') {
-            // The authenticated OTP flows - 2FA enrolment and password change -
-            // name a CHANNEL rather than an identifier, because the server
-            // already knows whose account it is. Falling through to a single
-            // literal 'unresolved' key put every one of those users in one
-            // shared bucket: three enrolment codes from any one account
-            // exhausted the 3-per-15-minutes budget for the entire deployment.
-            // Key on the account instead; only a genuinely anonymous caller
-            // with no identifier reaches the shared bucket now.
             return $request->user()
                 ? 'user:'.$request->user()->getKey()
                 : 'unresolved';

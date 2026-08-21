@@ -36,6 +36,9 @@ function Login() {
             challengeToken: data.challenge_token,
             channel: data.two_factor_channel,
             identifier: data.identifier,
+            // "two_factor" or "recaptcha_step_up" - the screen words itself
+            // differently for each.
+            reason: data.reason,
           },
         });
         return;
