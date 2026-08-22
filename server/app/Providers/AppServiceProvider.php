@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Models\User;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SemaphoreClient;
 use App\Services\Sms\SmsSender;
@@ -114,6 +113,17 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('place-order', function (Request $request) {
             return Limit::perMinute(8)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('checkout-quote', function (Request $request) {
+            return Limit::perMinute(90)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('geocode', function (Request $request) {
+            return [
+                Limit::perMinute(20)->by('geocode:user:'.($request->user()?->id ?: $request->ip())),
+                Limit::perMinute(40)->by('geocode:ip:'.$request->ip()),
+            ];
         });
     }
 

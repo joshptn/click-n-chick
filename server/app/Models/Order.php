@@ -16,11 +16,13 @@ class Order extends Model
         'order_number',
         'order_type',
         'scheduled_for',
+        'pickup_at',
         'status',
         'total_price',
         'subtotal',
         'discount_amount',
         'delivery_fee',
+        'delivery_distance_km',
         'total_amount',
         'payment_status',
         'estimated_time_of_completion',
@@ -31,12 +33,15 @@ class Order extends Model
         'latitude',
         'longitude',
         'location',
+        'delivery_note',
     ];
 
     protected function casts(): array
     {
         return [
             'scheduled_for' => 'datetime',
+            'pickup_at' => 'datetime',
+            'delivery_distance_km' => 'decimal:2',
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',

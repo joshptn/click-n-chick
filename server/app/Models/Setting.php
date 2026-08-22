@@ -22,6 +22,14 @@ class Setting extends Model
 
     public const LOYALTY_PESO_PER_POINT = 'loyalty.peso_per_point';
 
+    public const STORE_OPENS_AT = 'store.opens_at';
+
+    public const STORE_CLOSES_AT = 'store.closes_at';
+
+    public const STORE_ORDERING_OVERRIDE = 'store.ordering_override';
+
+    public const STORE_DELIVERY_ENABLED = 'store.delivery_enabled';
+
     protected $fillable = [
         'key',
         'value',
@@ -61,11 +69,24 @@ class Setting extends Model
         return is_numeric($raw) ? (float) $raw : $default;
     }
 
-    public static function put(string $key, string|int|float $value, ?int $updatedBy = null): void
+    public static function boolean(string $key, bool $default): bool
     {
+        $raw = static::get($key);
+
+        if ($raw === null) {
+            return $default;
+        }
+
+        return filter_var($raw, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+
+    public static function put(string $key, string|int|float|bool $value, ?int $updatedBy = null): void
+    {
+        $stored = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+
         static::query()->updateOrCreate(
             ['key' => $key],
-            ['value' => (string) $value, 'updated_by' => $updatedBy]
+            ['value' => $stored, 'updated_by' => $updatedBy]
         );
 
         Cache::forget(self::cacheKey($key));

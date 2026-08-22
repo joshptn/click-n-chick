@@ -15,30 +15,20 @@ import {
 import AuthContext from "../../context/AuthContext";
 import Button from "../ui/Button";
 import LogoIcon from "../../assets/logo-icon.png";
+import { formatStoreTime, useStoreStatus } from "../../lib/store";
 import { useCart } from "../../context/useCart";
 import { useRealtime } from "../../context/useRealtime";
 
-/**
- * The application header for every signed-in page.
- *
- * Deliberately separate from the landing page's SiteHeader: that one is a
- * marketing bar that scrolls between anchors on a single page, this one is
- * app chrome with search, store status and an account menu. Merging them would
- * mean one component with two disjoint sets of props.
- *
- * `search` is optional and controlled by the page - Home owns the query so it
- * can filter the grid, while other pages simply omit the box.
- */
 function AppHeader({
   search,
   onSearchChange,
   searchPlaceholder = "What do you want to eat today...",
-  isOpen = true,
   onOpenCart,
 }) {
   const nav = useNavigate();
   const { user, logOut } = useContext(AuthContext);
   const { item_count: itemCount } = useCart();
+  const { isOpen, status: storeStatus } = useStoreStatus();
   const { notifications, unreadCount, isConnected, isConfigured, isReady, markAllRead } = useRealtime();
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -51,14 +41,8 @@ function AppHeader({
 
   const initials = `${user?.first_name?.charAt(0) ?? ""}${user?.last_name?.charAt(0) ?? ""}`.toUpperCase() || "G";
 
-  // Straight off AuthContext, which every avatar mutation writes back to - so
-  // a new picture is on the header the moment the upload resolves, without
-  // this component fetching anything of its own.
   const avatar = user?.avatar ?? null;
 
-  // A picture that cannot load falls back to the initials rather than leaving
-  // a broken image in the header. Reset per URL: each upload is a new
-  // Cloudinary address, so a failure on the old one must not stick.
   const [avatarBroken, setAvatarBroken] = useState(false);
 
   useEffect(() => {
@@ -71,8 +55,6 @@ function AppHeader({
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    // logOut revokes the token server-side before clearing local state, so
-    // this awaits rather than navigating straight away.
     setSigningOut(true);
 
     try {
@@ -133,13 +115,18 @@ function AppHeader({
         <div className={`flex shrink-0 items-center gap-2 sm:gap-3 ${showSearch ? "" : "ml-auto"}`}>
 
           <span
+            data-testid="store-status"
+            data-open={isOpen}
+            title={
+              storeStatus
+                ? `Online ordering ${formatStoreTime(storeStatus.opens_at)} - ${formatStoreTime(storeStatus.closes_at)}`
+                : undefined
+            }
             className={`hidden rounded-full px-3.5 py-1.5 font-display text-[12px] font-bold sm:inline-flex ${isOpen ? "bg-[#e9f8ee] text-[#2f9e44]" : "bg-[#f4f1ec] text-[#8d8884]"}`}
           >
             {isOpen ? "Open" : "Closed"}
           </span>
 
-          {/* Cart trigger. Doubles as the modal opener below xl, where the
-              docked panel is not rendered. */}
           <button
             type="button"
             onClick={onOpenCart}
@@ -180,7 +167,6 @@ function AppHeader({
               <Menu.Label>
                 <span className="flex items-center justify-between gap-3">
                   Notifications
-                  {/* Live, not decorative: this is the Reverb connection. */}
                   {isConfigured && (
                     <span
                       data-testid="realtime-status"

@@ -2,17 +2,6 @@
 
 return [
 
-    /*
-    |--------------------------------------------------------------------------
-    | Third Party Services
-    |--------------------------------------------------------------------------
-    |
-    | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
-    |
-    */
 
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),
@@ -36,22 +25,14 @@ return [
     ],
 
     'sms' => [
-        // 'log' writes the OTP to the log instead of calling the provider.
-        // Default everywhere; only a deliberate manual test flips it.
         'driver' => env('SMS_DRIVER', 'log'),
     ],
 
     'recaptcha' => [
-        // On by default but inert until both keys exist, so pasting the
-        // credentials in is the only step needed to turn it on.
         'enabled' => env('RECAPTCHA_ENABLED', true),
         'site_key' => env('RECAPTCHA_SITE_KEY'),
         'secret_key' => env('RECAPTCHA_SECRET_KEY'),
-        // Required. Without it the verify call has no URL to post to, the
-        // service treats that as an outage and fails open - which silently
-        // disables reCAPTCHA on every guarded route.
         'verify_url' => env('RECAPTCHA_VERIFY_URL', 'https://www.google.com/recaptcha/api/siteverify'),
-        // v3 returns 0.0-1.0; below this the request is treated as automated.
         'min_score' => (float) env('RECAPTCHA_MIN_SCORE', 0.5),
         'timeout' => (int) env('RECAPTCHA_TIMEOUT', 5),
     ],
@@ -59,21 +40,28 @@ return [
     'semaphore' => [
         'endpoint' => env('SEMAPHORE_ENDPOINT', 'https://api.semaphore.co/api/v4/otp'),
         'key' => env('SEMAPHORE_API_KEY'),
-        // Empty -> omit `sendername` and let the account default apply.
         'sender_name' => env('SEMAPHORE_SENDER_NAME'),
     ],
 
+    'nominatim' => [
+        'endpoint' => env('NOMINATIM_ENDPOINT', 'https://nominatim.openstreetmap.org'),
+
+        'user_agent' => env(
+            'NOMINATIM_USER_AGENT',
+            'ClickNChick/1.0 (BES House of Chicken, Apalit; +'.env('APP_URL', 'http://localhost').')'
+        ),
+
+        'min_interval_ms' => (int) env('NOMINATIM_MIN_INTERVAL_MS', 1100),
+        'gate_timeout_ms' => (int) env('NOMINATIM_GATE_TIMEOUT_MS', 3000),
+
+        'timeout' => (int) env('NOMINATIM_TIMEOUT', 6),
+        'connect_timeout' => (int) env('NOMINATIM_CONNECT_TIMEOUT', 3),
+
+        'search_ttl' => (int) env('NOMINATIM_SEARCH_TTL', 86400),
+        'reverse_ttl' => (int) env('NOMINATIM_REVERSE_TTL', 604800),
+    ],
+
     'session_security' => [
-        /*
-         * Kill a session outright when a token is presented by a device it was
-         * not issued to, rather than only recording and alerting.
-         *
-         * Off by default on purpose: any authenticated request that arrives
-         * without the X-Device-Id header falls back to a user-agent
-         * fingerprint, so turning this on before every client call sends the
-         * header would log people out for no reason. Turn it on once you are
-         * satisfied the alerts in auth_events are only ever real.
-         */
         'revoke_on_device_mismatch' => (bool) env('SESSION_REVOKE_ON_DEVICE_MISMATCH', false),
     ],
 

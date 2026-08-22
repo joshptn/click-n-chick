@@ -1,23 +1,28 @@
 <?php
 
-namespace App\Utils; 
-
+namespace App\Utils;
 
 class Distance
 {
-    public static function getDistance($lat, $lng)
+    private const EARTH_RADIUS_KM = 6371;
+
+    public static function getDistance($lat, $lng): float
     {
-        $origin_lat = 14.958753194320153;
-        $origin_lng = 120.75846924744896;
+        return self::between(
+            (float) config('store.origin.latitude'),
+            (float) config('store.origin.longitude'),
+            (float) $lat,
+            (float) $lng,
+        );
+    }
 
-        
-        $latFrom = deg2rad($origin_lat);
-        $lngFrom = deg2rad($origin_lng);
-        $latTo = deg2rad($lat);
-        $lngTo = deg2rad($lng);
-
-        
-        $earthRadius = 6371; 
+    /** Haversine. Straight-line, not road distance - see DeliveryQuote. */
+    public static function between(float $latFrom, float $lngFrom, float $latTo, float $lngTo): float
+    {
+        $latFrom = deg2rad($latFrom);
+        $lngFrom = deg2rad($lngFrom);
+        $latTo = deg2rad($latTo);
+        $lngTo = deg2rad($lngTo);
 
         $latDelta = $latTo - $latFrom;
         $lngDelta = $lngTo - $lngFrom;
@@ -26,10 +31,6 @@ class Distance
              cos($latFrom) * cos($latTo) *
              sin($lngDelta / 2) * sin($lngDelta / 2);
 
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-        $distance = $earthRadius * $c;
-
-        return $distance; 
+        return self::EARTH_RADIUS_KM * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 }

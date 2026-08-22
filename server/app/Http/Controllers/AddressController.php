@@ -39,9 +39,6 @@ class AddressController extends Controller
         $user = $request->user();
 
         $address = DB::transaction(function () use ($user, $validated) {
-            // The first address saved is the default, whatever the request
-            // said: an account with addresses but no default has no sensible
-            // pick at checkout.
             $isFirst = ! $user->addresses()->exists();
             $shouldDefault = $isFirst || ($validated['is_default'] ?? false);
 
@@ -101,8 +98,6 @@ class AddressController extends Controller
             $wasDefault = $target->is_default;
             $target->delete();
 
-            // Promote another address rather than leaving the account with
-            // several addresses and no default.
             if ($wasDefault) {
                 $next = $user->addresses()->orderByDesc('id')->first();
                 $next?->forceFill(['is_default' => true])->save();
@@ -145,9 +140,6 @@ class AddressController extends Controller
             'label' => ['required', 'string', Rule::in(self::LABELS)],
             'full_address' => ['required', 'string', 'max:500'],
             'delivery_note' => ['nullable', 'string', 'max:255'],
-            'recipient_name' => ['nullable', 'string', 'max:255'],
-            'contact_number' => ['nullable', 'string', 'max:20'],
-            // Accepted now, populated by the map module later.
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'location' => ['nullable', 'string', 'max:255'],

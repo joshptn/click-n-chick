@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { IconMoodEmpty, IconSearchOff } from "@tabler/icons-react";
 
@@ -12,6 +13,7 @@ import PosterBanner from "../../components/menu/PosterBanner";
 import toast from "../../components/app/Toast";
 import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
 import { useCart } from "../../context/useCart";
+import { useStoreStatus } from "../../lib/store";
 
 /** Long enough that typing does not fire a request per keystroke. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -23,7 +25,9 @@ function Home() {
   const [selectedFood, setSelectedFood] = useState(null);
   const [cartOpen, setCartOpen] = useState(false);
 
+  const navigate = useNavigate();
   const { addItem, isAdding } = useCart();
+  const { status: storeStatus } = useStoreStatus();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
@@ -67,8 +71,19 @@ function Home() {
       .catch(() => {});
   };
 
-  const handleCheckout = () => {
-    toast.info("Checkout is the next module. Your order is saved.", "Coming soon");
+  // The ticked lines travel with the navigation (BR-25, partial checkout) so
+  // checkout prices exactly what the customer selected, not the whole cart.
+  const handleCheckout = (ids) => {
+    if (!storeStatus?.accepting_orders) {
+      toast.info(
+        storeStatus?.blockers?.pickup?.message ?? "The store is not taking orders right now.",
+        "Store closed"
+      );
+
+      return;
+    }
+
+    navigate("/checkout", { state: { selectedIds: ids ?? null } });
   };
 
   return (

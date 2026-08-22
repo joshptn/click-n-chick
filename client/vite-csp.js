@@ -35,7 +35,17 @@ export function buildPolicy(env, { dev = false } = {}) {
     "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
 
     "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
-    "img-src": ["'self'", "data:", "https://res.cloudinary.com", "https://images.unsplash.com"],
+    "img-src": [
+      "'self'",
+      "data:",
+      "https://res.cloudinary.com",
+      "https://images.unsplash.com",
+      // OpenStreetMap raster tiles for the delivery map. Served from the
+      // a/b/c subdomains, which is why this is a wildcard rather than one
+      // host. Nominatim itself is NOT here: address lookups go through
+      // Laravel, so the browser never contacts it.
+      "https://*.tile.openstreetmap.org",
+    ],
 
     "connect-src": [
       "'self'",

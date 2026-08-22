@@ -12,6 +12,7 @@ import AdminRoutes from './providers/AdminRoutes'
 import LandingPage from './pages/LandingPage'
 import Unauthorized from './pages/Unauthorized'
 import Home from './pages/customer/Home'
+import Checkout from './pages/customer/Checkout'
 import Profile from './pages/account/Profile'
 import Security from './pages/account/Security'
 import AdminDashboard from './pages/admin/Dashboard'
@@ -39,6 +40,9 @@ function App() {
         {/* Signed-in customer area. Staff roles may view it too. */}
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route path="/home" element={<Home />} />
+          {/* Checkout (UC-ORD-001). Guest checkout is a separate flow with
+              its own token, so this stays inside the signed-in area. */}
+          <Route path="/checkout" element={<Checkout />} />
           {/* Account settings (UC-PROF-001 / UC-PROF-002). Staff see it too -
               they have a profile like anyone else, minus the customer-only
               discount section, which the server omits from their payload. */}

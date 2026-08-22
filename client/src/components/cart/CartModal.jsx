@@ -2,14 +2,6 @@ import { Modal } from "@mantine/core";
 
 import CartPanel from "./CartPanel";
 
-/**
- * The cart as a modal.
- *
- * Wraps the same CartPanel the home page docks into its grid, so the two
- * presentations cannot drift apart. On wide screens the panel is always
- * visible and this is only reachable deliberately; below that the header's
- * cart button is the only way in.
- */
 function CartModal({ opened, onClose, onCheckout }) {
   return (
     <Modal
@@ -25,9 +17,9 @@ function CartModal({ opened, onClose, onCheckout }) {
     >
       <CartPanel
         className="max-h-[86vh] border-0"
-        onCheckout={() => {
+        onCheckout={(selectedIds) => {
           onClose();
-          onCheckout?.();
+          onCheckout?.(selectedIds);
         }}
       />
     </Modal>

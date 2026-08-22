@@ -8,10 +8,11 @@ use App\Models\Notification;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Orders\DeliveryPricing;
+use App\Services\Store\StoreAvailability;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Throwable;
-
 
 class SystemSettingController extends Controller
 {
@@ -59,7 +60,6 @@ class SystemSettingController extends Controller
         return response()->json($this->deliveryPayload());
     }
 
-
     public function updateDelivery(Request $request)
     {
         $validated = $request->validate([
@@ -85,7 +85,6 @@ class SystemSettingController extends Controller
         return response()->json($this->loyaltyPayload());
     }
 
-
     public function updateLoyalty(Request $request)
     {
         $validated = $request->validate([
@@ -102,6 +101,76 @@ class SystemSettingController extends Controller
             'success' => true,
             'message' => 'Loyalty rates updated.',
         ] + $this->loyaltyPayload());
+    }
+
+    public function showStore()
+    {
+        return response()->json($this->storePayload());
+    }
+
+    /**
+     * PUT /api/admin/settings/store — hours (UC-OPS-011), Store Manager only.
+     *
+     * Kept apart from the toggles below: hours are a standing policy decision,
+     * the toggles are an operational reaction to today. Store Agents need the
+     * second without being handed the first (BR-29's separation of governance
+     * from operations).
+     */
+    public function updateStore(Request $request)
+    {
+        $validated = $request->validate([
+            'opens_at' => ['required', 'date_format:H:i'],
+            'closes_at' => ['required', 'date_format:H:i', 'different:opens_at'],
+        ], [
+            'closes_at.different' => 'Opening and closing time cannot be the same.',
+        ]);
+
+        $actor = (int) $request->user()->getKey();
+
+        Setting::put(Setting::STORE_OPENS_AT, $validated['opens_at'], $actor);
+        Setting::put(Setting::STORE_CLOSES_AT, $validated['closes_at'], $actor);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Operating hours updated.',
+        ] + $this->storePayload());
+    }
+
+    /**
+     * PATCH /api/admin/store/toggles — UC-OPS-009 / UC-OPS-010.
+     *
+     * Both the Store Manager and the Store Agent may flip these (FR-07.3), so
+     * this route sits in the shared admin group rather than the manager-only
+     * one. Either field may be sent alone.
+     */
+    public function updateStoreToggles(Request $request)
+    {
+        $validated = $request->validate([
+            'ordering_override' => ['sometimes', Rule::in(StoreAvailability::overrides())],
+            'delivery_enabled' => ['sometimes', 'boolean'],
+        ]);
+
+        if ($validated === []) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nothing to change.',
+            ], 422);
+        }
+
+        $actor = (int) $request->user()->getKey();
+
+        if (array_key_exists('ordering_override', $validated)) {
+            Setting::put(Setting::STORE_ORDERING_OVERRIDE, $validated['ordering_override'], $actor);
+        }
+
+        if (array_key_exists('delivery_enabled', $validated)) {
+            Setting::put(Setting::STORE_DELIVERY_ENABLED, (bool) $validated['delivery_enabled'], $actor);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Store availability updated.',
+        ] + $this->storePayload());
     }
 
     private function announceRateChange(float $previous, float $next): void
@@ -183,6 +252,21 @@ class SystemSettingController extends Controller
             'peso_per_point' => Setting::number(Setting::LOYALTY_PESO_PER_POINT, 0.0),
             'active' => false,
         ] + $this->provenance(Setting::LOYALTY_POINTS_PER_PESO);
+    }
+
+    /** @return array<string, mixed> */
+    private function storePayload(): array
+    {
+        $store = app(StoreAvailability::class);
+
+        return [
+            'status' => $store->snapshot(),
+            'defaults' => [
+                'opens_at' => (string) config('store.hours.opens_at'),
+                'closes_at' => (string) config('store.hours.closes_at'),
+            ],
+            'service_radius_km' => (float) config('store.service_radius_km'),
+        ] + $this->provenance(Setting::STORE_OPENS_AT);
     }
 
     /**

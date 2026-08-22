@@ -4,9 +4,11 @@ use App\Http\Controllers\AddressController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\DeviceSessionController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FoodController;
+use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OtpController;
@@ -15,6 +17,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecaptchaConfigController;
+use App\Http\Controllers\StoreStatusController;
 use App\Http\Controllers\SystemSettingController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\VerificationChannelController;
@@ -41,6 +44,9 @@ Route::get('/sides', [FoodController::class, 'sides']);
 Route::get('/category', [CategoryController::class, 'index']);
 Route::get('/category/{category}', [CategoryController::class, 'show']);
 Route::get('/posters', [PosterController::class, 'index']);
+
+// Trading status 
+Route::get('/store/status', [StoreStatusController::class, 'show']);
 
 // Customer
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(function () {
@@ -89,6 +95,17 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::delete('/cart/items', [CartController::class, 'destroyMany']);
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
+    
+    Route::post('/checkout/quote', [CheckoutController::class, 'quote'])
+        ->middleware('throttle:checkout-quote');
+    Route::post('/delivery/quote', [CheckoutController::class, 'deliveryQuote'])
+        ->middleware('throttle:checkout-quote');
+
+    Route::get('/geocode/search', [GeocodingController::class, 'search'])
+        ->middleware('throttle:geocode');
+    Route::get('/geocode/reverse', [GeocodingController::class, 'reverse'])
+        ->middleware('throttle:geocode');
+
     Route::post('/order/place', [OrderController::class, 'placeOrder'])
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
     Route::get('/orders', [OrderController::class, 'getUserOrder']);
@@ -100,6 +117,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/admin/discount-claims', [DiscountController::class, 'index']);
     Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
     Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
+
+    Route::patch('/admin/store/toggles', [SystemSettingController::class, 'updateStoreToggles'])
+        ->middleware('throttle:user-update');
 
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
@@ -139,6 +159,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::get('/admin/settings/delivery', [SystemSettingController::class, 'showDelivery']);
     Route::put('/admin/settings/delivery', [SystemSettingController::class, 'updateDelivery'])
         ->middleware(['throttle:user-update', 'confirm-password:change delivery pricing']);
+
+    Route::get('/admin/settings/store', [SystemSettingController::class, 'showStore']);
+    Route::put('/admin/settings/store', [SystemSettingController::class, 'updateStore'])
+        ->middleware('throttle:user-update');
 
     Route::get('/admin/settings/loyalty', [SystemSettingController::class, 'showLoyalty']);
     Route::put('/admin/settings/loyalty', [SystemSettingController::class, 'updateLoyalty'])

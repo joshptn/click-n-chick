@@ -18,10 +18,12 @@ return new class extends Migration
             $table->string('order_number')->nullable()->unique();
             $table->string('order_type')->nullable();
             $table->dateTime('scheduled_for')->nullable();
+            $table->dateTime('pickup_at')->nullable();
             $table->decimal('total_price', 10, 2);
             $table->decimal('subtotal', 10, 2)->nullable();
             $table->decimal('discount_amount', 10, 2)->default(0);
             $table->decimal('delivery_fee', 10, 2)->default(0);
+            $table->decimal('delivery_distance_km', 6, 2)->nullable();
             $table->decimal('total_amount', 10, 2)->nullable();
             $table->string('status')->default('pending');
             $table->string('estimated_time_of_completion')->nullable();
@@ -33,6 +35,7 @@ return new class extends Migration
             $table->string('longitude')->nullable();
             $table->string('latitude')->nullable();
             $table->string('location')->nullable();
+            $table->string('delivery_note')->nullable();
             $table->timestamps();
         });
     }

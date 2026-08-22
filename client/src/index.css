@@ -76,3 +76,47 @@ body {
     scroll-behavior: auto;
   }
 }
+
+/* ------------------------------------------------------------------
+   Leaflet, restyled to the brand.
+
+   Leaflet's default marker is a PNG resolved by relative URL, which the
+   bundler rewrites and a strict CSP would refuse anyway. DeliveryMap
+   builds its pins from divIcons instead; these are their styles.
+   ------------------------------------------------------------------ */
+.cnc-pin {
+  background: none;
+  border: 0;
+}
+
+.cnc-pin__shape {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--color-brand-500);
+  border: 2.5px solid #fff;
+  box-shadow: 0 3px 10px -2px rgb(0 0 0 / 0.35);
+}
+
+.cnc-pin__shape--store {
+  width: 30px;
+  height: 30px;
+  background: #7c3aed;
+}
+
+/* The map lives inside a rounded card and sits under the sticky header. */
+.leaflet-container {
+  font-family: var(--font-display);
+  z-index: 0;
+}
+
+.leaflet-control-attribution {
+  font-size: 9px;
+  background: rgb(255 255 255 / 0.82);
+}
+
+.leaflet-control-attribution a {
+  color: var(--color-brand-700);
+}
