@@ -2,7 +2,6 @@
 
 return [
 
-
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),
     ],
@@ -59,6 +58,20 @@ return [
 
         'search_ttl' => (int) env('NOMINATIM_SEARCH_TTL', 86400),
         'reverse_ttl' => (int) env('NOMINATIM_REVERSE_TTL', 604800),
+    ],
+
+    'routing' => [
+        'driver' => env('ROUTING_DRIVER', 'openrouteservice'),
+
+        'openrouteservice' => [
+            'endpoint' => env('ORS_ENDPOINT', 'https://api.openrouteservice.org'),
+            'api_key' => env('ORS_API_KEY'),
+            'profile' => env('ORS_PROFILE', 'driving-car'),
+        ],
+        
+        'timeout' => (int) env('ROUTING_TIMEOUT', 6),
+        'connect_timeout' => (int) env('ROUTING_CONNECT_TIMEOUT', 3),
+        'cache_ttl' => (int) env('ROUTING_CACHE_TTL', 604800),
     ],
 
     'session_security' => [

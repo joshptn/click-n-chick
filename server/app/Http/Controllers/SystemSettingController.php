@@ -108,14 +108,6 @@ class SystemSettingController extends Controller
         return response()->json($this->storePayload());
     }
 
-    /**
-     * PUT /api/admin/settings/store — hours (UC-OPS-011), Store Manager only.
-     *
-     * Kept apart from the toggles below: hours are a standing policy decision,
-     * the toggles are an operational reaction to today. Store Agents need the
-     * second without being handed the first (BR-29's separation of governance
-     * from operations).
-     */
     public function updateStore(Request $request)
     {
         $validated = $request->validate([
@@ -136,13 +128,6 @@ class SystemSettingController extends Controller
         ] + $this->storePayload());
     }
 
-    /**
-     * PATCH /api/admin/store/toggles — UC-OPS-009 / UC-OPS-010.
-     *
-     * Both the Store Manager and the Store Agent may flip these (FR-07.3), so
-     * this route sits in the shared admin group rather than the manager-only
-     * one. Either field may be sent alone.
-     */
     public function updateStoreToggles(Request $request)
     {
         $validated = $request->validate([
@@ -265,18 +250,10 @@ class SystemSettingController extends Controller
                 'opens_at' => (string) config('store.hours.opens_at'),
                 'closes_at' => (string) config('store.hours.closes_at'),
             ],
-            'service_radius_km' => (float) config('store.service_radius_km'),
+            'max_driving_km' => (float) config('store.max_driving_km'),
         ] + $this->provenance(Setting::STORE_OPENS_AT);
     }
 
-    /**
-     * Who last changed a setting, and when.
-     *
-     * Takes one representative key for groups written together - they are
-     * always saved in the same request, so their provenance is identical.
-     *
-     * @return array<string, mixed>
-     */
     private function provenance(string $key): array
     {
         $setting = Setting::query()

@@ -14,8 +14,10 @@ use App\Services\Store\StoreAvailability;
 use App\Services\Verification\Channel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -31,10 +33,7 @@ class CheckoutDispatchTest extends TestCase
 
     private int $phoneSeq = 0;
 
-    /** Roughly 1.5 km from the store: inside the base-rate band. */
-    private const NEAR = ['latitude' => 14.9700, 120 => null, 'longitude' => 120.7600];
-
-    /** Metro Manila, ~55 km out: beyond the 45 km radius. */
+    /** Metro Manila: 46.7 km straight-line, so past the limit before routing. */
     private const FAR = ['latitude' => 14.5995, 'longitude' => 120.9842];
 
     protected function setUp(): void
@@ -49,6 +48,26 @@ class CheckoutDispatchTest extends TestCase
         // Eloquent's model events, which Setting's cache invalidation rides on
         // - several tests here change a setting and expect it to take effect.
         Event::fake([OrderBroadcast::class, NotificationBroadcast::class]);
+
+        // The routing cache is keyed by coordinate and outlives a single test
+        // in the array store, which would let one test's answer leak into the
+        // next one's assertions.
+        Cache::flush();
+
+        // phpunit.xml blanks the real key so nothing can reach the live API by
+        // accident. Tests that route need a key present to get as far as the
+        // faked HTTP layer.
+        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+    }
+
+    /** Answer every routing call with this many kilometres by road. */
+    private function fakeRouting(float $km): void
+    {
+        Http::fake([
+            'api.openrouteservice.org/*' => Http::response([
+                'routes' => [['summary' => ['distance' => $km, 'duration' => $km * 90]]],
+            ]),
+        ]);
     }
 
     protected function tearDown(): void
@@ -128,48 +147,77 @@ class CheckoutDispatchTest extends TestCase
 
     // -----------------------------------------------------------------
     // UC-DEL-004 / 005: service area and fee
+    //
+    // BR-12 is 45 km of DRIVING, so only the routing engine can decide who is
+    // servable. Haversine appears here in exactly one role - a free pre-filter
+    // that can refuse, never one that can approve or price.
     // -----------------------------------------------------------------
 
-    public function test_the_service_radius_is_forty_five_kilometres(): void
+    public function test_the_limit_is_forty_five_kilometres_of_driving(): void
     {
-        $this->assertSame(45.0, app(DeliveryQuote::class)->radiusKm());
+        $this->assertSame(45.0, app(DeliveryQuote::class)->maxDrivingKm());
     }
 
-    public function test_a_nearby_address_is_inside_the_service_area(): void
+    public function test_a_destination_past_the_limit_in_a_straight_line_is_refused_without_routing(): void
     {
-        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+        Http::fake();
 
-        $this->assertTrue($quote['within_service_area']);
-        $this->assertLessThan(5, $quote['distance_km']);
-    }
-
-    public function test_an_address_beyond_the_radius_is_refused_with_a_notice(): void
-    {
         $quote = app(DeliveryQuote::class)->for(self::FAR['latitude'], self::FAR['longitude']);
 
         $this->assertFalse($quote['within_service_area']);
-        $this->assertGreaterThan(45, $quote['distance_km']);
-        $this->assertNull($quote['fee'], 'There is no price for a delivery that will not happen.');
-        $this->assertStringContainsString('outside our', $quote['message']);
+        $this->assertNull($quote['fee']);
+        $this->assertGreaterThan(45, $quote['straight_line_km']);
+
+        // The whole point of the pre-filter: road distance can never be
+        // shorter than the straight line, so this refusal is already certain
+        // and must not spend a request against the daily quota.
+        Http::assertNothingSent();
     }
 
-    public function test_the_base_fee_covers_the_first_three_kilometres(): void
+    public function test_a_destination_within_straight_line_range_is_settled_by_the_router(): void
     {
-        $pricing = app(DeliveryQuote::class);
+        $this->fakeRouting(6.4);
 
-        $this->assertSame(55.0, $pricing->for(14.9700, 120.7600)['fee']);
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertTrue($quote['within_service_area']);
+        $this->assertSame(6.4, $quote['distance_km']);
+        Http::assertSentCount(1);
     }
 
-    public function test_the_fee_rises_by_the_increment_past_the_base_distance(): void
+    /**
+     * The case that only exists because the rule changed: close enough in a
+     * straight line, too far once the roads are followed.
+     */
+    public function test_a_destination_near_in_a_straight_line_but_far_by_road_is_refused(): void
     {
-        // ~9 km north of the store: 6 chargeable km past the 3 km base.
-        $quote = app(DeliveryQuote::class)->for(15.0396, 120.7584);
+        $this->fakeRouting(52.0);
 
-        $this->assertGreaterThan(55.0, $quote['fee']);
-        $this->assertSame(
-            round(55.0 + (ceil($quote['distance_km'] - 3) * 10.0), 2),
-            $quote['fee']
-        );
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertFalse($quote['within_service_area']);
+        $this->assertSame(52.0, $quote['distance_km']);
+        $this->assertNull($quote['fee']);
+        $this->assertStringContainsString('by road', $quote['message']);
+    }
+
+    public function test_the_fee_is_computed_from_driving_distance_not_straight_line(): void
+    {
+        // The pin is ~1.3 km away in a straight line; the road is 12 km.
+        $this->fakeRouting(12.0);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        // 3 km base + 9 chargeable km = 55 + 90.
+        $this->assertSame(145.0, $quote['fee']);
+        $this->assertLessThan(2, $quote['straight_line_km'], 'Straight-line would have charged the base fee alone.');
+    }
+
+    public function test_the_base_fee_covers_the_first_three_driving_kilometres(): void
+    {
+        $this->fakeRouting(2.8);
+
+        $this->assertSame(55.0, app(DeliveryQuote::class)->for(14.9700, 120.7600)['fee']);
     }
 
     public function test_the_fee_follows_the_store_managers_configuration(): void
@@ -177,19 +225,132 @@ class CheckoutDispatchTest extends TestCase
         Setting::put(Setting::DELIVERY_BASE_FEE, 80);
         Setting::put(Setting::DELIVERY_EXTRA_FEE_PER_KM, 25);
 
+        $this->fakeRouting(2.5);
+
         $this->assertSame(80.0, app(DeliveryQuote::class)->for(14.9700, 120.7600)['fee']);
+    }
+
+    // -----------------------------------------------------------------
+    // When the router cannot answer
+    // -----------------------------------------------------------------
+
+    public function test_a_routing_outage_is_reported_apart_from_being_out_of_range(): void
+    {
+        Http::fake(['api.openrouteservice.org/*' => Http::response('gateway timeout', 504)]);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertFalse($quote['within_service_area']);
+        $this->assertFalse($quote['routing_available']);
+        $this->assertNull($quote['distance_km'], 'No distance is better than the wrong distance.');
+        $this->assertNull($quote['fee']);
+    }
+
+    public function test_an_exhausted_quota_is_treated_as_an_outage(): void
+    {
+        Http::fake(['api.openrouteservice.org/*' => Http::response('quota exceeded', 429)]);
+
+        $this->assertFalse(app(DeliveryQuote::class)->for(14.9700, 120.7600)['routing_available']);
+    }
+
+    /**
+     * A sanity check, not a correction.
+     *
+     * Driving distance shorter than the straight line is physically
+     * impossible - swapped coordinates, a units mix-up. The route is rejected
+     * rather than clamped, because clamping would quietly promote the
+     * straight-line figure into the authoritative distance.
+     */
+    public function test_an_impossible_route_shorter_than_the_straight_line_is_rejected(): void
+    {
+        // Hagonoy is ~14 km away in a straight line; 3 km by road cannot be.
+        $this->fakeRouting(3.0);
+
+        $quote = app(DeliveryQuote::class)->for(14.8339, 120.7325);
+
+        $this->assertFalse($quote['routing_available']);
+        $this->assertNull($quote['distance_km']);
+        $this->assertNull($quote['fee'], 'A fee must never be derived from the straight-line fallback.');
+    }
+
+    /**
+     * The other side of that check, and the reason it has a tolerance.
+     *
+     * A router snaps both endpoints to the nearest road before measuring, so
+     * over short distances the routed figure can legitimately come in under
+     * the straight line. Observed live: a pin 405 m from the shop routed as
+     * 360 m. Rejecting that would make deliveries to the neighbouring street
+     * impossible.
+     */
+    public function test_a_short_route_slightly_under_the_straight_line_is_accepted(): void
+    {
+        // ~0.4 km away in a straight line, routed at 0.36 km after snapping.
+        $this->fakeRouting(0.36);
+
+        $quote = app(DeliveryQuote::class)->for(14.9624, 120.7584);
+
+        $this->assertTrue($quote['routing_available']);
+        $this->assertTrue($quote['within_service_area']);
+        $this->assertSame(0.36, $quote['distance_km']);
+        $this->assertSame(55.0, $quote['fee']);
+    }
+
+    public function test_a_missing_api_key_reads_as_an_outage_not_a_refusal(): void
+    {
+        config()->set('services.routing.openrouteservice.api_key', null);
+        Http::fake();
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertFalse($quote['routing_available']);
+        Http::assertNothingSent();
+    }
+
+    // -----------------------------------------------------------------
+    // Quota discipline
+    // -----------------------------------------------------------------
+
+    public function test_the_same_destination_is_only_routed_once(): void
+    {
+        $this->fakeRouting(6.4);
+
+        $quote = app(DeliveryQuote::class);
+        $quote->for(14.9700, 120.7600);
+        $quote->for(14.9700, 120.7600);
+        // Eight metres away: the same doorway, and the same cache entry.
+        $quote->for(14.97001, 120.76003);
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_the_router_is_asked_for_longitude_latitude_in_that_order(): void
+    {
+        $this->fakeRouting(6.4);
+
+        app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        // ORS reverses the usual pair. Getting it wrong routes to a different
+        // continent and still returns 200.
+        Http::assertSent(function ($request) {
+            $sent = $request->data()['coordinates'][1] ?? [];
+
+            return $sent === [120.76, 14.97];
+        });
     }
 
     public function test_the_delivery_quote_endpoint_prices_a_pin(): void
     {
         [$user] = $this->customerWithCart();
 
+        $this->fakeRouting(2.5);
+
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/delivery/quote', ['latitude' => 14.9700, 'longitude' => 120.7600])
             ->assertOk()
             ->assertJsonPath('within_service_area', true)
             ->assertJsonPath('fee', 55)
-            ->assertJsonStructure(['distance_km', 'radius_km', 'origin', 'pricing']);
+            ->assertJsonPath('distance_km', 2.5)
+            ->assertJsonStructure(['distance_km', 'straight_line_km', 'max_driving_km', 'origin', 'pricing']);
     }
 
     public function test_the_delivery_quote_endpoint_requires_a_session(): void
@@ -219,6 +380,8 @@ class CheckoutDispatchTest extends TestCase
     {
         [$user] = $this->customerWithCart();
 
+        $this->fakeRouting(2.5);
+
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/checkout/quote', $this->deliveryBody())
             ->assertOk()
@@ -226,6 +389,26 @@ class CheckoutDispatchTest extends TestCase
             ->assertJsonPath('subtotal', 350)
             ->assertJsonPath('delivery_fee', 55)
             ->assertJsonPath('total', 405);
+    }
+
+    public function test_a_routing_outage_blocks_delivery_but_leaves_pickup_alone(): void
+    {
+        [$user] = $this->customerWithCart();
+
+        Http::fake(['api.openrouteservice.org/*' => Http::response('down', 503)]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/checkout/quote', $this->deliveryBody())
+            ->assertOk()
+            ->assertJsonPath('can_place', false)
+            ->assertJsonPath('blockers.0.code', 'ROUTING_UNAVAILABLE');
+
+        // Which is exactly how the shop already operates during a surge:
+        // delivery off, pickup carries on.
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/checkout/quote', $this->pickupBody())
+            ->assertOk()
+            ->assertJsonPath('can_place', true);
     }
 
     /** BR-25: the customer checks out a subset, and is priced on that subset. */
@@ -271,9 +454,11 @@ class CheckoutDispatchTest extends TestCase
             ->assertJsonPath('blockers.0.code', 'LOCATION_REQUIRED');
     }
 
-    public function test_a_delivery_outside_the_radius_is_blocked(): void
+    public function test_a_delivery_beyond_the_limit_is_blocked(): void
     {
         [$user] = $this->customerWithCart();
+
+        Http::fake();
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/checkout/quote', $this->deliveryBody(self::FAR))
@@ -281,6 +466,8 @@ class CheckoutDispatchTest extends TestCase
             ->assertJsonPath('can_place', false)
             ->assertJsonPath('blockers.0.code', 'OUTSIDE_SERVICE_AREA')
             ->assertJsonPath('delivery_fee', 0);
+
+        Http::assertNothingSent();
     }
 
     public function test_a_pickup_without_a_time_is_blocked(): void
@@ -336,6 +523,7 @@ class CheckoutDispatchTest extends TestCase
         [$user] = $this->customerWithCart();
 
         Setting::put(Setting::STORE_DELIVERY_ENABLED, false);
+        $this->fakeRouting(2.5);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/checkout/quote', $this->deliveryBody())
@@ -414,6 +602,8 @@ class CheckoutDispatchTest extends TestCase
             'location' => 'Apalit',
         ]);
 
+        $this->fakeRouting(2.5);
+
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/checkout/quote', [
                 'fulfilment_type' => 'delivery',
@@ -491,9 +681,11 @@ class CheckoutDispatchTest extends TestCase
         $this->assertNull($order->latitude, 'A pickup order has no delivery destination.');
     }
 
-    public function test_placing_a_delivery_order_snapshots_the_destination_and_distance(): void
+    public function test_placing_a_delivery_order_snapshots_the_driving_distance(): void
     {
         [$user] = $this->customerWithCart();
+
+        $this->fakeRouting(7.4);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->deliveryBody())
@@ -502,10 +694,13 @@ class CheckoutDispatchTest extends TestCase
         $order = Order::firstOrFail();
 
         $this->assertSame('delivery', $order->order_type);
-        $this->assertSame('55.00', $order->delivery_fee);
-        $this->assertSame('405.00', $order->total_amount);
+        // 3 km base + 5 chargeable km.
+        $this->assertSame('105.00', $order->delivery_fee);
+        $this->assertSame('455.00', $order->total_amount);
         $this->assertSame('ADD Street, Apalit', $order->full_address);
-        $this->assertNotNull($order->delivery_distance_km);
+        // The routed figure, snapshotted - so a later map update or a change
+        // of routing provider cannot rewrite what this order was charged.
+        $this->assertSame('7.40', $order->delivery_distance_km);
         $this->assertNull($order->pickup_at);
     }
 
@@ -514,20 +709,28 @@ class CheckoutDispatchTest extends TestCase
     {
         [$user] = $this->customerWithCart();
 
+        $this->fakeRouting(2.5);
+
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->deliveryBody([
                 'total_price' => 1,
                 'delivery_fee' => 0,
                 'subtotal' => 1,
+                // Nor a distance - the only distance that counts is the one
+                // the router returned.
+                'delivery_distance_km' => 0.1,
             ]))
             ->assertCreated();
 
         $this->assertSame('405.00', Order::firstOrFail()->total_amount);
+        $this->assertSame('2.50', Order::firstOrFail()->delivery_distance_km);
     }
 
-    public function test_placing_an_order_outside_the_service_area_is_refused(): void
+    public function test_placing_an_order_beyond_the_driving_limit_is_refused(): void
     {
         [$user] = $this->customerWithCart();
+
+        Http::fake();
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->deliveryBody(self::FAR))
@@ -535,6 +738,20 @@ class CheckoutDispatchTest extends TestCase
             ->assertJsonPath('error_code', 'OUTSIDE_SERVICE_AREA');
 
         $this->assertSame(0, Order::count());
+    }
+
+    public function test_an_order_cannot_be_placed_while_routing_is_unavailable(): void
+    {
+        [$user] = $this->customerWithCart();
+
+        Http::fake(['api.openrouteservice.org/*' => Http::response('down', 503)]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/order/place', $this->deliveryBody())
+            ->assertStatus(409)
+            ->assertJsonPath('error_code', 'ROUTING_UNAVAILABLE');
+
+        $this->assertSame(0, Order::count(), 'An unpriceable delivery must never be written.');
     }
 
     public function test_placing_an_order_while_closed_is_refused(): void

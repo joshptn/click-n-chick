@@ -5,23 +5,6 @@ import { IconCurrentLocation } from "@tabler/icons-react";
 
 import "leaflet/dist/leaflet.css";
 
-/**
- * The delivery location picker (UC-DEL-003).
- *
- * OpenStreetMap tiles through Leaflet. No geocoding happens in here - the map
- * reports a coordinate and the parent asks the server what it means, which
- * keeps every Nominatim call on one path with one debounce and one cache.
- *
- * The service-area circle is drawn from the radius the server reported, not a
- * constant, so raising the radius in config moves the ring without a frontend
- * change.
- */
-
-/**
- * Leaflet's default marker resolves its icons by relative URL, which a bundler
- * rewrites and a strict CSP would block anyway. Inline SVG sidesteps both and
- * lets the pin match the brand palette.
- */
 const pinIcon = L.divIcon({
   className: "cnc-pin",
   html: `
@@ -62,13 +45,6 @@ function ClickToPin({ onPick, disabled }) {
   return null;
 }
 
-/**
- * Keeps the viewport on the selected point.
- *
- * Only pans when the point moves somewhere the current view does not already
- * show, so dragging the pin a few metres does not yank the map out from under
- * the customer's finger.
- */
 function FollowSelection({ position }) {
   const map = useMap();
 
@@ -85,7 +61,6 @@ function FollowSelection({ position }) {
   return null;
 }
 
-/** Leaflet mis-sizes itself when it mounts inside anything that was hidden. */
 function InvalidateOnMount() {
   const map = useMap();
 
@@ -116,7 +91,7 @@ function RecentreControl({ onLocate, isLocating, disabled }) {
 function DeliveryMap({
   selected,
   origin,
-  radiusKm,
+  maxDrivingKm,
   withinServiceArea = true,
   localityLabel,
   onPick,
@@ -165,16 +140,16 @@ function DeliveryMap({
 
         {originPosition && <Marker position={originPosition} icon={storeIcon} interactive={false} />}
 
-        {originPosition && radiusKm > 0 && (
+        {originPosition && maxDrivingKm > 0 && (
           <Circle
             center={originPosition}
-            radius={radiusKm * 1000}
+            radius={maxDrivingKm * 1000}
             pathOptions={{
               color: "#ff8b2b",
               weight: 1.2,
-              opacity: 0.55,
-              fillColor: "#ff8b2b",
-              fillOpacity: 0.05,
+              opacity: 0.45,
+              dashArray: "6 6",
+              fill: false,
             }}
             interactive={false}
           />

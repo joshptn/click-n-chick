@@ -108,22 +108,12 @@ function DispatchStep({
   useEffect(() => () => reverseAbort.current?.abort(), []);
 
   const deliveryQuote = quote?.delivery ?? null;
-  const radiusKm = deliveryQuote?.radius_km ?? storeStatus?.service_radius_km ?? 45;
+  const maxDrivingKm = deliveryQuote?.max_driving_km ?? storeStatus?.max_driving_km ?? 45;
   const origin = deliveryQuote?.origin ?? null;
 
-  /*
-   * Two classes of blocker, shown at different moments.
-   *
-   * Conditions about the world - the store is shut, that pin is too far -
-   * are shown immediately: the customer needs to know before they fill
-   * anything in, and none of them read as an accusation.
-   *
-   * Complaints about a field the customer has not reached yet do not. A form
-   * that opens already scolding you for the blank time field you were about
-   * to fill is hostile, so those wait until Continue is pressed.
-   */
   const storeBlocker = blockerFor(quote, "STORE_CLOSED", "STORE_CLOSED_MANUALLY", "DELIVERY_UNAVAILABLE");
   const areaBlocker = blockerFor(quote, "OUTSIDE_SERVICE_AREA");
+  const routingBlocker = blockerFor(quote, "ROUTING_UNAVAILABLE");
 
   const whenSubmitted = (blocker) => (showFieldErrors ? blocker : null);
 
@@ -139,14 +129,6 @@ function DispatchStep({
   const phoneBlocker = whenSubmitted(blockerFor(quote, "CONTACT_PHONE_INVALID"));
   const nameBlocker = whenSubmitted(blockerFor(quote, "CONTACT_NAME_REQUIRED"));
 
-  /**
-   * Adopt a coordinate, then ask the server what it is called.
-   *
-   * The pin is applied immediately so the map never lags behind the tap; the
-   * label arrives a moment later. A failed lookup leaves the coordinate in
-   * place - it is what the order is actually placed against, and the customer
-   * can type the address themselves.
-   */
   const adoptPoint = useCallback(
     async ({ latitude, longitude }, { label, fullAddress, locality, addressId = null } = {}) => {
       onChange({
@@ -183,7 +165,6 @@ function DispatchStep({
         });
       } catch (caught) {
         if (caught.name !== "AbortError") {
-          // Not surfaced: the pin is set and priced, only its name is missing.
           setLocateError(null);
         }
       } finally {
@@ -193,7 +174,6 @@ function DispatchStep({
     [onChange]
   );
 
-  /** UC-DEL-001. Permission denial is a normal answer, not a failure. */
   const useMyLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setLocateError("This browser cannot share your location. Search or tap the map instead.");
@@ -302,7 +282,7 @@ function DispatchStep({
                 <DeliveryMap
                   selected={value.destination}
                   origin={origin}
-                  radiusKm={radiusKm}
+                  maxDrivingKm={maxDrivingKm}
                   withinServiceArea={deliveryQuote ? deliveryQuote.within_service_area : true}
                   localityLabel={value.destination?.locality}
                   onPick={(point) => adoptPoint(point)}
@@ -313,6 +293,8 @@ function DispatchStep({
               </div>
 
               {locateError && <Notice tone="info">{locateError}</Notice>}
+
+              {routingBlocker && <Notice tone="warning">{routingBlocker.message}</Notice>}
 
               {savedWithCoordinates.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -367,18 +349,20 @@ function DispatchStep({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 font-display text-[12px] text-[#6f6b68]">
                     <IconBike size={14} stroke={1.9} aria-hidden="true" />
-                    Distance from restaurant: {deliveryQuote.distance_km} km
+                    {deliveryQuote.distance_km !== null
+                      ? `Driving distance: ${deliveryQuote.distance_km} km`
+                      : "Driving distance unavailable"}
                   </span>
 
                   {deliveryQuote.within_service_area ? (
                     <span className="rounded-full bg-[#fff4e8] px-3 py-1 font-display text-[11.5px] font-bold text-brand-700">
                       Delivery Fee: {formatPeso(deliveryQuote.fee)}
                     </span>
-                  ) : (
+                  ) : deliveryQuote.routing_available ? (
                     <span className="rounded-full bg-[#fff1f1] px-3 py-1 font-display text-[11.5px] font-bold text-[#c92a2a]">
-                      Outside the {radiusKm} km area
+                      Beyond {maxDrivingKm} km by road
                     </span>
-                  )}
+                  ) : null}
                 </div>
               )}
             </>
@@ -465,11 +449,6 @@ function DispatchStep({
         <Button variant="ghost" size="lg" onClick={onBack} className="border border-[#ece7e0] text-[#6f6b68] sm:w-[210px]">
           Back
         </Button>
-
-        {/* Deliberately not disabled while the form is incomplete. A dead
-            button explains nothing; pressing it is what reveals which field
-            is missing. It only greys out for conditions no amount of typing
-            can fix - a closed store, an undeliverable pin. */}
         <Button
           size="lg"
           fullWidth

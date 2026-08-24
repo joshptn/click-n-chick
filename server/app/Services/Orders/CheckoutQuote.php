@@ -11,18 +11,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Throwable;
 
-/**
- * One authoritative answer to "can this order be placed, and for how much".
- *
- * Both the checkout screen and place-order run through here, which is the
- * point: the figures the customer agrees to and the figures the order is
- * written with come from the same code, so they cannot disagree. The client
- * sends a *selection* and a *destination*, never a price.
- *
- * Every gate is reported rather than thrown, so the UI can show all of them at
- * once - a closed store and an out-of-area pin are two separate things to fix,
- * and discovering them one refresh at a time is miserable.
- */
 class CheckoutQuote
 {
     public function __construct(
@@ -110,28 +98,12 @@ class CheckoutQuote
             'delivery_fee' => round($deliveryFee, 2),
             'pickup' => $pickup,
             'discount' => $discount,
-            // Statutory discount applies to food only, never the delivery fee
-            // (BR-10 / FR-05.4), so it is subtracted from the subtotal before
-            // the fee is added rather than from the grand total.
             'total' => round(max(0, $subtotal - (float) $discount['amount']) + $deliveryFee, 2),
             'blockers' => $blockers,
             'can_place' => $blockers === [],
         ];
     }
 
-    /**
-     * The selected cart lines, priced live.
-     *
-     * A null selection means the whole cart. Ids that are not in this user's
-     * cart are silently dropped rather than 403'd - the usual cause is a line
-     * removed in another tab, and the empty-selection blocker already covers
-     * the case where nothing survives.
-     *
-     * Prices are read from the catalogue every time, never from a stashed
-     * figure: carts float to the current price (BR-18 / FR-02.5).
-     *
-     * @return Collection<int, array<string, mixed>>
-     */
     public function lines(User $user, ?array $ids): Collection
     {
         $cart = Cart::query()
@@ -182,17 +154,6 @@ class CheckoutQuote
         });
     }
 
-    /**
-     * Where the order is going, from whichever source the customer used.
-     *
-     * A saved address wins over loose coordinates when both arrive: picking a
-     * saved address is an explicit choice, while stale coordinates in the body
-     * are usually just the previous pin the form has not cleared yet. Saved
-     * addresses are looked up through the user's own relation, so an id
-     * belonging to someone else resolves to nothing rather than to their home.
-     *
-     * @return array<string, mixed>
-     */
     private function destination(User $user, array $input): array
     {
         $addressId = $input['address_id'] ?? null;
@@ -233,9 +194,6 @@ class CheckoutQuote
         ];
     }
 
-    /**
-     * @return array{0: array<string, mixed>|null, 1: float, 2: array<string, string>|null}
-     */
     private function deliveryLeg(array $destination): array
     {
         $latitude = $destination['latitude'] ?? null;
@@ -252,7 +210,7 @@ class CheckoutQuote
 
         if (! $quote['within_service_area']) {
             return [$quote, 0.0, [
-                'code' => 'OUTSIDE_SERVICE_AREA',
+                'code' => $quote['routing_available'] ? 'OUTSIDE_SERVICE_AREA' : 'ROUTING_UNAVAILABLE',
                 'message' => $quote['message'],
             ]];
         }
@@ -260,9 +218,6 @@ class CheckoutQuote
         return [$quote, (float) $quote['fee'], null];
     }
 
-    /**
-     * @return array{0: array<string, mixed>|null, 1: array<string, string>|null}
-     */
     private function pickupLeg(array $input): array
     {
         $window = $this->store->pickupWindow();
@@ -311,30 +266,12 @@ class CheckoutQuote
         return [$payload, null];
     }
 
-    /**
-     * Who the store calls when the food is ready.
-     *
-     * Resolved, not stored: what the customer typed on this screen, falling
-     * back to the account. An authenticated order already reaches both through
-     * `user_id`, so there is nothing here worth a column of its own - and a
-     * per-order contact that drifts from the profile is a second copy of the
-     * same fact.
-     *
-     * @return array{name: string, phone: string, blocker: array<string, string>|null}
-     */
     private function contact(User $user, string $type, array $input): array
     {
         $typed = trim((string) ($input['contact_name'] ?? ''));
         $fromAccount = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
 
         $name = $typed !== '' ? $typed : $fromAccount;
-
-        /*
-         * The account is a fallback for a *blank* field, not a repair for a
-         * wrong one. Someone who typed a number meant to be reached on it -
-         * quietly substituting their profile number would send the rider to
-         * ring the wrong phone, and they would never find out why.
-         */
         $typedPhone = trim((string) ($input['contact_phone'] ?? ''));
 
         $phone = $typedPhone !== ''
@@ -360,13 +297,6 @@ class CheckoutQuote
         return ['name' => trim($name), 'phone' => $phone, 'blocker' => $blocker];
     }
 
-    /**
-     * A Philippine mobile number, or null if it is not one.
-     *
-     * Accepts the three ways people type the same number - 09XXXXXXXXX,
-     * +639XXXXXXXXX, 639XXXXXXXXX - with spaces or dashes anywhere, and
-     * normalises to the 09 form the store actually dials.
-     */
     private function normalizePhone(mixed $raw): ?string
     {
         $digits = preg_replace('/[\s\-()]/', '', (string) $raw);
@@ -382,16 +312,6 @@ class CheckoutQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    /**
-     * Statutory discount standing for this account.
-     *
-     * Reported, not applied. Claiming it is the customer's explicit act in the
-     * next checkout step (BR-09 is once per day, so it must not be spent
-     * silently). This block tells that step what it is allowed to offer, and
-     * lets the summary render the row without guessing the rate.
-     *
-     * @return array<string, mixed>
-     */
     private function discount(User $user, float $subtotal): array
     {
         $claim = Discount::activeFor((int) $user->getKey());
@@ -405,18 +325,12 @@ class CheckoutQuote
             'type_label' => $approved ? $claim->typeLabel() : null,
             'percentage' => $percentage,
             'used_today' => $approved ? $this->usedToday($user) : false,
-            // What claiming it would be worth, so the next step can show the
-            // figure before the customer commits to spending the day's use.
             'available_amount' => $approved ? round($subtotal * ($percentage / 100), 2) : 0.0,
             'applied' => false,
             'amount' => 0.0,
         ];
     }
 
-    /**
-     * BR-09: once per calendar day, Asia/Manila, regardless of how that order
-     * ended - a cancelled discounted order still spends the day.
-     */
     private function usedToday(User $user): bool
     {
         $today = CarbonImmutable::now(Discount::USAGE_TIMEZONE);

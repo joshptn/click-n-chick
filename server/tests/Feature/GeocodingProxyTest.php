@@ -199,7 +199,7 @@ class GeocodingProxyTest extends TestCase
     // The shape the client actually consumes
     // -----------------------------------------------------------------
 
-    public function test_results_are_reduced_and_carry_the_service_area_verdict(): void
+    public function test_results_are_reduced_and_carry_a_straight_line_estimate(): void
     {
         Http::fake(['*' => Http::response($this->fakeSearchResults())]);
 
@@ -208,14 +208,39 @@ class GeocodingProxyTest extends TestCase
             ->assertOk()
             ->assertJsonPath('results.0.label', 'ADD Street, Apalit')
             ->assertJsonPath('results.0.latitude', 14.97)
-            ->assertJsonPath('results.0.within_service_area', true)
-            ->assertJsonPath('results.0.delivery_fee', 55)
+            ->assertJsonPath('results.0.possibly_in_range', true)
+            // Straight-line only. A result row cannot promise a driving
+            // distance without routing every candidate, so it does not try.
+            ->assertJsonPath('results.0.straight_line_km', 1.26)
+            ->assertJsonMissingPath('results.0.delivery_fee')
+            ->assertJsonMissingPath('results.0.within_service_area')
             // Nominatim's own shape must not leak through; swapping to a
             // self-hosted instance should not be a frontend change.
             ->assertJsonMissingPath('results.0.display_name');
     }
 
-    public function test_a_result_beyond_the_radius_is_listed_but_marked_unservable(): void
+    /**
+     * The quota rule for search: several candidates, none of them routed.
+     *
+     * Routing every result would spend a handful of the day's requests
+     * answering a question the customer has not asked - which of these did
+     * they mean.
+     */
+    public function test_search_results_never_spend_a_routing_request(): void
+    {
+        Http::fake([
+            'nominatim.openstreetmap.org/*' => Http::response($this->fakeSearchResults()),
+            'api.openrouteservice.org/*' => Http::response(['routes' => [['summary' => ['distance' => 5]]]]),
+        ]);
+
+        $this->actingAs($this->customer(), 'sanctum')
+            ->getJson('/api/geocode/search?q=apalit')
+            ->assertOk();
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouteservice'));
+    }
+
+    public function test_a_result_beyond_the_limit_is_listed_but_marked_out_of_range(): void
     {
         Http::fake(['*' => Http::response([[
             'place_id' => 9,
@@ -226,11 +251,13 @@ class GeocodingProxyTest extends TestCase
             'address' => ['city' => 'Manila'],
         ]])]);
 
+        // 46.7 km in a straight line already exceeds the 45 km driving limit,
+        // and road distance is never shorter - so this "no" is certain even
+        // though nothing was routed.
         $this->actingAs($this->customer(), 'sanctum')
             ->getJson('/api/geocode/search?q=manila+city+hall')
             ->assertOk()
-            ->assertJsonPath('results.0.within_service_area', false)
-            ->assertJsonPath('results.0.delivery_fee', null);
+            ->assertJsonPath('results.0.possibly_in_range', false);
     }
 
     /**
@@ -245,7 +272,7 @@ class GeocodingProxyTest extends TestCase
             ->getJson('/api/geocode/reverse?latitude=14.97&longitude=120.76')
             ->assertOk()
             ->assertJsonPath('result.latitude', 14.97)
-            ->assertJsonPath('result.within_service_area', true);
+            ->assertJsonPath('result.possibly_in_range', true);
     }
 
     // -----------------------------------------------------------------
@@ -296,17 +323,29 @@ class GeocodingProxyTest extends TestCase
             ->assertJsonCount(1, 'results');
     }
 
-    /** The pin path must keep working when the geocoder does not. */
+    /**
+     * Pricing a pin needs the router, not the geocoder.
+     *
+     * These are two independent services and only one of them is on the
+     * critical path for a fee. Nominatim being down costs the customer a
+     * street name, not a delivery.
+     */
     public function test_pricing_a_pin_does_not_touch_the_geocoder(): void
     {
-        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('down'));
+        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+
+        Http::fake([
+            'nominatim.openstreetmap.org/*' => fn () => throw new \Illuminate\Http\Client\ConnectionException('down'),
+            'api.openrouteservice.org/*' => Http::response(['routes' => [['summary' => ['distance' => 2.4]]]]),
+        ]);
 
         $this->actingAs($this->customer(), 'sanctum')
             ->postJson('/api/delivery/quote', ['latitude' => 14.97, 'longitude' => 120.76])
             ->assertOk()
-            ->assertJsonPath('within_service_area', true);
+            ->assertJsonPath('within_service_area', true)
+            ->assertJsonPath('distance_km', 2.4);
 
-        Http::assertNothingSent();
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'nominatim'));
     }
 
     public function test_the_client_reduces_a_place_without_throwing_on_missing_fields(): void

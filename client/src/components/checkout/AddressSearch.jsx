@@ -3,22 +3,6 @@ import { IconAlertCircle, IconLoader2, IconMapPin, IconSearch, IconX } from "@ta
 
 import { searchAddress } from "../../lib/checkout";
 
-/**
- * Type-ahead address search (UC-DEL-002).
- *
- * Debounced at 450ms, which is longer than the menu search deliberately. Every
- * uncached keystroke here costs a request against Nominatim's shared public
- * budget of roughly one per second for the whole application (PRD C-02), so
- * the cost of an eager search is borne by every other customer checking out,
- * not just this one.
- *
- * Three further guards on top of the debounce:
- *   - a three-character floor, matching the server's;
- *   - the previous request is aborted when a new one starts, so a slow
- *     response cannot land after a newer one and overwrite it;
- *   - the service is allowed to be down. A 503 here is not an error state,
- *     it is a nudge toward the map, which needs no geocoder at all.
- */
 const DEBOUNCE_MS = 450;
 const MIN_QUERY = 3;
 
@@ -158,7 +142,7 @@ function AddressSearch({ onSelect, disabled = false }) {
                     size={16}
                     stroke={1.9}
                     aria-hidden="true"
-                    className={`mt-0.5 shrink-0 ${place.within_service_area ? "text-brand-500" : "text-[#c9c2b8]"}`}
+                    className={`mt-0.5 shrink-0 ${place.possibly_in_range ? "text-brand-500" : "text-[#c9c2b8]"}`}
                   />
 
                   <span className="min-w-0 flex-1">
@@ -169,13 +153,12 @@ function AddressSearch({ onSelect, disabled = false }) {
                       {place.full_address}
                     </span>
                   </span>
-
                   <span
                     className={`shrink-0 whitespace-nowrap font-display text-[11px] font-bold ${
-                      place.within_service_area ? "text-[#2f9e44]" : "text-[#e5322d]"
+                      place.possibly_in_range ? "text-[#8d8884]" : "text-[#e5322d]"
                     }`}
                   >
-                    {place.within_service_area ? `${place.distance_km} km` : "Too far"}
+                    {place.possibly_in_range ? `~${place.straight_line_km} km` : "Too far"}
                   </span>
                 </button>
               </li>
