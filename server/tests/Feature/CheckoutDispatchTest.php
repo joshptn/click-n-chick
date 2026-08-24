@@ -60,13 +60,25 @@ class CheckoutDispatchTest extends TestCase
         config()->set('services.routing.openrouteservice.api_key', 'test-key');
     }
 
-    /** Answer every routing call with this many kilometres by road. */
-    private function fakeRouting(float $km): void
+    /**
+     * Answer every routing call with this many kilometres by road.
+     *
+     * `$geometry` mirrors what ORS actually sends - an encoded polyline
+     * alongside the summary - so the geometry path is exercised by default
+     * rather than only where a test names it. Pass false for the case where a
+     * provider returns a distance with no drawable shape.
+     */
+    private function fakeRouting(float $km, bool $geometry = true): void
     {
+        $route = ['summary' => ['distance' => $km, 'duration' => $km * 90]];
+
+        if ($geometry) {
+            // Google's reference vector: three real, decodable points.
+            $route['geometry'] = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
+        }
+
         Http::fake([
-            'api.openrouteservice.org/*' => Http::response([
-                'routes' => [['summary' => ['distance' => $km, 'duration' => $km * 90]]],
-            ]),
+            'api.openrouteservice.org/*' => Http::response(['routes' => [$route]]),
         ]);
     }
 
@@ -246,6 +258,53 @@ class CheckoutDispatchTest extends TestCase
         $this->assertNull($quote['fee']);
     }
 
+    /**
+     * ORS answering "there is no road there" is not an outage.
+     *
+     * It returns 404 for a destination it cannot reach - a pin in the
+     * fishponds, which around Apalit takes one careless tap. Retrying is
+     * useless advice; moving the pin is the fix, so the two are reported
+     * apart.
+     */
+    public function test_an_unreachable_pin_is_reported_apart_from_an_outage(): void
+    {
+        Http::fake(['api.openrouteservice.org/*' => Http::response(
+            ['error' => ['code' => 2010, 'message' => 'Could not find routable point']],
+            404
+        )]);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertFalse($quote['within_service_area']);
+        $this->assertTrue($quote['routing_available'], 'The service answered; it just had no road.');
+        $this->assertFalse($quote['route_found']);
+        $this->assertStringContainsString('Move the pin', $quote['message']);
+    }
+
+    public function test_an_unreachable_pin_blocks_checkout_with_its_own_code(): void
+    {
+        [$user] = $this->customerWithCart();
+
+        Http::fake(['api.openrouteservice.org/*' => Http::response([], 404)]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/checkout/quote', $this->deliveryBody())
+            ->assertOk()
+            ->assertJsonPath('can_place', false)
+            ->assertJsonPath('blockers.0.code', 'NO_ROUTE_FOUND');
+    }
+
+    /** A 200 carrying no route means the same thing as the 404. */
+    public function test_an_empty_route_response_is_also_a_missing_route(): void
+    {
+        Http::fake(['api.openrouteservice.org/*' => Http::response(['routes' => []])]);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertTrue($quote['routing_available']);
+        $this->assertFalse($quote['route_found']);
+    }
+
     public function test_an_exhausted_quota_is_treated_as_an_outage(): void
     {
         Http::fake(['api.openrouteservice.org/*' => Http::response('quota exceeded', 429)]);
@@ -304,6 +363,74 @@ class CheckoutDispatchTest extends TestCase
 
         $this->assertFalse($quote['routing_available']);
         Http::assertNothingSent();
+    }
+
+    // -----------------------------------------------------------------
+    // The drawn route (decoration, never load-bearing)
+    // -----------------------------------------------------------------
+
+    public function test_a_quote_carries_the_route_line_as_coordinates(): void
+    {
+        $this->fakeRouting(6.4);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        // Decoded server-side, so the client never sees the provider's
+        // encoding - the same reason Nominatim's shape is stripped from
+        // search results.
+        $this->assertSame([
+            [38.5, -120.2],
+            [40.7, -120.95],
+            [43.252, -126.453],
+        ], $quote['geometry']);
+    }
+
+    public function test_a_route_without_a_drawable_shape_is_still_a_valid_delivery(): void
+    {
+        $this->fakeRouting(6.4, geometry: false);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertTrue($quote['within_service_area']);
+        $this->assertSame(6.4, $quote['distance_km']);
+        // 3 km base, then ceil(3.4) = 4 chargeable km.
+        $this->assertSame(95.0, $quote['fee']);
+        $this->assertNull($quote['geometry'], 'A missing line costs a drawing, never an order.');
+    }
+
+    /** Seeing the road it would have taken is what makes a refusal legible. */
+    public function test_an_out_of_range_route_still_carries_its_line(): void
+    {
+        $this->fakeRouting(52.0);
+
+        $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
+
+        $this->assertFalse($quote['within_service_area']);
+        $this->assertNotNull($quote['geometry']);
+    }
+
+    public function test_the_pre_filter_refusal_carries_no_line(): void
+    {
+        Http::fake();
+
+        $quote = app(DeliveryQuote::class)->for(self::FAR['latitude'], self::FAR['longitude']);
+
+        // Nothing was routed, so there is no road to draw.
+        $this->assertNull($quote['geometry']);
+        Http::assertNothingSent();
+    }
+
+    public function test_the_route_line_is_cached_with_its_distance(): void
+    {
+        $this->fakeRouting(6.4);
+
+        $quote = app(DeliveryQuote::class);
+        $first = $quote->for(14.9700, 120.7600);
+        $second = $quote->for(14.9700, 120.7600);
+
+        $this->assertSame($first['geometry'], $second['geometry']);
+        // One request bought both the distance and the shape.
+        Http::assertSentCount(1);
     }
 
     // -----------------------------------------------------------------

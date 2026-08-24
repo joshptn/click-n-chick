@@ -20,13 +20,6 @@ import Input from "../ui/Input";
 import { FULFILMENT, blockerFor, reverseGeocode } from "../../lib/checkout";
 import { formatPeso } from "../../lib/menu";
 
-/**
- * Step 1 of checkout: how the order gets to the customer (UC-ORD-002/003/004).
- *
- * Owns no money. Every figure shown here - distance, delivery fee, whether the
- * address is servable - is read off the server's quote, so the customer cannot
- * be shown one price and charged another.
- */
 
 const TYPES = [
   { id: FULFILMENT.DELIVERY, label: "Delivery", icon: IconBike },
@@ -114,6 +107,7 @@ function DispatchStep({
   const storeBlocker = blockerFor(quote, "STORE_CLOSED", "STORE_CLOSED_MANUALLY", "DELIVERY_UNAVAILABLE");
   const areaBlocker = blockerFor(quote, "OUTSIDE_SERVICE_AREA");
   const routingBlocker = blockerFor(quote, "ROUTING_UNAVAILABLE");
+  const noRouteBlocker = blockerFor(quote, "NO_ROUTE_FOUND");
 
   const whenSubmitted = (blocker) => (showFieldErrors ? blocker : null);
 
@@ -283,6 +277,7 @@ function DispatchStep({
                   selected={value.destination}
                   origin={origin}
                   maxDrivingKm={maxDrivingKm}
+                  route={deliveryQuote?.geometry ?? null}
                   withinServiceArea={deliveryQuote ? deliveryQuote.within_service_area : true}
                   localityLabel={value.destination?.locality}
                   onPick={(point) => adoptPoint(point)}
@@ -295,6 +290,12 @@ function DispatchStep({
               {locateError && <Notice tone="info">{locateError}</Notice>}
 
               {routingBlocker && <Notice tone="warning">{routingBlocker.message}</Notice>}
+
+              {noRouteBlocker && (
+                <Notice tone="info" icon={IconMapPin}>
+                  {noRouteBlocker.message}
+                </Notice>
+              )}
 
               {savedWithCoordinates.length > 0 && (
                 <div className="flex flex-wrap gap-2">

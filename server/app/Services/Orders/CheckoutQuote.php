@@ -210,7 +210,14 @@ class CheckoutQuote
 
         if (! $quote['within_service_area']) {
             return [$quote, 0.0, [
-                'code' => $quote['routing_available'] ? 'OUTSIDE_SERVICE_AREA' : 'ROUTING_UNAVAILABLE',
+                'code' => match (true) {
+                    // No road to that spot: fixable by moving the pin.
+                    ($quote['route_found'] ?? null) === false => 'NO_ROUTE_FOUND',
+                    // The engine could not be reached: fixable by waiting.
+                    ! $quote['routing_available'] => 'ROUTING_UNAVAILABLE',
+                    // Genuinely too far: not fixable, switch to pickup.
+                    default => 'OUTSIDE_SERVICE_AREA',
+                },
                 'message' => $quote['message'],
             ]];
         }

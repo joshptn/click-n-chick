@@ -2,7 +2,8 @@
 
 namespace App\Services\Orders;
 
-use App\Services\Geo\DrivingDistanceProvider;
+use App\Services\Geo\RouteNotFound;
+use App\Services\Geo\RoutingProvider;
 use App\Services\Geo\RoutingUnavailable;
 use App\Utils\Distance;
 
@@ -10,7 +11,7 @@ class DeliveryQuote
 {
     public function __construct(
         private DeliveryPricing $pricing,
-        private DrivingDistanceProvider $routing,
+        private RoutingProvider $routing,
     ) {}
 
     public function maxDrivingKm(): float
@@ -55,8 +56,10 @@ class DeliveryQuote
         if ($straightLine > $limit) {
             return $base + [
                 'distance_km' => null,
+                'geometry' => null,
                 'within_service_area' => false,
                 'routing_available' => true,
+                'route_found' => null,
                 'fee' => null,
                 'message' => 'That address is about '.$this->format($straightLine)
                     .' km away in a straight line, which is beyond our '
@@ -65,23 +68,41 @@ class DeliveryQuote
         }
 
         try {
-            $drivingKm = $this->routing->drivingDistanceKm($latitude, $longitude);
+            $route = $this->routing->route($latitude, $longitude);
+        } catch (RouteNotFound $e) {
+            return $base + [
+                'distance_km' => null,
+                'geometry' => null,
+                'within_service_area' => false,
+                'routing_available' => true,
+                'route_found' => false,
+                'fee' => null,
+                'message' => 'We could not find a road to that exact spot. '
+                    .'Move the pin closer to a street and try again.',
+            ];
         } catch (RoutingUnavailable $e) {
             return $base + [
                 'distance_km' => null,
+                'geometry' => null,
                 'within_service_area' => false,
                 'routing_available' => false,
+                'route_found' => null,
                 'fee' => null,
                 'message' => 'We cannot work out the delivery distance right now. '
                     .'Please try again shortly, or place a pickup order.',
             ];
         }
 
+        $drivingKm = $route->distanceKm;
+        $geometry = $route->hasGeometry() ? $route->geometry : null;
+
         if ($drivingKm > $limit) {
             return $base + [
                 'distance_km' => $drivingKm,
+                'geometry' => $geometry,
                 'within_service_area' => false,
                 'routing_available' => true,
+                'route_found' => true,
                 'fee' => null,
                 'message' => 'That address is '.$this->format($drivingKm)
                     .' km away by road, outside our '.$this->format($limit)
@@ -91,8 +112,10 @@ class DeliveryQuote
 
         return $base + [
             'distance_km' => $drivingKm,
+            'geometry' => $geometry,
             'within_service_area' => true,
             'routing_available' => true,
+            'route_found' => true,
             'fee' => $this->pricing->feeFor($drivingKm),
             'message' => null,
         ];

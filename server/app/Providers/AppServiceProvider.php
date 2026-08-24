@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Services\Geo\DrivingDistanceProvider;
 use App\Services\Geo\OpenRouteServiceClient;
+use App\Services\Geo\RoutingProvider;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SemaphoreClient;
 use App\Services\Sms\SmsSender;
@@ -37,7 +37,7 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        $this->app->bind(DrivingDistanceProvider::class, function () {
+        $this->app->bind(RoutingProvider::class, function () {
             return new OpenRouteServiceClient(
                 (string) config('services.routing.openrouteservice.endpoint'),
                 config('services.routing.openrouteservice.api_key'),

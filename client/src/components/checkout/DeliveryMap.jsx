@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { Circle, MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { IconCurrentLocation } from "@tabler/icons-react";
+import { IconCurrentLocation, IconMinus, IconPlus } from "@tabler/icons-react";
 
 import "leaflet/dist/leaflet.css";
+
+const ROUTE_COLOR = "#1d7fd4";
 
 const pinIcon = L.divIcon({
   className: "cnc-pin",
@@ -33,7 +35,6 @@ const storeIcon = L.divIcon({
   iconAnchor: [15, 15],
 });
 
-/** Drops the pin wherever the map is clicked. */
 function ClickToPin({ onPick, disabled }) {
   useMapEvents({
     click(event) {
@@ -45,10 +46,24 @@ function ClickToPin({ onPick, disabled }) {
   return null;
 }
 
-function FollowSelection({ position }) {
+function FollowSelection({ position, route }) {
   const map = useMap();
+  const lastRouteKey = useRef(null);
 
   useEffect(() => {
+    if (route && route.length >= 2) {
+      const key = `${route.length}:${route[0]}:${route[route.length - 1]}`;
+
+      if (key === lastRouteKey.current) return;
+      lastRouteKey.current = key;
+
+      map.fitBounds(L.latLngBounds(route), { padding: [26, 26], animate: true, maxZoom: 16 });
+
+      return;
+    }
+
+    lastRouteKey.current = null;
+
     if (!position) return;
 
     const target = L.latLng(position[0], position[1]);
@@ -56,9 +71,37 @@ function FollowSelection({ position }) {
     if (!map.getBounds().pad(-0.25).contains(target)) {
       map.panTo(target, { animate: true, duration: 0.4 });
     }
-  }, [map, position]);
+  }, [map, position, route]);
 
   return null;
+}
+
+function ZoomControl({ disabled }) {
+  const map = useMap();
+
+  return (
+    <div className="absolute left-3 top-3 z-[500] flex flex-col overflow-hidden rounded-[9px] border border-[#ece7e0] bg-white shadow-[0_2px_10px_-2px_rgba(0,0,0,0.18)]">
+      <button
+        type="button"
+        onClick={() => map.zoomIn()}
+        disabled={disabled}
+        aria-label="Zoom in"
+        className="grid h-8 w-8 place-items-center border-b border-[#f0e9df] bg-transparent text-ink transition-colors hover:bg-[#faf7f3] disabled:cursor-not-allowed disabled:text-[#c9c2b8]"
+      >
+        <IconPlus size={15} stroke={2.6} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => map.zoomOut()}
+        disabled={disabled}
+        aria-label="Zoom out"
+        className="grid h-8 w-8 place-items-center bg-transparent text-ink transition-colors hover:bg-[#faf7f3] disabled:cursor-not-allowed disabled:text-[#c9c2b8]"
+      >
+        <IconMinus size={15} stroke={2.6} />
+      </button>
+    </div>
+  );
 }
 
 function InvalidateOnMount() {
@@ -93,13 +136,14 @@ function DeliveryMap({
   origin,
   maxDrivingKm,
   withinServiceArea = true,
+  route = null,
   localityLabel,
   onPick,
   onLocate,
   isLocating = false,
   isResolving = false,
   disabled = false,
-  height = 210,
+  height = 260,
 }) {
   const mapRef = useRef(null);
 
@@ -113,6 +157,16 @@ function DeliveryMap({
   const position = selected?.latitude != null ? [selected.latitude, selected.longitude] : null;
   const originPosition = origin?.latitude != null ? [origin.latitude, origin.longitude] : null;
 
+  const routeLine = useMemo(() => {
+    if (!Array.isArray(route) || route.length < 2) return null;
+
+    const points = route.filter(
+      (point) => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1])
+    );
+
+    return points.length >= 2 ? points : null;
+  }, [route]);
+
   return (
     <div
       className="relative overflow-hidden rounded-[12px] border border-[#ece7e0]"
@@ -122,8 +176,8 @@ function DeliveryMap({
         ref={mapRef}
         center={centre}
         zoom={15}
-        scrollWheelZoom={false}
-        zoomControl={false}
+        scrollWheelZoom={true}
+        zoomControl={true}
         attributionControl
         className="h-full w-full"
         style={{ background: "#eef3ea" }}
@@ -135,8 +189,31 @@ function DeliveryMap({
         />
 
         <InvalidateOnMount />
-        <FollowSelection position={position} />
+        <FollowSelection position={position} route={routeLine} />
         <ClickToPin onPick={onPick} disabled={disabled} />
+        <ZoomControl disabled={disabled} />
+
+        {routeLine && (
+          <>
+            <Polyline
+              positions={routeLine}
+              pathOptions={{ color: "#ffffff", weight: 8, opacity: 0.9, lineCap: "round", lineJoin: "round" }}
+              interactive={false}
+            />
+            <Polyline
+              positions={routeLine}
+              pathOptions={{
+                color: ROUTE_COLOR,
+                weight: 4,
+                opacity: withinServiceArea ? 0.95 : 0.5,
+                lineCap: "round",
+                lineJoin: "round",
+                dashArray: withinServiceArea ? undefined : "7 7",
+              }}
+              interactive={false}
+            />
+          </>
+        )}
 
         {originPosition && <Marker position={originPosition} icon={storeIcon} interactive={false} />}
 
@@ -196,7 +273,7 @@ function DeliveryMap({
       <RecentreControl onLocate={onLocate} isLocating={isLocating} disabled={disabled} />
 
       {!position && (
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-[400] -translate-y-1/2 px-6 text-center">
+        <div className="pointer-events-none absolute  inset-x-0 top-7 z-[400] -translate-y-1/2 px-6 text-center">
           <span className="inline-block rounded-full bg-white/95 px-3.5 py-1.5 font-display text-[11.5px] font-semibold text-[#6f6b68] shadow-[0_1px_8px_-2px_rgba(0,0,0,0.2)]">
             Search, tap the map, or use your location
           </span>
