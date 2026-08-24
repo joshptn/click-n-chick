@@ -3,12 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Events\OrderBroadcast;
+use App\Exceptions\DiscountAlreadyUsed;
 use App\Models\CartItem;
+use App\Models\Discount;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\User;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Store\StoreAvailability;
 use App\Utils\Notification;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -27,24 +31,11 @@ class OrderController extends Controller implements HasMiddleware
         ];
     }
 
-    /**
-     * POST /api/order/place
-     *
-     * Re-runs the whole Dispatch quote before writing anything. The checkout
-     * screen has already been told what this order costs and whether it may be
-     * placed, but that was a previous request against a store that may since
-     * have closed, a menu that may since have sold out, and a fee that may
-     * since have changed. The quote is the authority, here as there - the
-     * request body supplies a selection and a destination, never a price.
-     */
     public function placeOrder(Request $request)
     {
         $user = $request->user();
 
         $validated = $request->validate([
-            // `type` is the historical name for this field; the checkout
-            // screen sends `fulfilment_type`. Both are accepted so an older
-            // client is not broken by the rename.
             'type' => ['nullable', 'in:delivery,pickup'],
             'fulfilment_type' => ['nullable', 'in:delivery,pickup'],
             'cart_item_ids' => ['nullable', 'array'],
@@ -58,6 +49,7 @@ class OrderController extends Controller implements HasMiddleware
             'pickup_at' => ['nullable', 'string', 'max:64'],
             'contact_name' => ['nullable', 'string', 'max:255'],
             'contact_phone' => ['nullable', 'string', 'max:20'],
+            'apply_discount' => ['sometimes', 'boolean'],
         ]);
 
         $validated['fulfilment_type'] = $validated['fulfilment_type'] ?? $validated['type'] ?? null;
@@ -71,9 +63,6 @@ class OrderController extends Controller implements HasMiddleware
 
         $quote = app(CheckoutQuote::class)->build($user, $validated);
 
-        // 409, not 422: nothing the customer typed is wrong. The world moved
-        // between quoting and placing, and the screen needs to re-render with
-        // the fresh quote rather than highlight a field.
         if (! $quote['can_place']) {
             return response()->json([
                 'message' => $quote['blockers'][0]['message'] ?? 'This order can no longer be placed.',
@@ -89,6 +78,10 @@ class OrderController extends Controller implements HasMiddleware
 
         try {
             $order = DB::transaction(function () use ($user, $quote, $selectedIds, $isDelivery, $destination) {
+                if ((float) $quote['discount']['amount'] > 0 && $this->discountSpentToday($user)) {
+                    throw new DiscountAlreadyUsed;
+                }
+
                 $order = Order::create([
                     'user_id' => $user->id,
                     'order_type' => $quote['fulfilment_type'],
@@ -99,9 +92,6 @@ class OrderController extends Controller implements HasMiddleware
                     'delivery_fee' => $quote['delivery_fee'],
                     'delivery_distance_km' => $isDelivery ? ($quote['delivery']['distance_km'] ?? null) : null,
                     'total_amount' => $quote['total'],
-                    // Kept in step with total_amount: older screens read this
-                    // one, and two columns disagreeing about the price of the
-                    // same order is worse than the duplication.
                     'total_price' => $quote['total'],
                     'pickup_at' => $isDelivery ? null : ($quote['pickup']['requested_at'] ?? null),
                     'full_address' => $isDelivery ? ($destination['full_address'] ?? null) : null,
@@ -109,9 +99,6 @@ class OrderController extends Controller implements HasMiddleware
                     'longitude' => $isDelivery ? ($destination['longitude'] ?? null) : null,
                     'location' => $isDelivery ? ($destination['locality'] ?? null) : null,
                     'delivery_note' => $isDelivery ? ($destination['delivery_note'] ?? null) : null,
-                    // Payment is a separate module. The order is written
-                    // unpaid; the payment flow attaches the Payment record and
-                    // moves the status on.
                     'payment_status' => 'unpaid',
                 ]);
 
@@ -124,12 +111,15 @@ class OrderController extends Controller implements HasMiddleware
                     ]);
                 }
 
-                // Only what was checked out. Partial checkout (BR-25) means
-                // the rest of the cart must survive.
                 CartItem::where('user_id', $user->id)->whereIn('id', $selectedIds)->delete();
 
                 return $order;
             });
+        } catch (DiscountAlreadyUsed) {
+            return response()->json([
+                'message' => 'You have already used your discount today. It resets tomorrow.',
+                'error_code' => 'DISCOUNT_ALREADY_USED',
+            ], 409);
         } catch (\Throwable $e) {
             Log::error('Failed to place an order.', ['user_id' => $user->id, 'error' => $e->getMessage()]);
 
@@ -147,18 +137,19 @@ class OrderController extends Controller implements HasMiddleware
         ], 201);
     }
 
-    /**
-     * Fire the real-time notices for a change that is already saved.
-     *
-     * Every caller runs this *after* its write has committed, and a failure
-     * here is logged rather than raised. Reverb being unreachable is not a
-     * reason to tell a customer their order failed - they would place it
-     * again - or to tell a Store Agent that a status change they can see in
-     * the list did not happen (NFR-03).
-     *
-     * The notification row is written before its broadcast, so what the
-     * socket missed is still waiting on the next fetch.
-     */
+    private function discountSpentToday(User $user): bool
+    {
+        $today = CarbonImmutable::now(Discount::USAGE_TIMEZONE);
+
+        return $user->orders()
+            ->where('discount_amount', '>', 0)
+            ->whereBetween('created_at', [
+                $today->startOfDay()->utc(),
+                $today->endOfDay()->utc(),
+            ])
+            ->exists();
+    }
+
     private function announce(callable $broadcasts, Order $order): void
     {
         try {

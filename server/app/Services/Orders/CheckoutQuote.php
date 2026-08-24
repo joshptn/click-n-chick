@@ -18,10 +18,6 @@ class CheckoutQuote
         private StoreAvailability $store,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $input
-     * @return array<string, mixed>
-     */
     public function build(User $user, array $input): array
     {
         $type = in_array($input['fulfilment_type'] ?? null, [StoreAvailability::TYPE_PICKUP, StoreAvailability::TYPE_DELIVERY], true)
@@ -84,7 +80,13 @@ class CheckoutQuote
             $blockers[] = $contact['blocker'];
         }
 
-        $discount = $this->discount($user, $subtotal);
+        $discount = $this->discount($user, $subtotal, (bool) ($input['apply_discount'] ?? false));
+
+        if ($discount['blocker']) {
+            $blockers[] = $discount['blocker'];
+        }
+
+        unset($discount['blocker']);
 
         return [
             'fulfilment_type' => $type,
@@ -319,22 +321,51 @@ class CheckoutQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    private function discount(User $user, float $subtotal): array
+    private function discount(User $user, float $subtotal, bool $requested): array
     {
-        $claim = Discount::activeFor((int) $user->getKey());
-        $approved = $claim?->isApproved() ?? false;
+        $latest = $user->latestDiscountClaim()->first();
+        $approved = $latest?->isApproved() ?? false;
 
         $percentage = Discount::currentPercentage();
+        $usedToday = $approved && $this->usedToday($user);
+        $available = $approved ? round($subtotal * ($percentage / 100), 2) : 0.0;
+
+        $status = match (true) {
+            $approved => 'approved',
+            $latest?->isPending() ?? false => 'pending',
+            $latest?->isRejected() ?? false => 'rejected',
+            default => 'none',
+        };
+
+        $canApply = $approved && ! $usedToday && $available > 0;
+        $applied = $requested && $canApply;
+
+        $blocker = null;
+
+        if ($requested && ! $canApply) {
+            $blocker = $usedToday
+                ? [
+                    'code' => 'DISCOUNT_ALREADY_USED',
+                    'message' => 'You have already used your discount today. It resets tomorrow.',
+                ]
+                : [
+                    'code' => 'DISCOUNT_NOT_ELIGIBLE',
+                    'message' => 'Your Senior Citizen or PWD discount has not been approved yet.',
+                ];
+        }
 
         return [
             'eligible' => $approved,
-            'type' => $approved ? $claim->discount_type : null,
-            'type_label' => $approved ? $claim->typeLabel() : null,
+            'status' => $status,
+            'type' => $approved ? $latest->discount_type : null,
+            'type_label' => $approved ? $latest->typeLabel() : null,
             'percentage' => $percentage,
-            'used_today' => $approved ? $this->usedToday($user) : false,
-            'available_amount' => $approved ? round($subtotal * ($percentage / 100), 2) : 0.0,
-            'applied' => false,
-            'amount' => 0.0,
+            'used_today' => $usedToday,
+            'can_apply' => $canApply,
+            'available_amount' => $available,
+            'applied' => $applied,
+            'amount' => $applied ? $available : 0.0,
+            'blocker' => $blocker,
         ];
     }
 
