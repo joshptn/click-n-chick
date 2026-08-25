@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\OrderBroadcast;
 use App\Exceptions\DiscountAlreadyUsed;
 use App\Models\CartItem;
 use App\Models\Discount;
@@ -10,9 +9,9 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
 use App\Services\Orders\CheckoutQuote;
+use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
-use App\Utils\Notification;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -25,6 +24,8 @@ use Illuminate\Validation\Rule;
 class OrderController extends Controller implements HasMiddleware
 {
     use AuthorizesRequests;
+
+    public function __construct(private OrderAnnouncer $announcer) {}
 
     public static function middleware()
     {
@@ -128,10 +129,7 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Failed to place order'], 500);
         }
 
-        $this->announce(fn () => [
-            OrderBroadcast::dispatch($order->load('items.food', 'items.food.category', 'user'), 'create'),
-            Notification::notify('order', 'create', $order->user->id, $order),
-        ], $order);
+        $this->announcer->announce($order, 'create', 'create');
 
         return response()->json([
             'message' => 'Order Placed',
@@ -150,18 +148,6 @@ class OrderController extends Controller implements HasMiddleware
                 $today->endOfDay()->utc(),
             ])
             ->exists();
-    }
-
-    private function announce(callable $broadcasts, Order $order): void
-    {
-        try {
-            $broadcasts();
-        } catch (\Throwable $e) {
-            Log::warning('An order changed but its broadcast failed.', [
-                'order_id' => $order->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
     }
 
     public function getUserOrder(Request $request)
@@ -202,10 +188,7 @@ class OrderController extends Controller implements HasMiddleware
         $order->status = OrderStatus::CANCELLED;
         $order->save();
 
-        $this->announce(fn () => [
-            OrderBroadcast::dispatch($order->load('items'), 'cancelled'),
-            Notification::notify('order', 'cancelled', $order->user->id, $order),
-        ], $order);
+        $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
 
         return response()->json(['message' => 'Order cancelled successfully', 'order' => $order], 200);
     }
@@ -248,13 +231,14 @@ class OrderController extends Controller implements HasMiddleware
             ], 422);
         }
 
+        if ($target === OrderStatus::DELIVERED) {
+            $this->authorize('confirmReceipt', $order);
+        }
+
         $order->status = $target;
         $order->save();
 
-        $this->announce(fn () => [
-            OrderBroadcast::dispatch($order->load('items.food', 'items.food.category'), 'update'),
-            Notification::notify('order', $order->status, $order->user->id, $order),
-        ], $order);
+        $this->announcer->statusChanged($order);
 
         return response()->json(['message' => 'Order status updated', 'order' => $order], 200);
     }
@@ -276,10 +260,7 @@ class OrderController extends Controller implements HasMiddleware
         $order->estimated_time_of_completion = $request->etc;
         $order->save();
 
-        $this->announce(fn () => [
-            OrderBroadcast::dispatch($order->load('items.food', 'items.food.category'), 'update'),
-            Notification::notify('order', 'update', $order->user->id, $order),
-        ], $order);
+        $this->announcer->announce($order, 'update', 'update');
 
         return response()->json(['message' => 'Order status updated', 'order' => $order], 200);
     }
@@ -293,9 +274,15 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $perPage = $request->get('per_page', 10);
-        $status = $request->get('status');
-        $category = $request->get('category');
+        $validated = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'status' => ['sometimes', 'string', Rule::in([...OrderStatus::all(), 'all'])],
+            'category' => ['sometimes', 'string', 'max:100'],
+        ]);
+
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $status = $validated['status'] ?? null;
+        $category = $validated['category'] ?? null;
 
         $query = Order::with(['items.food.category', 'user']);
 

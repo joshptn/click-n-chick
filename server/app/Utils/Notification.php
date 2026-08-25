@@ -24,7 +24,9 @@ class Notification
             OrderStatus::ON_THE_WAY => "Your order #{$order->id} is on the way.",
             OrderStatus::COMPLETED => "Your order #{$order->id} has been completed. Thank you for ordering with us!",
             OrderStatus::DELIVERED => "Your order #{$order->id} has been delivered. Thank you for ordering with us!",
-            OrderStatus::CANCELLED => "Your order #{$order->id} has been cancelled.",
+            OrderStatus::CANCELLED => trim((string) $order->cancellation_reason) !== ''
+                ? "Your order #{$order->id} has been cancelled: {$order->cancellation_reason}"
+                : "Your order #{$order->id} has been cancelled.",
             'update' => "Your order #{$order->id} ETC has been updated to {$order->estimated_time_of_completion} minutes.",
             default => "There is an update regarding your order #{$order->id}."
         };

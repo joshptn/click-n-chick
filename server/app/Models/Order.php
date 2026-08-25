@@ -27,6 +27,7 @@ class Order extends Model
         'queue_number',
         'queue_date',
         'queued_at',
+        'cancellation_reason',
         'total_price',
         'subtotal',
         'discount_amount',

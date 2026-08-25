@@ -11,6 +11,7 @@ use App\Http\Controllers\FoodController;
 use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderQueueController;
 use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PasswordResetController;
@@ -124,6 +125,12 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
     Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
+
+    // Fulfilment: the queue the kitchen actually works from.
+    Route::get('/agent/queue', [OrderQueueController::class, 'index']);
+    Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
+    Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
+    Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
 });
 
 // Store Agent

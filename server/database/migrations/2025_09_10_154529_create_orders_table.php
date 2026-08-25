@@ -29,6 +29,7 @@ return new class extends Migration
             $table->unsignedInteger('queue_number')->nullable();
             $table->date('queue_date')->nullable();
             $table->dateTime('queued_at')->nullable();
+            $table->string('cancellation_reason')->nullable();
             $table->string('estimated_time_of_completion')->nullable();
             $table->string('payment_status')->nullable();
             $table->string('guest_name')->nullable();
