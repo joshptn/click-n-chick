@@ -81,6 +81,42 @@ class Order extends Model
         return $this->queue_number !== null;
     }
 
+    public function isInLine(): bool
+    {
+        return $this->hasEnteredQueue() && OrderStatus::isInLine((string) $this->status);
+    }
+
+    public function queueLabel(): ?string
+    {
+        if (! $this->hasEnteredQueue()) {
+            return null;
+        }
+
+        $prefix = trim((string) config('store.queue.label_prefix', ''));
+
+        return $prefix === '' ? (string) $this->queue_number : $prefix.' '.$this->queue_number;
+    }
+
+    public function queuePosition(): ?int
+    {
+        if (! $this->isInLine()) {
+            return null;
+        }
+
+        return static::query()
+            ->where('queue_date', $this->queue_date)
+            ->whereIn('status', OrderStatus::inLine())
+            ->where('queue_number', '<=', $this->queue_number)
+            ->count();
+    }
+
+    public function aheadInQueue(): ?int
+    {
+        $position = $this->queuePosition();
+
+        return $position === null ? null : $position - 1;
+    }
+
     public function enterQueue(?CarbonInterface $at = null): bool
     {
         if ($this->hasEnteredQueue()) {

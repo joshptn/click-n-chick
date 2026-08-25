@@ -263,6 +263,151 @@ class OrderLifecycleTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // Queue position (UC-QUE-004)
+    // -----------------------------------------------------------------
+
+    /** Queues n orders on the same day and hands back the models, in entry order. */
+    private function line(int $count, string $type = 'pickup'): array
+    {
+        return collect(range(1, $count))->map(function () use ($type) {
+            $order = $this->order($type);
+            $order->enterQueue();
+
+            return $order->fresh();
+        })->all();
+    }
+
+    public function test_an_order_that_has_not_paid_has_no_position(): void
+    {
+        $this->assertNull($this->order()->queuePosition(), 'BR-22: no payment, no place in the line.');
+    }
+
+    public function test_position_reflects_where_the_order_stands(): void
+    {
+        [$first, $second, $third] = $this->line(3);
+
+        $this->assertSame(1, $first->queuePosition());
+        $this->assertSame(2, $second->queuePosition());
+        $this->assertSame(3, $third->queuePosition());
+
+        $this->assertSame(0, $first->aheadInQueue());
+        $this->assertSame(2, $third->aheadInQueue());
+    }
+
+    public function test_the_line_closes_up_as_orders_are_finished(): void
+    {
+        [$first, $second, $third] = $this->line(3);
+
+        $this->assertSame(3, $third->queuePosition());
+
+        $first->forceFill(['status' => OrderStatus::COMPLETED])->save();
+
+        $this->assertSame(2, $third->fresh()->queuePosition());
+
+        $second->forceFill(['status' => OrderStatus::CANCELLED])->save();
+
+        $this->assertSame(1, $third->fresh()->queuePosition());
+        $this->assertSame(0, $third->fresh()->aheadInQueue());
+    }
+
+    public function test_a_quiet_evening_order_is_first_in_line_however_high_its_number(): void
+    {
+        $earlier = $this->line(8);
+
+        foreach ($earlier as $order) {
+            $order->forceFill(['status' => OrderStatus::COMPLETED])->save();
+        }
+
+        $latest = $this->order();
+        $latest->enterQueue();
+        $latest->refresh();
+
+        // The ticket still reads 9 - it is a ticket, not a wait - but there is
+        // nobody ahead, which is the whole point of keeping the two separate.
+        $this->assertSame(9, $latest->queue_number);
+        $this->assertSame(1, $latest->queuePosition());
+        $this->assertSame(0, $latest->aheadInQueue());
+    }
+
+    public function test_an_uncollected_order_does_not_hold_up_the_line(): void
+    {
+        [$waiting, $behind] = $this->line(2);
+
+        $this->assertSame(2, $behind->queuePosition());
+
+        // Ready on the shelf: the kitchen is done with it, the customer is late.
+        $waiting->forceFill(['status' => OrderStatus::READY_FOR_PICKUP])->save();
+
+        $this->assertSame(1, $behind->fresh()->queuePosition());
+    }
+
+    public function test_an_order_out_for_delivery_does_not_hold_up_the_line(): void
+    {
+        [$riding, $behind] = $this->line(2, 'delivery');
+
+        $riding->forceFill(['status' => OrderStatus::ON_THE_WAY])->save();
+
+        $this->assertSame(1, $behind->fresh()->queuePosition());
+    }
+
+    public function test_an_order_the_kitchen_has_finished_with_has_no_position(): void
+    {
+        [$order] = $this->line(1);
+
+        foreach ([OrderStatus::READY_FOR_PICKUP, OrderStatus::COMPLETED, OrderStatus::CANCELLED] as $status) {
+            $order->forceFill(['status' => $status])->save();
+
+            $this->assertNull($order->fresh()->queuePosition(), "no position while {$status}");
+            $this->assertNull($order->fresh()->aheadInQueue());
+        }
+    }
+
+    public function test_an_unfinished_order_from_another_day_does_not_inflate_todays_line(): void
+    {
+        $forgotten = $this->order();
+        $forgotten->enterQueue(CarbonImmutable::parse('2026-08-24 03:00:00', 'UTC'));
+        $forgotten->forceFill(['status' => OrderStatus::PREPARING])->save();
+
+        $today = $this->order();
+        $today->enterQueue(CarbonImmutable::parse('2026-08-25 03:00:00', 'UTC'));
+
+        $this->assertSame(1, $today->fresh()->queuePosition(), 'Yesterday’s loose end is yesterday’s problem.');
+    }
+
+    public function test_orders_awaiting_the_agents_confirmation_still_count(): void
+    {
+        [$first, $second] = $this->line(2);
+
+        $this->assertSame(OrderStatus::PLACED, $first->status);
+        $this->assertSame(2, $second->queuePosition(), 'Paid work in the pipe is work ahead of you.');
+    }
+
+    // -----------------------------------------------------------------
+    // The counter ticket
+    // -----------------------------------------------------------------
+
+    public function test_the_ticket_is_prefixed_so_it_cannot_be_confused_with_a_walk_in(): void
+    {
+        [$order] = $this->line(1);
+
+        $this->assertSame('Online 1', $order->queueLabel());
+    }
+
+    public function test_an_empty_prefix_gives_the_bare_number(): void
+    {
+        config(['store.queue.label_prefix' => '']);
+
+        [$order] = $this->line(1);
+
+        $this->assertSame('1', $order->queueLabel());
+    }
+
+    public function test_an_unpaid_order_has_no_ticket(): void
+    {
+        $this->assertNull($this->order()->queueLabel());
+    }
+
+    // -----------------------------------------------------------------
     // The vocabulary itself
     // -----------------------------------------------------------------
 

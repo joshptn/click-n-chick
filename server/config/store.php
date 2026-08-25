@@ -21,4 +21,8 @@ return [
         'last_order_buffer_minutes' => (int) env('STORE_PICKUP_BUFFER_MINUTES', 15),
     ],
 
+    'queue' => [
+        'label_prefix' => env('STORE_QUEUE_LABEL_PREFIX', 'Online'),
+    ],
+
 ];

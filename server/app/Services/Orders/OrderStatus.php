@@ -51,6 +51,16 @@ final class OrderStatus
         return [self::COMPLETED, self::DELIVERED, self::CANCELLED];
     }
 
+    public static function inLine(): array
+    {
+        return [self::PLACED, self::CONFIRMED, self::PREPARING];
+    }
+
+    public static function isInLine(string $status): bool
+    {
+        return in_array($status, self::inLine(), true);
+    }
+
     public static function isKnown(string $status): bool
     {
         return in_array($status, self::all(), true);
