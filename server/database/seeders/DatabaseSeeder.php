@@ -25,14 +25,11 @@ class DatabaseSeeder extends Seeder
                 ['email' => $account['email']],
                 [
                     'first_name' => $account['first_name'],
-                    'last_name'  => $account['last_name'],
-                    'role'       => $account['role'],
-                    'password'   => Hash::make('Password123!'),
+                    'last_name' => $account['last_name'],
+                    'role' => $account['role'],
+                    'password' => Hash::make('Password123!'),
                     'phone_number' => $account['phone'],
                     'phone_number_hash' => User::hashPhoneNumber($account['phone']),
-                    // Login gates on the per-channel timestamp, not on
-                    // account_status. Without these three a seeded account is
-                    // created already locked out of its own sign-in.
                     'verification_channel' => Channel::Email->value,
                     'email_verified_at' => now(),
                     'phone_verified_at' => now(),
@@ -41,12 +38,12 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        // Order matters: foods resolve their category and add-ons by name.
         $this->call([
             CategorySeeder::class,
             AddonSeeder::class,
             FoodSeeder::class,
             PosterSeeder::class,
+            OrderSeeder::class,
         ]);
     }
 }
