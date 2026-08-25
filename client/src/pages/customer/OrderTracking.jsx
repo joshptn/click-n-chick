@@ -8,10 +8,12 @@ import AppHeader from "../../components/app/AppHeader";
 import Button from "../../components/ui/Button";
 import OrderProgress from "../../components/orders/OrderProgress";
 import OrderReceipt from "../../components/orders/OrderReceipt";
+import EditOrderModal from "../../components/orders/EditOrderModal";
 import OrderStatusPanel from "../../components/orders/OrderStatusPanel";
 import toast from "../../components/app/Toast";
 import {
   ORDERS_KEY,
+  amendOrder,
   cancelOrder,
   confirmReceipt,
   fetchOrder,
@@ -21,20 +23,6 @@ import {
 } from "../../lib/orders";
 import { useOrderChannel } from "../../context/useRealtime";
 
-/**
- * Live order tracking (UC-ORD-010, UC-ORD-011).
- *
- * Two things keep this screen current, and they answer different questions:
- *
- *   Reverb, on private-orders.{id}, for THIS order's own status changes. The
- *   agent presses "next" and the screen moves immediately.
- *
- *   A slow poll, but only while the order is still in the kitchen's line. Queue
- *   position changes when OTHER people's orders finish, and those broadcast on
- *   their own channels - this customer is not admitted to them and should not
- *   be. Thirty seconds is well inside the time it takes to cook anything, and
- *   the poll stops the moment the order leaves the line.
- */
 const IN_LINE_POLL_MS = 30 * 1000;
 
 function TrackingSkeleton() {
@@ -55,6 +43,8 @@ function OrderTracking() {
   const queryClient = useQueryClient();
 
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState(null);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: orderKey(orderId),
@@ -109,6 +99,18 @@ function OrderTracking() {
       toast.error(err?.message ?? "That order could not be cancelled.", "Cancellation failed");
       queryClient.invalidateQueries({ queryKey: orderKey(orderId) });
     },
+  });
+
+  const amending = useMutation({
+    mutationFn: (changes) => amendOrder(orderId, changes),
+    onSuccess: (payload) => {
+      settle(payload);
+      setEditing(false);
+      setEditError(null);
+      toast.success("Your order has been updated.", "Saved");
+    },
+
+    onError: (err) => setEditError(err?.message ?? "That change could not be saved."),
   });
 
   const confirming = useMutation({
@@ -189,15 +191,15 @@ function OrderTracking() {
 
               <OrderStatusPanel
                 order={order}
+                onEdit={() => {
+                  setEditError(null);
+                  setEditing(true);
+                }}
                 onCancel={() => setConfirmingCancel(true)}
                 onConfirmReceipt={() => confirming.mutate()}
                 isCancelling={cancelling.isPending}
                 isConfirming={confirming.isPending}
               />
-
-              {/* UC-ORD-013. A mailto rather than a form: it reaches a real
-                  inbox the store already reads, with no new surface to build
-                  or moderate. */}
               <section className="rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4 sm:px-6">
                 <div className="flex items-start gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#fff4e8] text-brand-600">
@@ -241,6 +243,15 @@ function OrderTracking() {
           </div>
         )}
       </main>
+
+      <EditOrderModal
+        order={order}
+        opened={editing}
+        onClose={() => setEditing(false)}
+        onSave={(changes) => amending.mutate(changes)}
+        isSaving={amending.isPending}
+        error={editError}
+      />
 
       <Modal
         opened={confirmingCancel}

@@ -11,6 +11,7 @@ use App\Http\Controllers\FoodController;
 use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderModificationController;
 use App\Http\Controllers\OrderQueueController;
 use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\OtpController;
@@ -111,6 +112,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::get('/orders', [OrderTrackingController::class, 'index']);
     Route::get('/orders/{order}', [OrderTrackingController::class, 'show'])->whereNumber('order');
     Route::post('/orders/{order}/received', [OrderTrackingController::class, 'confirmReceipt'])
+        ->whereNumber('order')
+        ->middleware('throttle:user-update');
+    Route::patch('/orders/{order}', [OrderModificationController::class, 'update'])
         ->whereNumber('order')
         ->middleware('throttle:user-update');
     Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder'])

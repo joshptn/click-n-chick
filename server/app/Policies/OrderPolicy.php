@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Orders\CancellationPolicy;
+use App\Services\Orders\OrderStatus;
 
 class OrderPolicy
 {
@@ -31,6 +32,15 @@ class OrderPolicy
     public function update(User $user, Order $order): bool
     {
         return $this->isStaff($user);
+    }
+
+    public function amend(User $user, Order $order): bool
+    {
+        if (OrderStatus::isTerminal((string) $order->status)) {
+            return false;
+        }
+
+        return $this->owns($user, $order) || $this->isStaff($user);
     }
 
     public function cancel(User $user, Order $order): bool

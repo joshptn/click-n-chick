@@ -6,6 +6,7 @@ import {
   IconCircleCheck,
   IconClock,
   IconInfoCircle,
+  IconPencil,
   IconReceipt,
   IconShoppingBag,
   IconUsers,
@@ -59,10 +60,26 @@ const HERO = {
   },
 };
 
-function OrderStatusPanel({ order, onCancel, onConfirmReceipt, isCancelling, isConfirming }) {
+function OrderStatusPanel({ order, onEdit, onCancel, onConfirmReceipt, isCancelling, isConfirming }) {
   const hero = HERO[order.status] ?? HERO.placed;
   const Icon = hero.icon;
   const queue = queueMessage(order.queue);
+
+  const cancellation = order.cancellation ?? null;
+  const refundable = cancellation?.refundable ?? false;
+
+  const editable = order.editable ?? {};
+  const openFields = [
+    editable.address && "the address",
+    editable.note && "the note for the rider",
+    editable.pickup_at && "your collection time",
+  ].filter(Boolean);
+
+  const anythingEditable = openFields.length > 0;
+  const editableLabel =
+    openFields.length === 1
+      ? openFields[0]
+      : `${openFields.slice(0, -1).join(", ")} or ${openFields[openFields.length - 1]}`;
 
   const tone = order.is_cancelled
     ? { ring: "bg-[#fdecec]", dot: "bg-[#c92a2a]" }
@@ -124,33 +141,52 @@ function OrderStatusPanel({ order, onCancel, onConfirmReceipt, isCancelling, isC
         </section>
       )}
 
-      {!order.is_terminal && (
+      {anythingEditable && (
         <section className="rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4">
-          {order.can_cancel ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="m-0 min-w-0 font-display text-[12.5px] leading-snug text-[#6f6b68]">
-                Changed your mind? You can still cancel this order while the store is confirming it.
-                Your payment is refunded automatically.
-              </p>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                loading={isCancelling}
-                loadingLabel="Cancelling&hellip;"
-                onClick={onCancel}
-                className="shrink-0 border border-[#f3d4d4] text-[#c92a2a] hover:bg-[#fdecec]"
-              >
-                Cancel order
-              </Button>
-            </div>
-          ) : (
-            <p className="m-0 flex items-start gap-2 font-display text-[12.5px] leading-snug text-[#8d8884]">
-              <IconInfoCircle size={15} stroke={2} aria-hidden="true" className="mt-px shrink-0 text-brand-500" />
-              The store has confirmed this order, so it can no longer be cancelled here. Call the store if
-              something is wrong and a staff member will sort it out with you.
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="m-0 min-w-0 font-display text-[12.5px] leading-snug text-[#6f6b68]">
+              Typed something wrong? You can still fix
+              {" "}{editableLabel}{" "}
+              while the kitchen has your order.
             </p>
-          )}
+
+            <Button variant="outline" size="sm" onClick={onEdit} className="shrink-0">
+              <IconPencil size={15} stroke={2.2} aria-hidden="true" />
+              Correct my order
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {!order.is_terminal && (
+        <section
+          className={`rounded-[16px] border px-5 py-4 ${
+            refundable ? "border-[#f0e9df] bg-white" : "border-[#ffe6a8] bg-[#fff9e8]"
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p
+              className={`m-0 flex min-w-0 items-start gap-2 font-display text-[12.5px] leading-snug ${
+                refundable ? "text-[#6f6b68]" : "text-[#8a6206]"
+              }`}
+            >
+              {!refundable && (
+                <IconInfoCircle size={15} stroke={2} aria-hidden="true" className="mt-px shrink-0" />
+              )}
+              {cancellation?.message ?? "You can still cancel this order."}
+            </p>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={isCancelling}
+              loadingLabel="Cancelling&hellip;"
+              onClick={onCancel}
+              className="shrink-0 border border-[#f3d4d4] text-[#c92a2a] hover:bg-[#fdecec]"
+            >
+              Cancel order
+            </Button>
+          </div>
         </section>
       )}
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\Orders\AmendmentPolicy;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -39,6 +40,9 @@ class OrderTrackingResource extends JsonResource
 
             'cancellation' => app(CancellationPolicy::class)->for($this->resource),
             'can_cancel' => ! $this->isTerminal(),
+            // Which fields the screen may still offer. Decided here so the
+            // form and the endpoint cannot disagree about what is open.
+            'editable' => app(AmendmentPolicy::class)->editable($this->resource),
             'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
             'cancelled_by_store' => $this->cancelled_by !== null && $this->cancelled_by !== $this->user_id,
             'can_confirm_receipt' => $isDelivery && $status === OrderStatus::ON_THE_WAY,

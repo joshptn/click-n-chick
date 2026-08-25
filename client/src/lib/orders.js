@@ -16,6 +16,10 @@ export function cancelOrder(id) {
   return api.post(`/api/order/${id}/cancel`);
 }
 
+export function amendOrder(id, changes) {
+  return api.patch(`/api/orders/${id}`, changes);
+}
+
 export function confirmReceipt(id) {
   return api.post(`/api/orders/${id}/received`);
 }
