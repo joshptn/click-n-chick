@@ -147,7 +147,7 @@ class OrderLifecycleTest extends TestCase
         }
     }
 
-    public function test_a_customer_may_cancel_their_own_order_only_before_confirmation(): void
+    public function test_a_customer_may_cancel_their_own_order(): void
     {
         $order = $this->order('pickup');
         $owner = $order->user;
@@ -159,16 +159,30 @@ class OrderLifecycleTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
     }
 
-    public function test_a_customer_cannot_cancel_a_confirmed_order_themselves(): void
+    public function test_a_customer_may_still_cancel_after_confirmation(): void
     {
         $order = $this->order('pickup', OrderStatus::CONFIRMED);
+
+        // BR-19/BR-20: blocking this would not save the food, it would only stop
+        // the kitchen finding out. Whether they are refunded is the separate
+        // question CancellationPolicyTest covers.
+        $this->actingAs($order->user, 'sanctum')
+            ->postJson("/api/order/{$order->id}/cancel")
+            ->assertOk();
+
+        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+    }
+
+    public function test_a_closed_order_can_no_longer_be_cancelled(): void
+    {
+        $order = $this->order('pickup', OrderStatus::COMPLETED);
 
         $this->actingAs($order->user, 'sanctum')
             ->postJson("/api/order/{$order->id}/cancel")
             ->assertStatus(400)
-            ->assertJsonPath('error_code', 'CANCELLATION_REQUIRES_APPROVAL');
+            ->assertJsonPath('error_code', 'ORDER_ALREADY_CLOSED');
 
-        $this->assertSame(OrderStatus::CONFIRMED, $order->fresh()->status, 'BR-20: this is the agent’s decision.');
+        $this->assertSame(OrderStatus::COMPLETED, $order->fresh()->status);
     }
 
     // -----------------------------------------------------------------

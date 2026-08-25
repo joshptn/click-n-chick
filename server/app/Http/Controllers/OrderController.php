@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
 use App\Models\User;
+use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
@@ -171,24 +172,29 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        if (! OrderStatus::isCustomerCancellable((string) $order->status)) {
+        $policy = app(CancellationPolicy::class)->for($order);
+
+        if (! $policy['can_cancel']) {
             return response()->json([
-                'message' => $order->isTerminal()
-                    ? 'This order is already '.strtolower(OrderStatus::label((string) $order->status)).'.'
-                    : 'This order has already been confirmed. Ask a store agent to cancel it for you.',
-                'error_code' => $order->isTerminal()
-                    ? 'ORDER_ALREADY_CLOSED'
-                    : 'CANCELLATION_REQUIRES_APPROVAL',
+                'message' => $policy['message'],
+                'error_code' => $policy['code'],
             ], 400);
         }
 
-        $order->status = OrderStatus::CANCELLED;
-        $order->save();
+        $order->forceFill([
+            'status' => OrderStatus::CANCELLED,
+            'cancelled_by' => $user->getKey(),
+            'refund_owed' => $policy['refund_amount'],
+        ])->save();
 
         $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
 
         return response()->json([
-            'message' => 'Order cancelled successfully',
+            'message' => $policy['refundable']
+                ? 'Your order has been cancelled and your payment will be refunded.'
+                : 'Your order has been cancelled. As the kitchen had already started, this one is not refunded.',
+            'refunded' => $policy['refundable'],
+            'refund_amount' => $policy['refund_amount'],
             'order' => new OrderTrackingResource($order->load('items.food', 'items.addons', 'user')),
         ], 200);
     }

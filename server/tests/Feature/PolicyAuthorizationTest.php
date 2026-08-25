@@ -159,15 +159,25 @@ class PolicyAuthorizationTest extends TestCase
         $this->assertFalse(Gate::forUser($this->user(User::ROLE_CUSTOMER))->allows('viewAny', Order::class));
     }
 
-    public function test_a_customer_may_cancel_their_own_order_only_before_confirmation(): void
+    public function test_a_customer_may_cancel_their_own_order_until_it_closes(): void
     {
         $owner = $this->user(User::ROLE_CUSTOMER);
 
-        $pending = $this->order($owner, 'placed');
-        $confirmed = $this->order($owner, 'confirmed');
+        // BR-19/BR-20: the gate is the order closing, not the agent confirming.
+        // What confirmation changes is the refund, not the right to cancel.
+        foreach (['placed', 'confirmed', 'preparing', 'ready_for_pickup'] as $status) {
+            $this->assertTrue(
+                Gate::forUser($owner)->allows('cancel', $this->order($owner, $status)),
+                "FR-02.8: still cancellable at {$status}"
+            );
+        }
 
-        $this->assertTrue(Gate::forUser($owner)->allows('cancel', $pending), 'FR-02.8');
-        $this->assertFalse(Gate::forUser($owner)->allows('cancel', $confirmed), 'FR-02.9: past confirmation this is an agent decision.');
+        foreach (['completed', 'cancelled'] as $status) {
+            $this->assertFalse(
+                Gate::forUser($owner)->allows('cancel', $this->order($owner, $status)),
+                "a {$status} order is finished"
+            );
+        }
     }
 
     public function test_a_customer_may_not_cancel_someone_elses_order(): void

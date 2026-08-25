@@ -45,7 +45,7 @@ Route::get('/drinks', [FoodController::class, 'drinks']);
 Route::get('/sides', [FoodController::class, 'sides']);
 Route::get('/category', [CategoryController::class, 'index']);
 Route::get('/category/{category}', [CategoryController::class, 'show']);
-Route::get('/posters', [PosterController::class, 'index']); 
+Route::get('/posters', [PosterController::class, 'index']);
 Route::get('/store/status', [StoreStatusController::class, 'show']);
 
 // Customer
@@ -95,7 +95,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::delete('/cart/items', [CartController::class, 'destroyMany']);
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
-    
+
     Route::post('/checkout/quote', [CheckoutController::class, 'quote'])
         ->middleware('throttle:checkout-quote');
     Route::post('/delivery/quote', [CheckoutController::class, 'deliveryQuote'])
@@ -173,6 +173,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::get('/admin/settings/store', [SystemSettingController::class, 'showStore']);
     Route::put('/admin/settings/store', [SystemSettingController::class, 'updateStore'])
         ->middleware('throttle:user-update');
+
+    Route::get('/admin/settings/cancellation', [SystemSettingController::class, 'showCancellation']);
+    Route::put('/admin/settings/cancellation', [SystemSettingController::class, 'updateCancellation'])
+        ->middleware(['throttle:user-update', 'confirm-password:change the cancellation and refund rules']);
 
     Route::get('/admin/settings/loyalty', [SystemSettingController::class, 'showLoyalty']);
     Route::put('/admin/settings/loyalty', [SystemSettingController::class, 'updateLoyalty'])

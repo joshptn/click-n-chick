@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -36,7 +37,10 @@ class OrderTrackingResource extends JsonResource
                 'ahead' => $this->aheadInQueue(),
             ],
 
-            'can_cancel' => OrderStatus::isCustomerCancellable($status),
+            'cancellation' => app(CancellationPolicy::class)->for($this->resource),
+            'can_cancel' => ! $this->isTerminal(),
+            'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
+            'cancelled_by_store' => $this->cancelled_by !== null && $this->cancelled_by !== $this->user_id,
             'can_confirm_receipt' => $isDelivery && $status === OrderStatus::ON_THE_WAY,
 
             'placed_at' => $this->created_at?->toIso8601String(),
@@ -84,7 +88,7 @@ class OrderTrackingResource extends JsonResource
             'payment_status' => $this->payment_status,
         ];
     }
-    
+
     private function steps(string $status, bool $isCancelled): array
     {
         $chain = OrderStatus::chain($this->order_type);

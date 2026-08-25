@@ -103,6 +103,7 @@ class OrderQueueController extends Controller
 
         $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:255'],
+            'refund' => ['sometimes', 'boolean'],
         ]);
 
         if ($order->isTerminal()) {
@@ -115,15 +116,24 @@ class OrderQueueController extends Controller
 
         $reason = trim((string) ($validated['reason'] ?? ''));
 
+        $refund = $validated['refund'] ?? true
+            ? round((float) ($order->total_amount ?? $order->total_price), 2)
+            : 0.0;
+
         $order->forceFill([
             'status' => OrderStatus::CANCELLED,
             'cancellation_reason' => $reason === '' ? null : $reason,
+            'cancelled_by' => $request->user()->getKey(),
+            'refund_owed' => $refund,
         ])->save();
 
         $this->announcer->statusChanged($order);
 
         return response()->json([
-            'message' => 'Order cancelled.',
+            'message' => $refund > 0
+                ? 'Order cancelled and marked for refund.'
+                : 'Order cancelled without a refund.',
+            'refund_owed' => $refund,
             'order' => new OrderQueueResource($order->load(self::WITH)),
         ]);
     }

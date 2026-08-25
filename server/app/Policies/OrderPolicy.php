@@ -4,7 +4,7 @@ namespace App\Policies;
 
 use App\Models\Order;
 use App\Models\User;
-use App\Services\Orders\OrderStatus;
+use App\Services\Orders\CancellationPolicy;
 
 class OrderPolicy
 {
@@ -35,8 +35,9 @@ class OrderPolicy
 
     public function cancel(User $user, Order $order): bool
     {
+
         if ($this->owns($user, $order)) {
-            return OrderStatus::isCustomerCancellable((string) $order->status);
+            return app(CancellationPolicy::class)->canCancel($order);
         }
 
         return $this->isStaff($user);

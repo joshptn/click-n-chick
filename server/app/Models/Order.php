@@ -28,6 +28,8 @@ class Order extends Model
         'queue_date',
         'queued_at',
         'cancellation_reason',
+        'cancelled_by',
+        'refund_owed',
         'closed_at',
         'total_price',
         'subtotal',
@@ -55,6 +57,7 @@ class Order extends Model
             'queue_number' => 'integer',
             'queued_at' => 'datetime',
             'closed_at' => 'datetime',
+            'refund_owed' => 'decimal:2',
             'delivery_distance_km' => 'decimal:2',
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -175,6 +178,12 @@ class Order extends Model
         }
 
         return false;
+    }
+
+    /** The staff member or customer who cancelled it, if it was cancelled. */
+    public function cancelledBy()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
     }
 
     /** Null for guest orders. */
