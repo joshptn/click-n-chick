@@ -15,6 +15,7 @@ import {
   ORDERS_KEY,
   amendOrder,
   cancelOrder,
+  confirmDetails,
   confirmReceipt,
   fetchOrder,
   feedbackMailto,
@@ -113,6 +114,15 @@ function OrderTracking() {
     onError: (err) => setEditError(err?.message ?? "That change could not be saved."),
   });
 
+  const confirmingDetails = useMutation({
+    mutationFn: () => confirmDetails(orderId),
+    onSuccess: (payload) => {
+      settle(payload);
+      toast.success("Thanks - we'll get started.", "Details confirmed");
+    },
+    onError: (err) => toast.error(err?.message ?? "That could not be sent.", "Something went wrong"),
+  });
+
   const confirming = useMutation({
     mutationFn: () => confirmReceipt(orderId),
     onSuccess: (payload) => {
@@ -197,8 +207,10 @@ function OrderTracking() {
                 }}
                 onCancel={() => setConfirmingCancel(true)}
                 onConfirmReceipt={() => confirming.mutate()}
+                onConfirmDetails={() => confirmingDetails.mutate()}
                 isCancelling={cancelling.isPending}
                 isConfirming={confirming.isPending}
+                isConfirmingDetails={confirmingDetails.isPending}
               />
               <section className="rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4 sm:px-6">
                 <div className="flex items-start gap-3">

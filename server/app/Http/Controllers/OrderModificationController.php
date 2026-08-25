@@ -13,21 +13,6 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Throwable;
 
-/**
- * Correcting a placed order without cancelling it (UC-ORD-004 after the fact).
- *
- * The delivery address is the interesting one, because it is not free text -
- * it decides the fee (BR-13) and whether the order is deliverable at all
- * (BR-12). So a change is re-quoted through exactly the same service checkout
- * used, and is accepted only if the answer comes back the same.
- *
- * That last rule is deliberate. A cheaper address would mean owing the customer
- * money and a dearer one would mean charging them again, and neither can happen
- * until payment exists. Refusing anything that moves the fee keeps the receipt
- * honest by construction rather than leaving a stale figure on it - and it
- * almost never bites, because the real case is a corrected house number a
- * hundred metres away.
- */
 class OrderModificationController extends Controller
 {
     use AuthorizesRequests;
@@ -96,6 +81,8 @@ class OrderModificationController extends Controller
         if ($changes === []) {
             return $this->refuse('There was nothing to change.', 'NOTHING_TO_CHANGE');
         }
+
+        $changes['details_confirmed_at'] = null;
 
         $order->forceFill($changes)->save();
 
@@ -253,9 +240,6 @@ class OrderModificationController extends Controller
             )];
         }
 
-        // Normalised to UTC before it is written. Eloquent stores a Carbon
-        // verbatim, so handing it a Manila-zoned time writes "16:30" and reads
-        // it back as 16:30 UTC - the same wall clock, eight hours wrong.
         return ['changes' => ['pickup_at' => $requested->utc()]];
     }
 

@@ -111,6 +111,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
     Route::get('/orders', [OrderTrackingController::class, 'index']);
     Route::get('/orders/{order}', [OrderTrackingController::class, 'show'])->whereNumber('order');
+    Route::post('/orders/{order}/confirm-details', [OrderTrackingController::class, 'confirmDetails'])
+        ->whereNumber('order')
+        ->middleware('throttle:user-update');
     Route::post('/orders/{order}/received', [OrderTrackingController::class, 'confirmReceipt'])
         ->whereNumber('order')
         ->middleware('throttle:user-update');

@@ -376,6 +376,91 @@ class OrderModificationTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // "These details are right - start cooking"
+    // -----------------------------------------------------------------
+
+    public function test_a_customer_can_close_their_own_change_window_early(): void
+    {
+        $order = $this->order($customer = $this->customer());
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}")
+            ->assertJsonPath('order.can_confirm_details', true)
+            ->assertJsonPath('order.details_confirmed_at', null);
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson("/api/orders/{$order->id}/confirm-details")
+            ->assertOk();
+
+        $this->assertNotNull($order->fresh()->details_confirmed_at);
+    }
+
+    public function test_confirming_twice_is_refused_rather_than_re_stamped(): void
+    {
+        $order = $this->order($customer = $this->customer());
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/confirm-details")->assertOk();
+        $stamped = $order->fresh()->details_confirmed_at;
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson("/api/orders/{$order->id}/confirm-details")
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'NOTHING_TO_CONFIRM');
+
+        $this->assertEquals($stamped, $order->fresh()->details_confirmed_at);
+    }
+
+    public function test_there_is_nothing_to_confirm_once_the_kitchen_has_started(): void
+    {
+        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::PREPARING);
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson("/api/orders/{$order->id}/confirm-details")
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'NOTHING_TO_CONFIRM');
+    }
+
+    public function test_amending_the_order_withdraws_the_confirmation(): void
+    {
+        $order = $this->order($customer = $this->customer());
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/confirm-details")->assertOk();
+        $this->assertNotNull($order->fresh()->details_confirmed_at);
+
+        // They have just changed the thing they confirmed, so the agent's
+        // "safe to start" signal must stop being true.
+        $this->actingAs($customer, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Actually, the blue gate'])
+            ->assertOk();
+
+        $this->assertNull($order->fresh()->details_confirmed_at);
+    }
+
+    public function test_the_agents_queue_shows_which_orders_are_green_lit(): void
+    {
+        $order = $this->order($customer = $this->customer());
+        $order->enterQueue();
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/confirm-details")->assertOk();
+
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]), 'sanctum')
+            ->getJson('/api/agent/queue')
+            ->assertOk()
+            ->assertJsonPath('line.0.id', $order->id);
+
+        $this->assertNotNull($order->fresh()->details_confirmed_at);
+    }
+
+    public function test_a_stranger_cannot_confirm_someone_elses_details(): void
+    {
+        $order = $this->order($this->customer());
+
+        $this->actingAs($this->customer(), 'sanctum')
+            ->postJson("/api/orders/{$order->id}/confirm-details")
+            ->assertForbidden();
+    }
+
+    // -----------------------------------------------------------------
     // What the tracker advertises
     // -----------------------------------------------------------------
 

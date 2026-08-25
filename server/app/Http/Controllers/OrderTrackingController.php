@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Order;
+use App\Services\Orders\AmendmentPolicy;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -15,7 +16,10 @@ class OrderTrackingController extends Controller
 
     private const WITH = ['items.food', 'items.addons', 'user'];
 
-    public function __construct(private OrderAnnouncer $announcer) {}
+    public function __construct(
+        private OrderAnnouncer $announcer,
+        private AmendmentPolicy $amendment,
+    ) {}
 
     public function index(Request $request)
     {
@@ -58,6 +62,29 @@ class OrderTrackingController extends Controller
         $this->authorize('view', $order);
 
         return response()->json([
+            'order' => new OrderTrackingResource($order->load(self::WITH)),
+        ]);
+    }
+
+    public function confirmDetails(Request $request, Order $order)
+    {
+        $this->authorize('amend', $order);
+
+        if (! $this->amendment->canConfirmDetails($order)) {
+            return response()->json([
+                'message' => $order->details_confirmed_at !== null
+                    ? 'You have already confirmed these details.'
+                    : 'Your order has already moved on, so there is nothing left to confirm.',
+                'error_code' => 'NOTHING_TO_CONFIRM',
+            ], 422);
+        }
+
+        $order->forceFill(['details_confirmed_at' => now()])->save();
+
+        $this->announcer->announce($order, 'update');
+
+        return response()->json([
+            'message' => 'Thanks - we will get started.',
             'order' => new OrderTrackingResource($order->load(self::WITH)),
         ]);
     }

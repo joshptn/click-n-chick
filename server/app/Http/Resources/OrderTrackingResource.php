@@ -43,6 +43,8 @@ class OrderTrackingResource extends JsonResource
             // Which fields the screen may still offer. Decided here so the
             // form and the endpoint cannot disagree about what is open.
             'editable' => app(AmendmentPolicy::class)->editable($this->resource),
+            'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
+            'can_confirm_details' => app(AmendmentPolicy::class)->canConfirmDetails($this->resource),
             'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
             'cancelled_by_store' => $this->cancelled_by !== null && $this->cancelled_by !== $this->user_id,
             'can_confirm_receipt' => $isDelivery && $status === OrderStatus::ON_THE_WAY,

@@ -7,11 +7,6 @@ use App\Services\Store\StoreAvailability;
 
 class AmendmentPolicy
 {
-    /**
-     * Everything that can still be changed, in the shape the tracker reads.
-     *
-     * @return array<string, bool>
-     */
     public function editable(Order $order): array
     {
         return [
@@ -26,6 +21,12 @@ class AmendmentPolicy
     public function anyEditable(Order $order): bool
     {
         return in_array(true, $this->editable($order), true);
+    }
+
+    public function canConfirmDetails(Order $order): bool
+    {
+        return $order->details_confirmed_at === null
+            && in_array((string) $order->status, [OrderStatus::PLACED, OrderStatus::CONFIRMED], true);
     }
 
     public function canEditAddress(Order $order): bool

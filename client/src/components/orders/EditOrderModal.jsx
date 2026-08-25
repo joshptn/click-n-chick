@@ -38,6 +38,7 @@ function EditOrderModal({ order, opened, onClose, onSave, isSaving, error }) {
         locality: place?.locality ?? null,
       });
     } catch {
+      setDestination((current) => current);
     } finally {
       setIsResolving(false);
     }
