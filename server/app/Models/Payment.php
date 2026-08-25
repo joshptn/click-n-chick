@@ -21,8 +21,6 @@ class Payment extends Model
         'refund_status',
         'refund_reference_id',
         'refunded_at',
-        'verified_by',
-        'verified_at',
     ];
 
     protected function casts(): array
@@ -30,7 +28,6 @@ class Payment extends Model
         return [
             'paid_at' => 'datetime',
             'refunded_at' => 'datetime',
-            'verified_at' => 'datetime',
             'refund_amount' => 'decimal:2',
         ];
     }
@@ -40,15 +37,9 @@ class Payment extends Model
         return $this->belongsTo(Order::class);
     }
 
-    /** Null for guest payments. */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /** The admin who confirmed a manual payment. */
-    public function verifier()
-    {
-        return $this->belongsTo(User::class, 'verified_by');
-    }
 }
