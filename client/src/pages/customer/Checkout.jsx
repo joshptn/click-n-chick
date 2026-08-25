@@ -6,6 +6,7 @@ import { IconLock } from "@tabler/icons-react";
 import AppHeader from "../../components/app/AppHeader";
 import AuthContext from "../../context/AuthContext";
 import CheckoutStepper from "../../components/checkout/CheckoutStepper";
+import DiscountStep from "../../components/checkout/DiscountStep";
 import DispatchStep, { FulfilmentToggle } from "../../components/checkout/DispatchStep";
 import OrderSummary from "../../components/checkout/OrderSummary";
 import StepCard from "../../components/checkout/StepCard";
@@ -17,22 +18,10 @@ import {
   pickupTimeToIso,
   toLocalMobile,
 } from "../../lib/checkout";
+import { formatPeso } from "../../lib/menu";
 import { useCart } from "../../context/useCart";
 import { useStoreStatus } from "../../lib/store";
 
-/**
- * Checkout (UC-ORD-001).
- *
- * Three steps; this module implements the first. Discount and Payment are
- * separate modules with their own rules - the once-per-day statutory limit and
- * the PayMongo flow respectively - so they are rendered as locked shells here
- * rather than stubbed with behaviour that would have to be undone.
- *
- * The screen holds the customer's *choices*. It holds no prices: every figure
- * comes back from POST /api/checkout/quote, which is the same code place-order
- * runs before it writes anything. That is what stops the summary and the order
- * from ever disagreeing.
- */
 
 const STEPS = [
   { id: "dispatch", label: "Dispatch", shortLabel: "Dispatch" },
@@ -40,7 +29,6 @@ const STEPS = [
   { id: "payment", label: "Payment", shortLabel: "Pay" },
 ];
 
-/** How long to sit on a keystroke before re-quoting. */
 const QUOTE_DEBOUNCE_MS = 400;
 
 function Checkout() {
@@ -50,12 +38,6 @@ function Checkout() {
   const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCart();
   const { status: storeStatus } = useStoreStatus();
 
-  /*
-   * The cart page passes the ticked lines through router state (BR-25, partial
-   * checkout). Landing here directly - a refresh, a bookmark - falls back to
-   * whatever is currently ticked in the cart, and the server refuses an empty
-   * selection either way.
-   */
   const routeSelection = location.state?.selectedIds ?? null;
   const initialSelection = useRef(routeSelection);
 
@@ -63,9 +45,8 @@ function Checkout() {
 
   const [step, setStep] = useState("dispatch");
   const [completed, setCompleted] = useState([]);
-  // Field-level complaints stay quiet until the customer has actually tried
-  // to continue. See DispatchStep for the split.
   const [attemptedContinue, setAttemptedContinue] = useState(false);
+  const [applyDiscount, setApplyDiscount] = useState(false);
 
   const [dispatchState, setDispatchState] = useState(() => ({
     fulfilmentType: FULFILMENT.PICKUP,
@@ -78,8 +59,6 @@ function Checkout() {
     destination: null,
   }));
 
-  // Prefill from the account once it arrives. Only fills blanks, so it cannot
-  // overwrite something the customer has already typed.
   useEffect(() => {
     if (!user) return;
 
@@ -89,8 +68,6 @@ function Checkout() {
       lastName: prev.lastName || user.last_name || "",
       contactName:
         prev.contactName || [user.first_name, user.last_name].filter(Boolean).join(" "),
-      // Shown the way Filipinos write it. The profile stores +639..., which
-      // is correct but is not what anyone reads back off a form.
       contactPhone: prev.contactPhone || toLocalMobile(user.phone_number),
     }));
   }, [user]);
@@ -116,11 +93,6 @@ function Checkout() {
 
   const addresses = useMemo(() => addressPayload?.addresses ?? [], [addressPayload]);
 
-  /*
-   * Pickup takes a first/last pair to match the form, delivery a single
-   * recipient field. Both collapse to one contact name for the server, which
-   * has no reason to care which shape the screen used.
-   */
   const contactName =
     dispatchState.fulfilmentType === FULFILMENT.DELIVERY
       ? dispatchState.contactName
@@ -141,11 +113,11 @@ function Checkout() {
           : null,
       contact_name: contactName,
       contact_phone: dispatchState.contactPhone,
+      apply_discount: applyDiscount,
     }),
-    [dispatchState, cartItemIds, contactName]
+    [dispatchState, cartItemIds, contactName, applyDiscount]
   );
 
-  // Debounced so typing a phone number does not fire a request per character.
   const [debouncedInput, setDebouncedInput] = useState(quoteInput);
 
   useEffect(() => {
@@ -162,16 +134,11 @@ function Checkout() {
     queryKey: ["checkout", "quote", debouncedInput],
     queryFn: () => fetchCheckoutQuote(debouncedInput),
     enabled: Boolean(cartItemIds),
-    // Always refetched on mount: a quote is a statement about the store and
-    // the menu right now, and serving a cached one would show a fee or an
-    // availability that has since moved.
     staleTime: 0,
     placeholderData: (previous) => previous,
     retry: false,
   });
 
-  // An empty cart has nothing to check out. Sent back rather than shown a
-  // screen whose every control is disabled.
   useEffect(() => {
     if (cartLoading) return;
     if (cartCount === 0) {
@@ -195,6 +162,28 @@ function Checkout() {
     setCompleted((prev) => (prev.includes("dispatch") ? prev : [...prev, "dispatch"]));
     setStep("discount");
   };
+
+  const handleDiscountContinue = () => {
+    if (!quote?.can_place) {
+      toast.info(quote?.blockers?.[0]?.message ?? "Please check this step.", "Almost there");
+
+      return;
+    }
+
+    setCompleted((prev) => (prev.includes("discount") ? prev : [...prev, "discount"]));
+    setStep("payment");
+  };
+
+  const discountSummary = useMemo(() => {
+    const discount = quote?.discount;
+
+    if (!discount) return null;
+    if (discount.applied) {
+      return `${discount.type_label} discount applied (−${formatPeso(discount.amount)})`;
+    }
+
+    return discount.eligible && !discount.used_today ? "Not using my discount" : "No discount";
+  }, [quote]);
 
   const dispatchSummary = useMemo(() => {
     if (dispatchState.fulfilmentType === FULFILMENT.DELIVERY) {
@@ -257,13 +246,21 @@ function Checkout() {
               />
             </StepCard>
 
-            {/* Steps 2 and 3 are separate modules. Shown so the customer can
-                see the whole flow, inert until those modules land. */}
-            <StepCard index={2} title="Senior / PWD Discount" state={stateFor("discount")}>
-              <p className="m-0 flex items-center gap-2 font-display text-[13px] text-[#8d8884]">
-                <IconLock size={15} stroke={2} aria-hidden="true" />
-                The discount step is coming next.
-              </p>
+            <StepCard
+              index={2}
+              title="Senior / PWD Discount"
+              state={stateFor("discount")}
+              summary={discountSummary}
+              onReopen={() => setStep("discount")}
+            >
+              <DiscountStep
+                discount={quote?.discount ?? null}
+                applied={applyDiscount}
+                onChange={setApplyDiscount}
+                isQuoting={quoteFetching && !quoteLoading}
+                onContinue={handleDiscountContinue}
+                onBack={() => setStep("dispatch")}
+              />
             </StepCard>
 
             <StepCard index={3} title="Secure Payment" state={stateFor("payment")}>
