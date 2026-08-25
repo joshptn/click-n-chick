@@ -60,7 +60,16 @@ const HERO = {
   },
 };
 
-function OrderStatusPanel({ order, onEdit, onCancel, onConfirmReceipt, isCancelling, isConfirming }) {
+function OrderStatusPanel({
+  order,
+  onEdit,
+  onCancel,
+  onConfirmReceipt,
+  onConfirmDetails,
+  isCancelling,
+  isConfirming,
+  isConfirmingDetails,
+}) {
   const hero = HERO[order.status] ?? HERO.placed;
   const Icon = hero.icon;
   const queue = queueMessage(order.queue);
@@ -139,6 +148,35 @@ function OrderStatusPanel({ order, onEdit, onCancel, onConfirmReceipt, isCancell
             Yes, I received my order
           </Button>
         </section>
+      )}
+
+      {order.can_confirm_details && (
+        <section className="rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="m-0 min-w-0 font-display text-[12.5px] leading-snug text-[#6f6b68]">
+              Everything correct? Tell us and we can get started sooner. You can still cancel for a full
+              refund until the kitchen begins.
+            </p>
+
+            <Button
+              size="sm"
+              loading={isConfirmingDetails}
+              loadingLabel="Sending&hellip;"
+              onClick={onConfirmDetails}
+              className="shrink-0"
+            >
+              <IconCircleCheck size={15} stroke={2.2} aria-hidden="true" />
+              Details are correct
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {order.details_confirmed_at && !order.is_terminal && (
+        <p className="m-0 flex items-center justify-center gap-1.5 font-display text-[12px] text-[#2f9e44]">
+          <IconCircleCheck size={13} stroke={2.2} aria-hidden="true" />
+          You confirmed these details. The kitchen can start any time.
+        </p>
       )}
 
       {anythingEditable && (

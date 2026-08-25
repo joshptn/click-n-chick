@@ -16,6 +16,7 @@ class CheckoutQuote
     public function __construct(
         private DeliveryQuote $delivery,
         private StoreAvailability $store,
+        private CancellationPolicy $cancellation,
     ) {}
 
     public function build(User $user, array $input): array
@@ -100,9 +101,22 @@ class CheckoutQuote
             'delivery_fee' => round($deliveryFee, 2),
             'pickup' => $pickup,
             'discount' => $discount,
+            'cancellation' => $this->cancellationTerms(),
             'total' => round(max(0, $subtotal - (float) $discount['amount']) + $deliveryFee, 2),
             'blockers' => $blockers,
             'can_place' => $blockers === [],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function cancellationTerms(): array
+    {
+        $through = $this->cancellation->fullRefundThrough();
+
+        return [
+            'full_refund_through' => $through,
+            'full_refund_through_label' => OrderStatus::label($through),
+            'advance_cutoff_hours' => $this->cancellation->advanceCutoffHours(),
         ];
     }
 

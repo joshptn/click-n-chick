@@ -20,6 +20,10 @@ export function amendOrder(id, changes) {
   return api.patch(`/api/orders/${id}`, changes);
 }
 
+export function confirmDetails(id) {
+  return api.post(`/api/orders/${id}/confirm-details`);
+}
+
 export function confirmReceipt(id) {
   return api.post(`/api/orders/${id}/received`);
 }

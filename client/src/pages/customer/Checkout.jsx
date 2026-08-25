@@ -8,7 +8,9 @@ import AuthContext from "../../context/AuthContext";
 import CheckoutStepper from "../../components/checkout/CheckoutStepper";
 import DiscountStep from "../../components/checkout/DiscountStep";
 import DispatchStep, { FulfilmentToggle } from "../../components/checkout/DispatchStep";
+import CancellationNotice from "../../components/checkout/CancellationNotice";
 import OrderSummary from "../../components/checkout/OrderSummary";
+import ReviewOrderModal from "../../components/checkout/ReviewOrderModal";
 import StepCard from "../../components/checkout/StepCard";
 import toast from "../../components/app/Toast";
 import {
@@ -47,6 +49,8 @@ function Checkout() {
   const [completed, setCompleted] = useState([]);
   const [attemptedContinue, setAttemptedContinue] = useState(false);
   const [applyDiscount, setApplyDiscount] = useState(false);
+  const [acknowledgedTerms, setAcknowledgedTerms] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   const [dispatchState, setDispatchState] = useState(() => ({
     fulfilmentType: FULFILMENT.PICKUP,
@@ -170,6 +174,11 @@ function Checkout() {
       return;
     }
 
+    setReviewing(true);
+  };
+
+  const handleReviewContinue = () => {
+    setReviewing(false);
     setCompleted((prev) => (prev.includes("discount") ? prev : [...prev, "discount"]));
     setStep("payment");
   };
@@ -271,16 +280,27 @@ function Checkout() {
             </StepCard>
           </div>
 
-          <div className="lg:sticky lg:top-[84px]">
+          <div className="flex flex-col gap-3.5 lg:sticky lg:top-[84px]">
             <OrderSummary
               quote={quote}
               isLoading={quoteLoading}
               canPlaceOrder={false}
               placeOrderLabel="Place Order"
             />
+
+            <CancellationNotice quote={quote} />
           </div>
         </div>
       </main>
+
+      <ReviewOrderModal
+        quote={quote}
+        opened={reviewing}
+        onClose={() => setReviewing(false)}
+        acknowledged={acknowledgedTerms}
+        onAcknowledge={setAcknowledgedTerms}
+        onContinue={handleReviewContinue}
+      />
     </div>
   );
 }

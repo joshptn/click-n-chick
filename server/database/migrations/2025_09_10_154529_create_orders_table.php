@@ -31,6 +31,8 @@ return new class extends Migration
             $table->date('queue_date')->nullable();
             $table->dateTime('queued_at')->nullable();
 
+            $table->dateTime('details_confirmed_at')->nullable();
+
             $table->string('cancellation_reason')->nullable();
             $table->foreignId('cancelled_by')->nullable()->constrained('users')->nullOnDelete();
             $table->decimal('refund_owed', 10, 2)->nullable();

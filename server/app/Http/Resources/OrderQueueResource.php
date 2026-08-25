@@ -36,6 +36,11 @@ class OrderQueueResource extends JsonResource
             'allowed_transitions' => OrderStatus::transitionsFrom((string) $this->status, $this->order_type),
             'cancellation_reason' => $this->cancellation_reason,
 
+            // The customer has checked their own details. Not a gate - the
+            // kitchen may start regardless - but it is the difference between
+            // starting on a confirmed order and one still being edited.
+            'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
+
             'order_type' => $this->order_type,
             'estimated_time_of_completion' => $this->estimated_time_of_completion,
 
