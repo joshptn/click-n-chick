@@ -236,7 +236,7 @@ function AppHeader({
               <Menu.Item leftSection={<IconUser size={16} stroke={1.9} />} onClick={() => nav("/account/profile")}>
                 My profile
               </Menu.Item>
-              <Menu.Item leftSection={<IconReceipt size={16} stroke={1.9} />} onClick={() => nav("/home")}>
+              <Menu.Item leftSection={<IconReceipt size={16} stroke={1.9} />} onClick={() => nav("/orders")}>
                 My orders
               </Menu.Item>
               <Menu.Item

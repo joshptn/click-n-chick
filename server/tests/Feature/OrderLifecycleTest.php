@@ -390,7 +390,15 @@ class OrderLifecycleTest extends TestCase
     {
         [$order] = $this->line(1);
 
-        $this->assertSame('Online 1', $order->queueLabel());
+        $this->assertSame('CNC-001', $order->queueLabel());
+    }
+
+    public function test_the_ticket_is_padded_so_the_ninth_and_the_ninetieth_read_alike(): void
+    {
+        [$order] = $this->line(1);
+        $order->forceFill(['queue_number' => 42])->save();
+
+        $this->assertSame('CNC-042', $order->fresh()->queueLabel());
     }
 
     public function test_an_empty_prefix_gives_the_bare_number(): void
@@ -399,7 +407,7 @@ class OrderLifecycleTest extends TestCase
 
         [$order] = $this->line(1);
 
-        $this->assertSame('1', $order->queueLabel());
+        $this->assertSame('001', $order->queueLabel());
     }
 
     public function test_an_unpaid_order_has_no_ticket(): void

@@ -28,6 +28,7 @@ class Order extends Model
         'queue_date',
         'queued_at',
         'cancellation_reason',
+        'closed_at',
         'total_price',
         'subtotal',
         'discount_amount',
@@ -53,6 +54,7 @@ class Order extends Model
             'pickup_at' => 'datetime',
             'queue_number' => 'integer',
             'queued_at' => 'datetime',
+            'closed_at' => 'datetime',
             'delivery_distance_km' => 'decimal:2',
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -60,6 +62,19 @@ class Order extends Model
             'delivery_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $order) {
+            if (! $order->isDirty('status')) {
+                return;
+            }
+
+            if (OrderStatus::isTerminal((string) $order->status)) {
+                $order->closed_at ??= now();
+            }
+        });
     }
 
     public function nextStatus(): ?string
@@ -94,8 +109,14 @@ class Order extends Model
         }
 
         $prefix = trim((string) config('store.queue.label_prefix', ''));
+        $number = str_pad((string) $this->queue_number, 3, '0', STR_PAD_LEFT);
 
-        return $prefix === '' ? (string) $this->queue_number : $prefix.' '.$this->queue_number;
+        return $prefix === '' ? $number : $prefix.'-'.$number;
+    }
+
+    public function reference(): string
+    {
+        return $this->queueLabel() ?? '#'.$this->getKey();
     }
 
     public function queuePosition(): ?int

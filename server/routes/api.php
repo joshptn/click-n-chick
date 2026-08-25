@@ -12,6 +12,7 @@ use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderQueueController;
+use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PasswordResetController;
@@ -44,9 +45,7 @@ Route::get('/drinks', [FoodController::class, 'drinks']);
 Route::get('/sides', [FoodController::class, 'sides']);
 Route::get('/category', [CategoryController::class, 'index']);
 Route::get('/category/{category}', [CategoryController::class, 'show']);
-Route::get('/posters', [PosterController::class, 'index']);
-
-// Trading status 
+Route::get('/posters', [PosterController::class, 'index']); 
 Route::get('/store/status', [StoreStatusController::class, 'show']);
 
 // Customer
@@ -109,8 +108,13 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
 
     Route::post('/order/place', [OrderController::class, 'placeOrder'])
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
-    Route::get('/orders', [OrderController::class, 'getUserOrder']);
-    Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder']);
+    Route::get('/orders', [OrderTrackingController::class, 'index']);
+    Route::get('/orders/{order}', [OrderTrackingController::class, 'show'])->whereNumber('order');
+    Route::post('/orders/{order}/received', [OrderTrackingController::class, 'confirmReceipt'])
+        ->whereNumber('order')
+        ->middleware('throttle:user-update');
+    Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder'])
+        ->middleware('throttle:user-update');
 });
 
 // Superadmin and Admin
@@ -126,7 +130,6 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
     Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
 
-    // Fulfilment: the queue the kitchen actually works from.
     Route::get('/agent/queue', [OrderQueueController::class, 'index']);
     Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
     Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);

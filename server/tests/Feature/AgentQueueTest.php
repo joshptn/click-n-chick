@@ -164,7 +164,7 @@ class AgentQueueTest extends TestCase
             ->assertOk()
             ->assertJsonPath('line.0.items.0.food_name', 'Fried Chicken')
             ->assertJsonPath('line.0.items.0.quantity', 2)
-            ->assertJsonPath('line.0.queue_label', 'Online 1')
+            ->assertJsonPath('line.0.queue_label', 'CNC-001')
             ->assertJsonPath('line.0.status_label', 'Placed')
             ->assertJsonPath('line.0.next_status', OrderStatus::CONFIRMED);
     }

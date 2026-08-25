@@ -22,7 +22,7 @@ return [
     ],
 
     'queue' => [
-        'label_prefix' => env('STORE_QUEUE_LABEL_PREFIX', 'Online'),
+        'label_prefix' => env('STORE_QUEUE_LABEL_PREFIX', 'CNC'),
     ],
 
 ];

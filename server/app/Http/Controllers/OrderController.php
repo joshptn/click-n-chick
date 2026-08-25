@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\DiscountAlreadyUsed;
+use App\Http\Resources\OrderTrackingResource;
 use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\OrderItemAddon;
 use App\Models\User;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\OrderAnnouncer;
@@ -106,12 +108,22 @@ class OrderController extends Controller implements HasMiddleware
                 ]);
 
                 foreach ($quote['items'] as $line) {
-                    OrderItem::create([
+                    $item = OrderItem::create([
                         'order_id' => $order->id,
                         'food_id' => $line['food_id'],
                         'quantity' => $line['quantity'],
                         'price' => $line['unit_price'],
+                        'unit_price' => $line['unit_price'],
+                        'subtotal' => $line['subtotal'],
                     ]);
+
+                    foreach ($line['addons'] ?? [] as $addon) {
+                        OrderItemAddon::create([
+                            'order_item_id' => $item->id,
+                            'addon_id' => $addon['id'],
+                            'unit_price' => $addon['addon_price'],
+                        ]);
+                    }
                 }
 
                 CartItem::where('user_id', $user->id)->whereIn('id', $selectedIds)->delete();
@@ -150,21 +162,6 @@ class OrderController extends Controller implements HasMiddleware
             ->exists();
     }
 
-    public function getUserOrder(Request $request)
-    {
-        $user = $request->user();
-
-        $orders = $user->Orders()->with('items.food', 'items.food.category', 'user')->orderBy('created_at', 'desc')->get();
-
-        if ($orders->isEmpty()) {
-            return response()->json(['message' => 'No orders found'], 404);
-        }
-
-        return response()->json([
-            'orders' => $orders,
-        ], 200);
-    }
-
     public function cancelOrder(Request $request, $orderId)
     {
         $user = $request->user();
@@ -190,7 +187,10 @@ class OrderController extends Controller implements HasMiddleware
 
         $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
 
-        return response()->json(['message' => 'Order cancelled successfully', 'order' => $order], 200);
+        return response()->json([
+            'message' => 'Order cancelled successfully',
+            'order' => new OrderTrackingResource($order->load('items.food', 'items.addons', 'user')),
+        ], 200);
     }
 
     public function updateOrderStatus(Request $request, $orderId)
