@@ -52,7 +52,7 @@ class PolicyAuthorizationTest extends TestCase
         ]);
     }
 
-    private function order(User $owner, string $status = 'pending'): Order
+    private function order(User $owner, string $status = 'placed'): Order
     {
         return Order::create([
             'user_id' => $owner->id,
@@ -163,7 +163,7 @@ class PolicyAuthorizationTest extends TestCase
     {
         $owner = $this->user(User::ROLE_CUSTOMER);
 
-        $pending = $this->order($owner, 'pending');
+        $pending = $this->order($owner, 'placed');
         $confirmed = $this->order($owner, 'confirmed');
 
         $this->assertTrue(Gate::forUser($owner)->allows('cancel', $pending), 'FR-02.8');
@@ -172,7 +172,7 @@ class PolicyAuthorizationTest extends TestCase
 
     public function test_a_customer_may_not_cancel_someone_elses_order(): void
     {
-        $order = $this->order($this->user(User::ROLE_CUSTOMER), 'pending');
+        $order = $this->order($this->user(User::ROLE_CUSTOMER), 'placed');
 
         $this->assertFalse(Gate::forUser($this->user(User::ROLE_CUSTOMER))->allows('cancel', $order));
     }

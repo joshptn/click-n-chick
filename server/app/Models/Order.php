@@ -2,12 +2,18 @@
 
 namespace App\Models;
 
+use App\Services\Orders\OrderStatus;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 class Order extends Model
 {
-    /** @use HasFactory<\Database\Factories\OrderFactory> */
+    private const QUEUE_ATTEMPTS = 3;
+
     use HasFactory;
 
     protected $fillable = [
@@ -18,6 +24,9 @@ class Order extends Model
         'scheduled_for',
         'pickup_at',
         'status',
+        'queue_number',
+        'queue_date',
+        'queued_at',
         'total_price',
         'subtotal',
         'discount_amount',
@@ -41,6 +50,8 @@ class Order extends Model
         return [
             'scheduled_for' => 'datetime',
             'pickup_at' => 'datetime',
+            'queue_number' => 'integer',
+            'queued_at' => 'datetime',
             'delivery_distance_km' => 'decimal:2',
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -48,6 +59,64 @@ class Order extends Model
             'delivery_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
         ];
+    }
+
+    public function nextStatus(): ?string
+    {
+        return OrderStatus::next((string) $this->status, $this->order_type);
+    }
+
+    public function canTransitionTo(string $status): bool
+    {
+        return OrderStatus::allows((string) $this->status, $status, $this->order_type);
+    }
+
+    public function isTerminal(): bool
+    {
+        return OrderStatus::isTerminal((string) $this->status);
+    }
+
+    public function hasEnteredQueue(): bool
+    {
+        return $this->queue_number !== null;
+    }
+
+    public function enterQueue(?CarbonInterface $at = null): bool
+    {
+        if ($this->hasEnteredQueue()) {
+            return false;
+        }
+
+        $moment = $at ? CarbonImmutable::parse($at) : CarbonImmutable::now();
+        $date = $moment->setTimezone((string) config('store.timezone', 'Asia/Manila'))->toDateString();
+
+        for ($attempt = 1; $attempt <= self::QUEUE_ATTEMPTS; $attempt++) {
+            try {
+                DB::transaction(function () use ($moment, $date) {
+                    $last = static::query()
+                        ->where('queue_date', $date)
+                        ->orderByDesc('queue_number')
+                        ->lockForUpdate()
+                        ->value('queue_number');
+
+                    $this->forceFill([
+                        'queue_number' => (int) $last + 1,
+                        'queue_date' => $date,
+                        'queued_at' => $moment,
+                    ])->save();
+                });
+
+                return true;
+            } catch (QueryException $e) {
+                if ($attempt === self::QUEUE_ATTEMPTS) {
+                    throw $e;
+                }
+
+                $this->forceFill(['queue_number' => null, 'queue_date' => null, 'queued_at' => null]);
+            }
+        }
+
+        return false;
     }
 
     /** Null for guest orders. */

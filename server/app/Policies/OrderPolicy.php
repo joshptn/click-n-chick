@@ -4,12 +4,10 @@ namespace App\Policies;
 
 use App\Models\Order;
 use App\Models\User;
-
+use App\Services\Orders\OrderStatus;
 
 class OrderPolicy
 {
-    private const STATUS_PENDING = 'pending';
-
     private function owns(User $user, Order $order): bool
     {
         return $order->user_id !== null && (int) $order->user_id === (int) $user->id;
@@ -19,7 +17,6 @@ class OrderPolicy
     {
         return $user->hasRole(User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN);
     }
-
 
     public function viewAny(User $user): bool
     {
@@ -39,7 +36,7 @@ class OrderPolicy
     public function cancel(User $user, Order $order): bool
     {
         if ($this->owns($user, $order)) {
-            return $order->status === self::STATUS_PENDING;
+            return OrderStatus::isCustomerCancellable((string) $order->status);
         }
 
         return $this->isStaff($user);
@@ -50,7 +47,6 @@ class OrderPolicy
         return $this->owns($user, $order)
             || $user->hasRole(User::ROLE_ADMIN);
     }
-
 
     public function delete(User $user, Order $order): bool
     {

@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
 use App\Services\Orders\CheckoutQuote;
+use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use App\Utils\Notification;
 use Carbon\CarbonImmutable;
@@ -19,6 +20,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class OrderController extends Controller implements HasMiddleware
 {
@@ -86,7 +88,7 @@ class OrderController extends Controller implements HasMiddleware
                     'user_id' => $user->id,
                     'order_type' => $quote['fulfilment_type'],
                     'address_id' => $isDelivery ? ($destination['address_id'] ?? null) : null,
-                    'status' => 'pending',
+                    'status' => OrderStatus::PLACED,
                     'subtotal' => $quote['subtotal'],
                     'discount_amount' => $quote['discount']['amount'],
                     'delivery_fee' => $quote['delivery_fee'],
@@ -186,11 +188,18 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        if ($order->status !== 'pending') {
-            return response()->json(['message' => 'Order cannot be cancelled'], 400);
+        if (! OrderStatus::isCustomerCancellable((string) $order->status)) {
+            return response()->json([
+                'message' => $order->isTerminal()
+                    ? 'This order is already '.strtolower(OrderStatus::label((string) $order->status)).'.'
+                    : 'This order has already been confirmed. Ask a store agent to cancel it for you.',
+                'error_code' => $order->isTerminal()
+                    ? 'ORDER_ALREADY_CLOSED'
+                    : 'CANCELLATION_REQUIRES_APPROVAL',
+            ], 400);
         }
 
-        $order->status = 'cancelled';
+        $order->status = OrderStatus::CANCELLED;
         $order->save();
 
         $this->announce(fn () => [
@@ -205,8 +214,8 @@ class OrderController extends Controller implements HasMiddleware
     {
         $this->authorize('isAdmin', Order::class);
 
-        $request->validate([
-            'status' => 'required|in:pending,approved,declined,completed',
+        $validated = $request->validate([
+            'status' => ['required', 'string', Rule::in(OrderStatus::all())],
         ]);
 
         $order = Order::find($orderId);
@@ -215,7 +224,31 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        $order->status = $request->status;
+        $target = $validated['status'];
+
+        if ($order->status === $target) {
+            return response()->json(['message' => 'Order status updated', 'order' => $order], 200);
+        }
+
+        if (! $order->canTransitionTo($target)) {
+            $allowed = OrderStatus::transitionsFrom((string) $order->status, $order->order_type);
+
+            return response()->json([
+                'message' => $allowed === []
+                    ? 'This order is already '.strtolower(OrderStatus::label((string) $order->status)).'.'
+                    : 'An order that is '.strtolower(OrderStatus::label((string) $order->status))
+                        .' can only move to '
+                        .implode(' or ', array_map(
+                            fn (string $status) => strtolower(OrderStatus::label($status)),
+                            $allowed
+                        )).'.',
+                'error_code' => 'INVALID_STATUS_TRANSITION',
+                'status' => $order->status,
+                'allowed' => $allowed,
+            ], 422);
+        }
+
+        $order->status = $target;
         $order->save();
 
         $this->announce(fn () => [

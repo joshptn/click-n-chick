@@ -37,7 +37,7 @@ class RealtimeConfigTest extends TestCase
         return Order::create([
             'user_id' => User::factory()->create()->id,
             'total_price' => 100,
-            'status' => 'pending',
+            'status' => 'placed',
         ]);
     }
 
@@ -168,7 +168,7 @@ class RealtimeConfigTest extends TestCase
         $agent = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $this->actingAs($agent, 'sanctum')
-            ->putJson("/api/order/{$order->id}/status", ['status' => 'approved'])
+            ->putJson("/api/order/{$order->id}/status", ['status' => 'confirmed'])
             ->assertOk();
 
         Event::assertDispatched(

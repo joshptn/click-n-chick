@@ -25,7 +25,10 @@ return new class extends Migration
             $table->decimal('delivery_fee', 10, 2)->default(0);
             $table->decimal('delivery_distance_km', 6, 2)->nullable();
             $table->decimal('total_amount', 10, 2)->nullable();
-            $table->string('status')->default('pending');
+            $table->string('status')->default('placed');
+            $table->unsignedInteger('queue_number')->nullable();
+            $table->date('queue_date')->nullable();
+            $table->dateTime('queued_at')->nullable();
             $table->string('estimated_time_of_completion')->nullable();
             $table->string('payment_status')->nullable();
             $table->string('guest_name')->nullable();
@@ -37,12 +40,11 @@ return new class extends Migration
             $table->string('location')->nullable();
             $table->string('delivery_note')->nullable();
             $table->timestamps();
+            $table->unique(['queue_date', 'queue_number']);
+            $table->index(['status', 'queued_at']);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('orders');

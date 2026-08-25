@@ -25,7 +25,7 @@ class BroadcastChannelAuthTest extends TestCase
         return Order::create([
             'user_id' => $owner?->id,
             'total_price' => 100,
-            'status' => 'pending',
+            'status' => 'placed',
         ]);
     }
 
