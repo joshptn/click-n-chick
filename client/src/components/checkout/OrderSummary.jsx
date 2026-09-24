@@ -1,19 +1,17 @@
-import { IconClock, IconLock, IconShoppingCart, IconTruckDelivery } from "@tabler/icons-react";
+import { IconCheck, IconClock, IconLock, IconShoppingCart, IconTruckDelivery } from "@tabler/icons-react";
 
 import Button from "../ui/Button";
 import { formatPeso } from "../../lib/menu";
 
-/**
- * The running total, alongside the steps (UC-PAY-001).
- *
- * Reads the server's quote and nothing else - no arithmetic happens in this
- * file. The delivery fee, the discount and the amount due are all computed
- * server-side, so what is shown here is what the order will be written with.
- *
- * BR-11 fixes the order of the lines: subtotal, delivery fee, discount,
- * amount due.
- */
-function OrderSummary({ quote, isLoading, canPlaceOrder = false, onPlaceOrder, placeOrderLabel }) {
+function OrderSummary({
+  quote,
+  isLoading,
+  canPlaceOrder = false,
+  onPlaceOrder,
+  placeOrderLabel,
+  acknowledged = false,
+  onAcknowledge,
+}) {
   const items = quote?.items ?? [];
   const discount = quote?.discount ?? null;
   const isDelivery = quote?.fulfilment_type === "delivery";
@@ -82,9 +80,6 @@ function OrderSummary({ quote, isLoading, canPlaceOrder = false, onPlaceOrder, p
           </div>
         )}
 
-        {/* Rendered only once claimed. The entitlement alone is not a
-            discount - claiming it spends the customer's one use for the day
-            (BR-09), so it must never appear to apply itself. */}
         {discount?.applied && (
           <div className="flex items-center justify-between gap-3 font-display text-[13px] font-semibold text-brand-600">
             <span>
@@ -119,9 +114,28 @@ function OrderSummary({ quote, isLoading, canPlaceOrder = false, onPlaceOrder, p
           Est. {isDelivery ? "delivery" : "time of completion"}: 25&ndash;35 min
         </p>
 
-        <p className="m-0 mt-1 text-center font-display text-[10.5px] leading-snug text-[#b3aca4]">
-          Orders cannot be cancelled once confirmed.
-        </p>
+        <label className="mt-3 flex cursor-pointer items-start gap-2.5 border-t border-[#f4f1ec] pt-3">
+          <span className="relative mt-[1px] flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(event) => onAcknowledge?.(event.target.checked)}
+              className="peer h-full w-full cursor-pointer appearance-none rounded-full border-2 border-[#ddd6cd] bg-white transition-colors checked:border-brand-500 checked:bg-brand-500"
+            />
+            <IconCheck
+              size={11}
+              stroke={3.5}
+              aria-hidden="true"
+              className="pointer-events-none absolute text-white opacity-0 transition-opacity peer-checked:opacity-100"
+            />
+          </span>
+
+          <span className="font-display text-[11.5px] leading-snug text-[#8d8884]">
+            I confirm that my <span className="font-semibold text-brand-600">Order Details</span> are
+            correct and have read the{" "}
+            <span className="font-semibold text-brand-600">Refund Policy</span>
+          </span>
+        </label>
       </div>
     </aside>
   );

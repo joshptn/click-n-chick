@@ -10,7 +10,6 @@ import DiscountStep from "../../components/checkout/DiscountStep";
 import DispatchStep, { FulfilmentToggle } from "../../components/checkout/DispatchStep";
 import CancellationNotice from "../../components/checkout/CancellationNotice";
 import OrderSummary from "../../components/checkout/OrderSummary";
-import ReviewOrderModal from "../../components/checkout/ReviewOrderModal";
 import StepCard from "../../components/checkout/StepCard";
 import toast from "../../components/app/Toast";
 import {
@@ -33,6 +32,8 @@ const STEPS = [
 
 const QUOTE_DEBOUNCE_MS = 400;
 
+const PAYMENT_AVAILABLE = false;
+
 function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,7 +51,6 @@ function Checkout() {
   const [attemptedContinue, setAttemptedContinue] = useState(false);
   const [applyDiscount, setApplyDiscount] = useState(false);
   const [acknowledgedTerms, setAcknowledgedTerms] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
 
   const [dispatchState, setDispatchState] = useState(() => ({
     fulfilmentType: FULFILMENT.PICKUP,
@@ -174,11 +174,6 @@ function Checkout() {
       return;
     }
 
-    setReviewing(true);
-  };
-
-  const handleReviewContinue = () => {
-    setReviewing(false);
     setCompleted((prev) => (prev.includes("discount") ? prev : [...prev, "discount"]));
     setStep("payment");
   };
@@ -284,23 +279,16 @@ function Checkout() {
             <OrderSummary
               quote={quote}
               isLoading={quoteLoading}
-              canPlaceOrder={false}
+              canPlaceOrder={PAYMENT_AVAILABLE && acknowledgedTerms && Boolean(quote?.can_place)}
               placeOrderLabel="Place Order"
+              acknowledged={acknowledgedTerms}
+              onAcknowledge={setAcknowledgedTerms}
             />
 
             <CancellationNotice quote={quote} />
           </div>
         </div>
       </main>
-
-      <ReviewOrderModal
-        quote={quote}
-        opened={reviewing}
-        onClose={() => setReviewing(false)}
-        acknowledged={acknowledgedTerms}
-        onAcknowledge={setAcknowledgedTerms}
-        onContinue={handleReviewContinue}
-      />
     </div>
   );
 }
