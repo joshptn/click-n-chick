@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Indicator, Menu, Modal } from "@mantine/core";
 import {
   IconBell,
+  IconCalendarPlus,
   IconLogout,
   IconReceipt,
   IconSearch,
@@ -15,6 +16,7 @@ import {
 import AuthContext from "../../context/AuthContext";
 import Button from "../ui/Button";
 import LogoIcon from "../../assets/logo-icon.png";
+import { ROLES } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
 import { useCart } from "../../context/useCart";
 import { useRealtime } from "../../context/useRealtime";
@@ -34,6 +36,11 @@ function AppHeader({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const showSearch = typeof onSearchChange === "function";
+
+  // Advance ordering is for registered customers only (FR-03.4). Staff can reach
+  // the storefront, so the entrance is gated on the role rather than on being
+  // signed in.
+  const canOrderInAdvance = user?.role === ROLES.CUSTOMER;
 
   const displayName = user?.first_name
     ? `${user.first_name} ${user.last_name?.charAt(0) ?? ""}.`.trim()
@@ -206,6 +213,26 @@ function AppHeader({
               )}
             </Menu.Dropdown>
           </Menu>
+
+          {canOrderInAdvance && (
+            <>
+              <Link
+                to="/advance-order"
+                data-testid="advance-order-entry"
+                className="hidden h-[38px] shrink-0 items-center rounded-full border border-brand-500 bg-transparent px-4 font-display text-[13px] font-semibold text-brand-600 no-underline transition-colors hover:bg-brand-50 sm:inline-flex"
+              >
+                Advance Order
+              </Link>
+
+              <Link
+                to="/advance-order"
+                aria-label="Advance order"
+                className="grid h-10 w-10 place-items-center rounded-full bg-transparent text-brand-600 no-underline transition-colors hover:bg-brand-50 sm:hidden"
+              >
+                <IconCalendarPlus size={21} stroke={1.9} />
+              </Link>
+            </>
+          )}
 
           <Menu position="bottom-end" width={210} shadow="md" radius="md">
             <Menu.Target>
