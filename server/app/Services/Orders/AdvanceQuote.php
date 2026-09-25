@@ -8,7 +8,6 @@ use App\Models\Discount;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
-
 class AdvanceQuote
 {
     public function __construct(
@@ -42,9 +41,13 @@ class AdvanceQuote
             $blockers[] = $contact['blocker'];
         }
 
+        $discountBase = round((float) $lines->sum(
+            fn (array $line) => $line['base_price'] * $line['quantity']
+        ), 2);
+
         $discount = $this->discount(
             $user,
-            $subtotal,
+            $discountBase,
             (bool) ($input['apply_discount'] ?? false),
             $scheduleBlocker === null ? $collectAt : null,
         );
@@ -63,6 +66,7 @@ class AdvanceQuote
             'items' => $lines->values()->all(),
             'item_count' => (int) $lines->sum('quantity'),
             'subtotal' => $subtotal,
+            'discount_base' => $discountBase,
             'contact' => ['name' => $contact['name'], 'phone' => $contact['phone']],
             'discount' => $discount,
             'total' => round(max(0, $subtotal - (float) $discount['amount']), 2),
@@ -157,13 +161,13 @@ class AdvanceQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    private function discount(User $user, float $subtotal, bool $requested, ?\Carbon\CarbonImmutable $collectAt): array
+    private function discount(User $user, float $base, bool $requested, ?\Carbon\CarbonImmutable $collectAt): array
     {
         $latest = $user->latestDiscountClaim()->first();
         $approved = $latest?->isApproved() ?? false;
 
         $percentage = Discount::currentPercentage();
-        $available = $approved ? round($subtotal * ($percentage / 100), 2) : 0.0;
+        $available = $approved ? round($base * ($percentage / 100), 2) : 0.0;
 
         $usedOnDate = $approved && $collectAt !== null && $this->discountUsage->usedOn($user, $collectAt);
 

@@ -122,8 +122,7 @@ function DiscountStep({
 
       <p className="m-0 flex items-start gap-2 font-display text-[12px] leading-snug text-[#8d8884]">
         <IconInfoCircle size={14} stroke={2} aria-hidden="true" className="mt-px shrink-0 text-brand-500" />
-         Discount applies to food items only, not the
-        delivery fee.
+        Discount applies to the meal items only, not to add-ons and delivery fee.
       </p>
 
       <div className="mt-1 flex flex-col gap-2.5 sm:flex-row sm:items-center">

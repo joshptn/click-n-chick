@@ -82,7 +82,11 @@ class CheckoutQuote
             $blockers[] = $contact['blocker'];
         }
 
-        $discount = $this->discount($user, $subtotal, (bool) ($input['apply_discount'] ?? false));
+        $discountBase = round((float) $lines->sum(
+            fn (array $line) => $line['base_price'] * $line['quantity']
+        ), 2);
+
+        $discount = $this->discount($user, $discountBase, (bool) ($input['apply_discount'] ?? false));
 
         if ($discount['blocker']) {
             $blockers[] = $discount['blocker'];
@@ -96,6 +100,7 @@ class CheckoutQuote
             'items' => $lines->values()->all(),
             'item_count' => (int) $lines->sum('quantity'),
             'subtotal' => $subtotal,
+            'discount_base' => $discountBase,
             'destination' => $destination,
             'contact' => ['name' => $contact['name'], 'phone' => $contact['phone']],
             'delivery' => $delivery,
@@ -336,14 +341,14 @@ class CheckoutQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    private function discount(User $user, float $subtotal, bool $requested): array
+    private function discount(User $user, float $base, bool $requested): array
     {
         $latest = $user->latestDiscountClaim()->first();
         $approved = $latest?->isApproved() ?? false;
 
         $percentage = Discount::currentPercentage();
         $usedToday = $approved && $this->usedToday($user);
-        $available = $approved ? round($subtotal * ($percentage / 100), 2) : 0.0;
+        $available = $approved ? round($base * ($percentage / 100), 2) : 0.0;
 
         $status = match (true) {
             $approved => 'approved',
