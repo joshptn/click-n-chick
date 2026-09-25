@@ -22,6 +22,17 @@ final class OrderStatus
 
     public const CANCELLED = 'cancelled';
 
+    /** Advance orders only (BRD §3.2). Pickup, never delivery. */
+    public const SUBMITTED = 'submitted';
+
+    public const ACCEPTED = 'accepted';
+
+    public const AWAITING_PAYMENT = 'awaiting_payment';
+
+    public const SCHEDULED = 'scheduled';
+
+    public const REJECTED = 'rejected';
+
     public static function chain(?string $fulfilmentType): array
     {
         if ($fulfilmentType === StoreAvailability::TYPE_DELIVERY) {
@@ -29,6 +40,35 @@ final class OrderStatus
         }
 
         return [self::PLACED, self::CONFIRMED, self::PREPARING, self::READY_FOR_PICKUP, self::COMPLETED];
+    }
+
+    /**
+     * Once an advance order reaches `preparing` it is indistinguishable from an
+     * immediate pickup order, so the tail here is the pickup chain (BR-22c).
+     */
+    public static function advanceChain(): array
+    {
+        return [
+            self::SUBMITTED,
+            self::ACCEPTED,
+            self::AWAITING_PAYMENT,
+            self::CONFIRMED,
+            self::SCHEDULED,
+            self::PREPARING,
+            self::READY_FOR_PICKUP,
+            self::COMPLETED,
+        ];
+    }
+
+    /** Statuses only an advance order ever holds. */
+    public static function advanceOnly(): array
+    {
+        return [self::SUBMITTED, self::ACCEPTED, self::AWAITING_PAYMENT, self::SCHEDULED, self::REJECTED];
+    }
+
+    public static function isAdvanceOnly(string $status): bool
+    {
+        return in_array($status, self::advanceOnly(), true);
     }
 
     public static function all(): array
@@ -42,13 +82,18 @@ final class OrderStatus
             self::COMPLETED,
             self::DELIVERED,
             self::CANCELLED,
+            self::SUBMITTED,
+            self::ACCEPTED,
+            self::AWAITING_PAYMENT,
+            self::SCHEDULED,
+            self::REJECTED,
         ];
     }
 
     /** @return array<int, string> */
     public static function terminal(): array
     {
-        return [self::COMPLETED, self::DELIVERED, self::CANCELLED];
+        return [self::COMPLETED, self::DELIVERED, self::CANCELLED, self::REJECTED];
     }
 
     public static function inLine(): array
@@ -115,6 +160,11 @@ final class OrderStatus
             self::COMPLETED => 'Completed',
             self::DELIVERED => 'Delivered',
             self::CANCELLED => 'Cancelled',
+            self::SUBMITTED => 'Request sent',
+            self::ACCEPTED => 'Accepted',
+            self::AWAITING_PAYMENT => 'Awaiting payment',
+            self::SCHEDULED => 'Scheduled',
+            self::REJECTED => 'Rejected',
             default => ucfirst(str_replace('_', ' ', $status)),
         };
     }
