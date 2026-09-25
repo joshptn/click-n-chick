@@ -48,6 +48,7 @@ export async function primeRecaptcha() {
   try {
     await loadScript(config.site_key);
   } catch {
+    // executeRecaptcha reports the failure at submit time.
   }
 }
 

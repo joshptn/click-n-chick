@@ -117,6 +117,13 @@ class Order extends Model
         return $due->lessThanOrEqualTo($at ? CarbonImmutable::parse($at) : CarbonImmutable::now());
     }
 
+    public function statusChain(): array
+    {
+        return $this->isAdvance()
+            ? OrderStatus::advanceChain()
+            : OrderStatus::chain($this->order_type);
+    }
+
     public function nextStatus(): ?string
     {
         return $this->isAdvance()

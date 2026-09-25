@@ -60,6 +60,9 @@ class OrderTrackingTest extends TestCase
             'total_amount' => $type === 'delivery' ? 440 : 410,
             'total_price' => $type === 'delivery' ? 440 : 410,
             'full_address' => $type === 'delivery' ? 'Apalit, Pampanga' : null,
+            // Paid, so the refund assertions below are about the window rather
+            // than about there being no charge to reverse.
+            'payment_status' => 'paid',
         ]);
 
         if ($queue) {

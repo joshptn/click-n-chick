@@ -104,10 +104,10 @@ function AdvanceSubmitted() {
 
           <div className="flex flex-col gap-2.5 border-t border-[#f0e9df] px-6 py-5 sm:flex-row">
             <Link
-              to="/orders"
+              to={`/orders/${orderId}`}
               className="inline-flex h-[46px] flex-1 items-center justify-center rounded-[10px] bg-brand-500 font-display text-[14px] font-semibold text-white no-underline transition-colors hover:bg-brand-600"
             >
-              See my orders
+              Track this request
             </Link>
 
             <Link

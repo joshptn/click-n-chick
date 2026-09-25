@@ -2,18 +2,22 @@ import { motion } from "framer-motion";
 import {
   IconAlertTriangle,
   IconBike,
+  IconCalendarEvent,
   IconChefHat,
   IconCircleCheck,
   IconClock,
+  IconCreditCard,
   IconInfoCircle,
   IconPencil,
   IconReceipt,
+  IconSend,
   IconShoppingBag,
   IconUsers,
 } from "@tabler/icons-react";
 
 import Button from "../ui/Button";
-import { queueMessage } from "../../lib/orders";
+import { cancelPrompt, isRefused, queueMessage } from "../../lib/orders";
+import { formatCollection } from "../../lib/advance";
 
 const MotionSpan = motion.span;
 
@@ -60,6 +64,40 @@ const HERO = {
   },
 };
 
+
+const ADVANCE_HERO = {
+  submitted: {
+    icon: IconSend,
+    title: "Request sent",
+    body: "A Store Agent is checking whether the kitchen can make this on your date.",
+  },
+  accepted: {
+    icon: IconCircleCheck,
+    title: "Your request was accepted!",
+    body: "Pay within 24 hours to lock in your collection date.",
+  },
+  awaiting_payment: {
+    icon: IconCreditCard,
+    title: "Ready for payment",
+    body: "Pay within 24 hours of the store accepting to lock in your collection date.",
+  },
+  confirmed: {
+    icon: IconCircleCheck,
+    title: "Payment received!",
+    body: "Your date is booked. Nothing happens in the kitchen until then.",
+  },
+  scheduled: {
+    icon: IconCalendarEvent,
+    title: "You're booked in",
+    body: "We start preparing on your collection date. There is nothing to do until then.",
+  },
+  rejected: {
+    icon: IconAlertTriangle,
+    title: "Request declined",
+    body: "The store could not take this one on. Nothing was charged.",
+  },
+};
+
 function OrderStatusPanel({
   order,
   onEdit,
@@ -70,12 +108,16 @@ function OrderStatusPanel({
   isConfirming,
   isConfirmingDetails,
 }) {
-  const hero = HERO[order.status] ?? HERO.placed;
+  const isAdvance = Boolean(order.is_advance);
+  const hero =
+    (isAdvance ? ADVANCE_HERO[order.status] : null) ?? HERO[order.status] ?? HERO.placed;
   const Icon = hero.icon;
   const queue = queueMessage(order.queue);
 
   const cancellation = order.cancellation ?? null;
   const refundable = cancellation?.refundable ?? false;
+  const prompt = cancelPrompt(order);
+  const collectAt = isAdvance ? formatCollection(order.scheduled_for) : null;
 
   const editable = order.editable ?? {};
   const openFields = [
@@ -90,7 +132,7 @@ function OrderStatusPanel({
       ? openFields[0]
       : `${openFields.slice(0, -1).join(", ")} or ${openFields[openFields.length - 1]}`;
 
-  const tone = order.is_cancelled
+  const tone = isRefused(order)
     ? { ring: "bg-[#fdecec]", dot: "bg-[#c92a2a]" }
     : order.is_terminal
       ? { ring: "bg-[#e9f8ee]", dot: "bg-[#2f9e44]" }
@@ -115,8 +157,20 @@ function OrderStatusPanel({
         </h2>
 
         <p className="m-0 mx-auto mt-1.5 max-w-[440px] font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
-          {order.is_cancelled && order.cancellation_reason ? order.cancellation_reason : hero.body}
+          {isRefused(order) && order.cancellation_reason ? order.cancellation_reason : hero.body}
         </p>
+
+        {collectAt && !isRefused(order) && (
+          <div className="mx-auto mt-5 flex max-w-[360px] items-center gap-3 rounded-[12px] bg-[#fff4e8] px-4 py-3 text-left">
+            <IconCalendarEvent size={19} stroke={2} aria-hidden="true" className="shrink-0 text-brand-600" />
+            <span className="min-w-0">
+              <span className="block font-display text-[10.5px] font-bold uppercase tracking-[0.7px] text-brand-700/70">
+                Collection
+              </span>
+              <span className="block font-display text-[13.5px] font-bold text-ink">{collectAt}</span>
+            </span>
+          </div>
+        )}
 
         {queue && (
           <div className="mx-auto mt-5 flex max-w-[360px] items-center gap-3 rounded-[12px] bg-[#faf7f3] px-4 py-3 text-left">
@@ -218,11 +272,11 @@ function OrderStatusPanel({
               variant="ghost"
               size="sm"
               loading={isCancelling}
-              loadingLabel="Cancelling&hellip;"
+              loadingLabel="Working&hellip;"
               onClick={onCancel}
               className="shrink-0 border border-[#f3d4d4] text-[#c92a2a] hover:bg-[#fdecec]"
             >
-              Cancel order
+              {prompt.action}
             </Button>
           </div>
         </section>

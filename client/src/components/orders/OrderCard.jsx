@@ -1,18 +1,23 @@
 import { Link } from "react-router-dom";
 import {
   IconBike,
+  IconCalendarEvent,
   IconChevronRight,
   IconShoppingBag,
   IconUsers,
 } from "@tabler/icons-react";
 
 import { formatDay, formatTime, itemsSummary, statusBadgeClass } from "../../lib/orders";
+import { formatCollection } from "../../lib/advance";
 import { formatPeso } from "../../lib/menu";
 
 function OrderCard({ order }) {
   const isDelivery = order.order_type === "delivery";
+  const isAdvance = Boolean(order.is_advance);
   const ahead = order.queue?.in_line ? order.queue.ahead ?? 0 : null;
   const when = order.closed_at ?? order.placed_at;
+
+  const collectAt = isAdvance ? formatCollection(order.scheduled_for) : null;
 
   return (
     <Link
@@ -26,7 +31,13 @@ function OrderCard({ order }) {
               order.is_terminal ? "bg-[#f4f1ec] text-[#8d8884]" : "bg-[#fff4e8] text-brand-600"
             }`}
           >
-            {isDelivery ? <IconBike size={19} stroke={2} /> : <IconShoppingBag size={19} stroke={2} />}
+            {isAdvance ? (
+              <IconCalendarEvent size={19} stroke={2} />
+            ) : isDelivery ? (
+              <IconBike size={19} stroke={2} />
+            ) : (
+              <IconShoppingBag size={19} stroke={2} />
+            )}
           </span>
 
           <div className="min-w-0">
@@ -37,7 +48,16 @@ function OrderCard({ order }) {
               {itemsSummary(order.items)}
             </p>
             <p className="m-0 mt-0.5 font-display text-[11.5px] text-[#a39f9b]">
-              {isDelivery ? "Delivery" : "Pickup"} &middot; {formatDay(when)} &middot; {formatTime(when)}
+              {collectAt ? (
+                <>
+                  <span className="font-semibold text-brand-600">Advance</span> &middot; for {collectAt}
+                </>
+              ) : (
+                <>
+                  {isDelivery ? "Delivery" : "Pickup"} &middot; {formatDay(when)} &middot;{" "}
+                  {formatTime(when)}
+                </>
+              )}
             </p>
           </div>
         </div>

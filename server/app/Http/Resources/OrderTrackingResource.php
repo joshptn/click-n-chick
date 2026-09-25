@@ -28,7 +28,11 @@ class OrderTrackingResource extends JsonResource
 
             'steps' => $this->steps($status, $isCancelled),
             'step_index' => $isCancelled ? null : $this->stepIndex($status),
-            'step_count' => count(OrderStatus::chain($this->order_type)),
+            'step_count' => count($this->statusChain()),
+
+            'is_advance' => $this->isAdvance(),
+            'scheduled_for' => $this->scheduled_for?->toIso8601String(),
+            'payment_due_at' => $this->paymentDueAt()?->toIso8601String(),
 
             'queue' => [
                 'number' => $this->queue_number,
@@ -40,8 +44,6 @@ class OrderTrackingResource extends JsonResource
 
             'cancellation' => app(CancellationPolicy::class)->for($this->resource),
             'can_cancel' => ! $this->isTerminal(),
-            // Which fields the screen may still offer. Decided here so the
-            // form and the endpoint cannot disagree about what is open.
             'editable' => app(AmendmentPolicy::class)->editable($this->resource),
             'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
             'can_confirm_details' => app(AmendmentPolicy::class)->canConfirmDetails($this->resource),
@@ -97,7 +99,7 @@ class OrderTrackingResource extends JsonResource
 
     private function steps(string $status, bool $isCancelled): array
     {
-        $chain = OrderStatus::chain($this->order_type);
+        $chain = $this->statusChain();
         $at = $isCancelled ? -1 : array_search($status, $chain, true);
 
         return array_map(fn (string $step, int $index) => [
@@ -114,7 +116,7 @@ class OrderTrackingResource extends JsonResource
 
     private function stepIndex(string $status): ?int
     {
-        $at = array_search($status, OrderStatus::chain($this->order_type), true);
+        $at = array_search($status, $this->statusChain(), true);
 
         return $at === false ? null : $at + 1;
     }
