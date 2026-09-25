@@ -17,6 +17,7 @@ class CheckoutQuote
         private DeliveryQuote $delivery,
         private StoreAvailability $store,
         private CancellationPolicy $cancellation,
+        private DiscountUsage $discountUsage,
     ) {}
 
     public function build(User $user, array $input): array
@@ -385,14 +386,6 @@ class CheckoutQuote
 
     private function usedToday(User $user): bool
     {
-        $today = CarbonImmutable::now(Discount::USAGE_TIMEZONE);
-
-        return $user->orders()
-            ->where('discount_amount', '>', 0)
-            ->whereBetween('created_at', [
-                $today->startOfDay()->utc(),
-                $today->endOfDay()->utc(),
-            ])
-            ->exists();
+        return $this->discountUsage->usedToday($user);
     }
 }

@@ -57,7 +57,15 @@ function Unavailable({ discount }) {
   );
 }
 
-function DiscountStep({ discount, applied, onChange, isQuoting, onContinue, onBack }) {
+function DiscountStep({
+  discount,
+  applied,
+  onChange,
+  isQuoting,
+  onContinue,
+  onBack,
+  continueLabel = "Continue to Payment",
+}) {
   if (!discount) {
     return (
       <div className="space-y-3">
@@ -135,7 +143,7 @@ function DiscountStep({ discount, applied, onChange, isQuoting, onContinue, onBa
           loading={isQuoting}
           loadingLabel="Checking&hellip;"
         >
-          Continue to Payment
+          {continueLabel}
           <IconChevronRight size={16} stroke={2.6} aria-hidden="true" />
         </Button>
       </div>
