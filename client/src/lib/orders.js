@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { formatPeso } from "./menu";
 
 export const ORDERS_KEY = ["orders"];
 
@@ -70,8 +71,24 @@ export function formatDay(iso, { relative = true } = {}) {
   return full;
 }
 
+export const ADVANCE_STATUS = {
+  SUBMITTED: "submitted",
+  ACCEPTED: "accepted",
+  AWAITING_PAYMENT: "awaiting_payment",
+  SCHEDULED: "scheduled",
+  REJECTED: "rejected",
+};
+
+export function isRefused(order) {
+  return Boolean(order?.is_cancelled) || order?.status === ADVANCE_STATUS.REJECTED;
+}
+
+export function isUnanswered(order) {
+  return order?.status === ADVANCE_STATUS.SUBMITTED;
+}
+
 export function statusTone(order) {
-  if (order?.is_cancelled) return "cancelled";
+  if (isRefused(order)) return "cancelled";
   if (order?.is_terminal) return "done";
 
   return "live";
@@ -94,6 +111,39 @@ export function itemsSummary(items = []) {
   const head = first.quantity > 1 ? `${first.quantity}× ${first.food_name}` : first.food_name;
 
   return rest.length === 0 ? head : `${head} + ${rest.length} more`;
+}
+
+export function cancelPrompt(order) {
+  const terms = order?.cancellation ?? null;
+  const withdrawing = isUnanswered(order);
+  const advance = Boolean(order?.is_advance);
+
+  const outcome = (() => {
+    if (terms?.refundable) {
+      return `You will be refunded ${formatPeso(terms.refund_amount)} in full.`;
+    }
+
+    if (terms?.code === "NOTHING_PAID") {
+      return "You have not paid for this, so there is nothing to refund.";
+    }
+
+    return "The kitchen has already started on this, so it cannot be refunded.";
+  })();
+
+  const consequence = withdrawing
+    ? "The store will not see this request any more."
+    : advance
+      ? "Your collection date is released and the kitchen will not prepare it."
+      : "The kitchen will be told straight away.";
+
+  return {
+    action: withdrawing ? "Withdraw request" : "Cancel order",
+    title: withdrawing ? "Withdraw this request?" : "Cancel this order?",
+    body: `${outcome} ${consequence}`,
+    confirm: withdrawing ? "Yes, withdraw it" : "Yes, cancel it",
+    keep: withdrawing ? "Keep my request" : "Keep my order",
+    refundable: Boolean(terms?.refundable),
+  };
 }
 
 export function feedbackMailto(order, address = "clicknchick.feedback@gmail.com") {

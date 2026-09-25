@@ -91,7 +91,6 @@ class SystemSettingController extends Controller
     {
         $validated = $request->validate([
             'full_refund_through' => ['required', 'string', Rule::in(CancellationPolicy::thresholds())],
-            'advance_cutoff_hours' => ['required', 'integer', 'min:0', 'max:720'],
         ], [
             'full_refund_through.in' => 'A refund window cannot extend past the kitchen starting.',
         ]);
@@ -99,7 +98,6 @@ class SystemSettingController extends Controller
         $actor = (int) $request->user()->getKey();
 
         Setting::put(Setting::CANCELLATION_FULL_REFUND_THROUGH, $validated['full_refund_through'], $actor);
-        Setting::put(Setting::CANCELLATION_ADVANCE_CUTOFF_HOURS, (int) $validated['advance_cutoff_hours'], $actor);
 
         return response()->json([
             'success' => true,
@@ -246,14 +244,12 @@ class SystemSettingController extends Controller
 
         return [
             'full_refund_through' => $policy->fullRefundThrough(),
-            'advance_cutoff_hours' => $policy->advanceCutoffHours(),
             'options' => array_map(fn (string $status) => [
                 'value' => $status,
                 'label' => OrderStatus::label($status),
             ], CancellationPolicy::thresholds()),
             'defaults' => [
                 'full_refund_through' => CancellationPolicy::DEFAULT_FULL_REFUND_THROUGH,
-                'advance_cutoff_hours' => CancellationPolicy::DEFAULT_ADVANCE_CUTOFF_HOURS,
             ],
         ] + $this->provenance(Setting::CANCELLATION_FULL_REFUND_THROUGH);
     }

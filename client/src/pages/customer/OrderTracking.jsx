@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@mantine/core";
-import { IconArrowLeft, IconMail, IconToolsKitchen2 } from "@tabler/icons-react";
+import { IconArrowLeft, IconInfoCircle, IconMail, IconToolsKitchen2 } from "@tabler/icons-react";
 
 import AppHeader from "../../components/app/AppHeader";
 import Button from "../../components/ui/Button";
@@ -15,6 +15,7 @@ import {
   ORDERS_KEY,
   amendOrder,
   cancelOrder,
+  cancelPrompt,
   confirmDetails,
   confirmReceipt,
   fetchOrder,
@@ -55,8 +56,8 @@ function OrderTracking() {
   });
 
   const order = data?.order ?? null;
+  const prompt = cancelPrompt(order);
 
-  // Poll only while the kitchen still has work ahead of this order.
   const inLine = Boolean(order?.queue?.in_line);
 
   useEffect(() => {
@@ -70,7 +71,6 @@ function OrderTracking() {
     return () => window.clearInterval(timer);
   }, [inLine, orderId, queryClient]);
 
-  // This order's own status changes arrive instantly.
   const lastEvent = useOrderChannel(order ? orderId : null);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ function OrderTracking() {
     onSuccess: (payload) => {
       settle(payload);
       setConfirmingCancel(false);
-      toast.success("Your order has been cancelled.", "Cancelled");
+      toast.success(payload?.message ?? "Your order has been cancelled.", "Cancelled");
     },
     onError: (err) => {
       setConfirmingCancel(false);
@@ -268,27 +268,31 @@ function OrderTracking() {
       <Modal
         opened={confirmingCancel}
         onClose={() => setConfirmingCancel(false)}
-        title="Cancel this order?"
+        title={prompt.title}
         centered
         radius="md"
       >
-        <p className="m-0 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
-          Your payment is refunded automatically. Once the store confirms an order it can no longer be
-          cancelled here, so this is your window.
-        </p>
+        <p className="m-0 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">{prompt.body}</p>
+
+        {!prompt.refundable && (
+          <p className="m-0 mt-2.5 flex items-start gap-2 rounded-[10px] bg-[#fff9e8] px-3 py-2.5 font-display text-[12.5px] leading-snug text-[#8a6206]">
+            <IconInfoCircle size={15} stroke={2} aria-hidden="true" className="mt-px shrink-0" />
+            This cannot be undone.
+          </p>
+        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirmingCancel(false)} disabled={cancelling.isPending}>
-            Keep my order
+            {prompt.keep}
           </Button>
           <Button
             variant="secondary"
             size="sm"
             loading={cancelling.isPending}
-            loadingLabel="Cancelling&hellip;"
+            loadingLabel="Working&hellip;"
             onClick={() => cancelling.mutate()}
           >
-            Yes, cancel it
+            {prompt.confirm}
           </Button>
         </div>
       </Modal>

@@ -32,8 +32,6 @@ class Setting extends Model
 
     public const CANCELLATION_FULL_REFUND_THROUGH = 'cancellation.full_refund_through';
 
-    public const CANCELLATION_ADVANCE_CUTOFF_HOURS = 'cancellation.advance_cutoff_hours';
-
     protected $fillable = [
         'key',
         'value',

@@ -486,4 +486,78 @@ class OrderModificationTest extends TestCase
             ->assertJsonPath('order.editable.address', false)
             ->assertJsonPath('order.editable.note', false);
     }
+
+    // -----------------------------------------------------------------
+    // Advance orders are not amendable here
+    // -----------------------------------------------------------------
+    //
+    // `confirmed` exists in both chains, so without an explicit guard an
+    // advance order would be offered the pickup-time editor - and the change
+    // would be written to `pickup_at`, a column an advance order does not use
+    // for its collection date. Rescheduling one is its own piece of work.
+
+    private function advanceOrder(User $owner, string $status = OrderStatus::CONFIRMED): Order
+    {
+        $order = $this->order($owner, 'pickup', $status);
+
+        $order->forceFill([
+            'scheduled_for' => CarbonImmutable::now('Asia/Manila')->addDays(7)->setTime(12, 0),
+        ])->save();
+
+        return $order->fresh();
+    }
+
+    public function test_an_advance_order_offers_no_amendable_fields(): void
+    {
+        $order = $this->advanceOrder($customer = $this->customer());
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('order.is_advance', true)
+            ->assertJsonPath('order.editable.pickup_at', false)
+            ->assertJsonPath('order.editable.address', false)
+            ->assertJsonPath('order.editable.note', false);
+    }
+
+    public function test_an_advance_order_is_not_asked_to_confirm_its_details(): void
+    {
+        // "Go ahead and start" means nothing on an order booked for next week.
+        $order = $this->advanceOrder($customer = $this->customer());
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('order.can_confirm_details', false);
+    }
+
+    public function test_the_endpoint_refuses_to_amend_an_advance_order(): void
+    {
+        // Not merely hidden in the UI - the door itself is shut.
+        $order = $this->advanceOrder($customer = $this->customer());
+        $booked = $order->scheduled_for;
+
+        $this->actingAs($customer, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}", [
+                'pickup_at' => CarbonImmutable::now('Asia/Manila')->addDays(7)->setTime(15, 0)->toIso8601String(),
+            ])
+            ->assertStatus(422);
+
+        $this->assertTrue(
+            $booked->equalTo($order->fresh()->scheduled_for),
+            'the collection date must survive a refused amendment untouched'
+        );
+    }
+
+    public function test_an_immediate_pickup_order_still_offers_its_collection_time(): void
+    {
+        // The guard must key on the order being an advance one, not on pickup.
+        $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::CONFIRMED);
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('order.is_advance', false)
+            ->assertJsonPath('order.editable.pickup_at', true);
+    }
 }

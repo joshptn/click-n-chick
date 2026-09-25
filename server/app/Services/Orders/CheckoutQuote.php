@@ -122,7 +122,6 @@ class CheckoutQuote
         return [
             'full_refund_through' => $through,
             'full_refund_through_label' => OrderStatus::label($through),
-            'advance_cutoff_hours' => $this->cancellation->advanceCutoffHours(),
         ];
     }
 

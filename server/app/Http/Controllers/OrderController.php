@@ -163,7 +163,8 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        $policy = app(CancellationPolicy::class)->for($order);
+        $cancellation = app(CancellationPolicy::class);
+        $policy = $cancellation->for($order);
 
         if (! $policy['can_cancel']) {
             return response()->json([
@@ -181,11 +182,10 @@ class OrderController extends Controller implements HasMiddleware
         $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
 
         return response()->json([
-            'message' => $policy['refundable']
-                ? 'Your order has been cancelled and your payment will be refunded.'
-                : 'Your order has been cancelled. As the kitchen had already started, this one is not refunded.',
+            'message' => $cancellation->outcomeMessage($policy),
             'refunded' => $policy['refundable'],
             'refund_amount' => $policy['refund_amount'],
+            'refund_code' => $policy['code'],
             'order' => new OrderTrackingResource($order->load('items.food', 'items.addons', 'user')),
         ], 200);
     }

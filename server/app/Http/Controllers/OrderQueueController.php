@@ -132,7 +132,17 @@ class OrderQueueController extends Controller
 
         $reason = trim((string) ($validated['reason'] ?? ''));
 
-        $refund = $validated['refund'] ?? true
+        /**
+         * BR-21a: a shop-initiated cancellation refunds regardless of the
+         * window, because that is not the customer's fault. The agent may waive
+         * it for a cancellation the customer phoned in.
+         *
+         * Clamped to what was actually paid either way. An advance request the
+         * shop turns down has usually never been paid, and recording a refund
+         * against a charge that never happened would hand the payment provider
+         * something it cannot settle.
+         */
+        $refund = ($validated['refund'] ?? true) && $order->isPaid()
             ? round((float) ($order->total_amount ?? $order->total_price), 2)
             : 0.0;
 
@@ -146,9 +156,11 @@ class OrderQueueController extends Controller
         $this->announcer->statusChanged($order);
 
         return response()->json([
-            'message' => $refund > 0
-                ? 'Order cancelled and marked for refund.'
-                : 'Order cancelled without a refund.',
+            'message' => match (true) {
+                $refund > 0 => 'Order cancelled and marked for refund.',
+                ! $order->isPaid() => 'Order cancelled. It had not been paid for, so there is nothing to refund.',
+                default => 'Order cancelled without a refund.',
+            },
             'refund_owed' => $refund,
             'order' => new OrderQueueResource($order->load(self::WITH)),
         ]);
