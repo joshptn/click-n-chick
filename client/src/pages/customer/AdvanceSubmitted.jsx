@@ -35,7 +35,7 @@ function AdvanceSubmitted() {
   const collectAt = formatCollection(order?.scheduled_for);
 
   return (
-    <div className="min-h-dvh bg-[#fdfaf6] font-display text-ink">
+    <div className="min-h-dvh bg-vlat-display text-ink">
       <AppHeader cartMode={CART_MODE.ADVANCE} />
 
       <main className="mx-auto w-full max-w-[640px] px-4 py-8 sm:px-6">

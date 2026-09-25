@@ -1,11 +1,23 @@
 import { api } from "./api";
+import { RECAPTCHA_ACTIONS, withRecaptcha } from "./recaptcha";
 
 export function fetchAdvanceQuote(payload, options) {
   return api.post("/api/advance-orders/quote", payload, options);
 }
 
-export function submitAdvanceOrder(payload, options) {
-  return api.post("/api/advance-orders", payload, options);
+/**
+ * Send the request. Quoting is unguarded, submitting is not.
+ *
+ * The token is minted here rather than at the call site so a second caller
+ * cannot forget it - the route answers 422 RECAPTCHA_FAILED / "missing"
+ * without one, which is exactly how this was found.
+ */
+export async function submitAdvanceOrder(payload, options) {
+  return api.post(
+    "/api/advance-orders",
+    await withRecaptcha(payload, RECAPTCHA_ACTIONS.PLACE_ORDER),
+    options
+  );
 }
 
 export function toScheduleIso(date, time) {
