@@ -4,39 +4,45 @@ namespace App\Utils;
 
 use App\Events\NotificationBroadcast;
 use App\Models\Notification as ModelsNotification;
-use App\Services\Orders\OrderStatus;
+use App\Models\Order;
+use App\Services\Orders\OrderNotice;
 
 class Notification
 {
-    public static function notify($type, $event, $user_id, $order = null)
-    {
-        $title = ucfirst($type).' '.(
-            is_string($event) && OrderStatus::isKnown($event)
-                ? OrderStatus::label($event)
-                : ucfirst((string) $event)
-        );
 
-        $body = match ($event) {
-            'create' => "Your order #{$order->id} has been placed. We will confirm it shortly.",
-            OrderStatus::CONFIRMED => "Good news! Your order #{$order->id} has been confirmed.",
-            OrderStatus::PREPARING => "Your order #{$order->id} is being prepared now.",
-            OrderStatus::READY_FOR_PICKUP => "Your order #{$order->id} is ready for collection at the store.",
-            OrderStatus::ON_THE_WAY => "Your order #{$order->id} is on the way.",
-            OrderStatus::COMPLETED => "Your order #{$order->id} has been completed. Thank you for ordering with us!",
-            OrderStatus::DELIVERED => "Your order #{$order->id} has been delivered. Thank you for ordering with us!",
-            OrderStatus::CANCELLED => trim((string) $order->cancellation_reason) !== ''
-                ? "Your order #{$order->id} has been cancelled: {$order->cancellation_reason}"
-                : "Your order #{$order->id} has been cancelled.",
-            'update' => "Your order #{$order->id} ETC has been updated to {$order->estimated_time_of_completion} minutes.",
-            default => "There is an update regarding your order #{$order->id}."
-        };
-
+    public static function push(
+        int $userId,
+        string $title,
+        string $body,
+        ?string $type = null,
+        ?Order $order = null,
+    ): ModelsNotification {
         $notification = ModelsNotification::create([
-            'user_id' => $user_id,
+            'user_id' => $userId,
+            'order_id' => $order?->getKey(),
             'title' => $title,
             'body' => $body,
+            'notification_type' => $type,
         ]);
 
-        NotificationBroadcast::dispatch($notification, (int) $user_id);
+        NotificationBroadcast::dispatch($notification, $userId);
+
+        return $notification;
+    }
+
+    /** @param  array{title: string, body: string, type?: string|null}  $notice */
+    public static function send(int $userId, array $notice, ?Order $order = null): ModelsNotification
+    {
+        return self::push($userId, $notice['title'], $notice['body'], $notice['type'] ?? null, $order);
+    }
+
+    /** Tell a customer about their own order, worded for the kind of order it is. */
+    public static function notify($type, $event, $user_id, $order = null)
+    {
+        if (! $order instanceof Order) {
+            return self::push((int) $user_id, ucfirst((string) $type), 'There is an update on your order.');
+        }
+
+        return self::send((int) $user_id, app(OrderNotice::class)->customer($order, (string) $event), $order);
     }
 }

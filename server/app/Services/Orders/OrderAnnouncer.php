@@ -4,17 +4,13 @@ namespace App\Services\Orders;
 
 use App\Events\OrderBroadcast;
 use App\Models\Order;
+use App\Models\User;
 use App\Utils\Notification;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class OrderAnnouncer
 {
-    /**
-     * @param  string  $broadcastEvent  the wire event name the client switches on
-     * @param  string|null  $notifyEvent  the lifecycle status to word the customer's
-     *                                    notification from, or null to store none
-     */
     public function announce(Order $order, string $broadcastEvent, ?string $notifyEvent = null): void
     {
         if ($notifyEvent !== null && $order->user_id !== null) {
@@ -28,10 +24,27 @@ class OrderAnnouncer
         ));
     }
 
-    /** A status change: the wire event and the customer's wording are the same fact. */
     public function statusChanged(Order $order): void
     {
         $this->announce($order, 'update', (string) $order->status);
+    }
+
+    public function toStaff(Order $order, array $notice, array $roles = [User::ROLE_ADMIN]): int
+    {
+        $recipients = User::query()
+            ->whereIn('role', $roles)
+            ->where('account_status', User::STATUS_ACTIVE)
+            ->pluck('id');
+
+        foreach ($recipients as $id) {
+            $this->attempt(
+                $order,
+                'staff notification',
+                fn () => Notification::send((int) $id, $notice, $order)
+            );
+        }
+
+        return $recipients->count();
     }
 
     private function attempt(Order $order, string $what, callable $action): void

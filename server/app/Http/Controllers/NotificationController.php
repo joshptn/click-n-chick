@@ -67,7 +67,6 @@ class NotificationController extends Controller
             ], 403);
         }
 
-        // assuming you have 'is_read' boolean OR 'read_at' timestamp
         $notification->update([
             'is_read' => true,
             // OR use:
@@ -78,6 +77,19 @@ class NotificationController extends Controller
             'status' => 'success',
             'message' => 'Notification marked as read.',
             'data' => $notification
+        ]);
+    }
+
+    public function markAllAsRead(Request $request)
+    {
+        $marked = $request->user()->notifications()
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Notifications marked as read.',
+            'marked' => $marked,
         ]);
     }
 

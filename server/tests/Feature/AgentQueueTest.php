@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Events\OrderBroadcast;
 use App\Models\Food;
+use App\Models\Notification;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
@@ -328,7 +329,14 @@ class AgentQueueTest extends TestCase
             ->assertJsonPath('order.cancellation_reason', 'We ran out of chicken.');
     }
 
-    public function test_the_reason_reaches_the_customers_notification(): void
+    /**
+     * UC-NOTIF-012: the reason and the refund outcome, and that the shop did it.
+     *
+     * "Your order has been cancelled" reads as though the customer did it. When
+     * the shop calls off an order the customer was waiting on, the notification
+     * has to say so and say what happens to their money.
+     */
+    public function test_the_reason_and_refund_outcome_reach_the_customers_notification(): void
     {
         $order = $this->queued();
 
@@ -336,10 +344,28 @@ class AgentQueueTest extends TestCase
             ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Kitchen closed early.'])
             ->assertOk();
 
-        $this->assertDatabaseHas('notifications', [
-            'user_id' => $order->user_id,
-            'body' => "Your order #{$order->id} has been cancelled: Kitchen closed early.",
-        ]);
+        $body = Notification::where('user_id', $order->user_id)->latest('id')->value('body');
+
+        $this->assertStringContainsString('The store cancelled', $body);
+        $this->assertStringContainsString('Kitchen closed early.', $body);
+        // Unpaid, so there is no charge to reverse - and saying "refunded" here
+        // would promise money that never moved.
+        $this->assertStringContainsString('nothing to refund', $body);
+    }
+
+    public function test_a_paid_order_cancelled_by_the_shop_is_told_the_amount(): void
+    {
+        $order = $this->queued();
+        $order->forceFill(['payment_status' => 'paid'])->save();
+
+        $this->actingAs($this->staff(), 'sanctum')
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'We ran out of chicken.'])
+            ->assertOk();
+
+        $this->assertStringContainsString(
+            '₱120.00 will be refunded',
+            Notification::where('user_id', $order->user_id)->latest('id')->value('body')
+        );
     }
 
     public function test_a_reason_is_optional(): void

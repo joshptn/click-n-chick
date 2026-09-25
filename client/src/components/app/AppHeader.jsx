@@ -20,7 +20,9 @@ import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
 import { useCart } from "../../context/useCart";
+import { useNotifications } from "../../context/useNotifications";
 import { useRealtime } from "../../context/useRealtime";
+import { notificationTarget } from "../../lib/notifications";
 
 function AppHeader({
   search,
@@ -34,7 +36,13 @@ function AppHeader({
   const { user, logOut } = useContext(AuthContext);
   const { item_count: itemCount } = useCart(cartMode);
   const { isOpen, status: storeStatus } = useStoreStatus();
-  const { notifications, unreadCount, isConnected, isConfigured, isReady, markAllRead } = useRealtime();
+  const { isConnected, isConfigured, isReady } = useRealtime();
+  const {
+    items: notifications,
+    unreadCount,
+    markAllRead,
+    isMarking,
+  } = useNotifications();
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
@@ -193,23 +201,54 @@ function AppHeader({
                 </div>
               ) : (
                 <div data-testid="notification-list" className="max-h-[260px] overflow-y-auto">
-                  {notifications.map((item, index) => (
-                    <div
-                      key={item.id ?? index}
-                      className="border-b border-[#f5f0e9] px-3 py-2.5 last:border-b-0"
-                    >
-                      <p className="m-0 font-display text-[12.5px] font-semibold text-ink">{item.title}</p>
-                      <p className="m-0 font-display text-[12px] leading-snug text-[#6f6b68]">{item.body}</p>
-                    </div>
-                  ))}
+                  {notifications.map((item, index) => {
+                    const target = notificationTarget(item);
 
-                  <button
-                    type="button"
-                    onClick={markAllRead}
-                    className="w-full bg-transparent px-3 py-2.5 text-center font-display text-[12px] font-bold text-brand-600 hover:underline"
-                  >
-                    Clear
-                  </button>
+                    const content = (
+                      <>
+                        <p className="m-0 flex items-start gap-1.5 font-display text-[12.5px] font-semibold text-ink">
+                          {!item.is_read && (
+                            <span
+                              aria-hidden="true"
+                              className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500"
+                            />
+                          )}
+                          {item.title}
+                        </p>
+                        <p className="m-0 font-display text-[12px] leading-snug text-[#6f6b68]">
+                          {item.body}
+                        </p>
+                      </>
+                    );
+
+                    const shell = "block border-b border-[#f5f0e9] px-3 py-2.5 last:border-b-0";
+
+                    return target ? (
+                      <Link
+                        key={item.id ?? index}
+                        to={target}
+                        onClick={() => setNotificationsOpen(false)}
+                        className={`${shell} no-underline transition-colors hover:bg-[#faf7f3]`}
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <div key={item.id ?? index} className={shell}>
+                        {content}
+                      </div>
+                    );
+                  })}
+
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={markAllRead}
+                      disabled={isMarking}
+                      className="w-full bg-transparent px-3 py-2.5 text-center font-display text-[12px] font-bold text-brand-600 hover:underline disabled:opacity-50"
+                    >
+                      {isMarking ? "Marking…" : "Mark all as read"}
+                    </button>
+                  )}
                 </div>
               )}
             </Menu.Dropdown>

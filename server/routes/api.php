@@ -90,6 +90,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/{notification}', [NotificationController::class, 'show']);
     Route::put('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
 
     Route::get('/cart', [CartController::class, 'index']);
@@ -155,6 +156,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
         ->whereNumber('order');
     Route::post('/agent/advance-requests/{order}/reject', [AdvanceRequestController::class, 'reject'])
         ->whereNumber('order');
+    Route::post('/agent/advance-requests/{order}/remind', [AdvanceRequestController::class, 'remind'])
+        ->whereNumber('order')
+        ->middleware('throttle:user-update');
 });
 
 // Store Agent

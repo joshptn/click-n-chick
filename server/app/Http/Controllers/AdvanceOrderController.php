@@ -10,6 +10,8 @@ use App\Models\OrderItemAddon;
 use App\Models\User;
 use App\Services\Orders\AdvanceQuote;
 use App\Services\Orders\DiscountUsage;
+use App\Services\Orders\OrderAnnouncer;
+use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
@@ -24,6 +26,8 @@ class AdvanceOrderController extends Controller implements HasMiddleware
     public function __construct(
         private AdvanceQuote $quote,
         private DiscountUsage $discountUsage,
+        private OrderAnnouncer $announcer,
+        private OrderNotice $notice,
     ) {}
 
     public static function middleware()
@@ -72,8 +76,6 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                     'user_id' => $user->id,
                     'order_type' => StoreAvailability::TYPE_PICKUP,
                     'status' => OrderStatus::SUBMITTED,
-                    // scheduled_for both dates the order and marks it as an
-                    // advance one; nothing else distinguishes the two kinds.
                     'scheduled_for' => $collectAt,
                     'subtotal' => $quote['subtotal'],
                     'discount_amount' => $quote['discount']['amount'],
@@ -120,6 +122,10 @@ class AdvanceOrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Failed to send your request.'], 500);
         }
 
+        $this->announcer->announce($order, 'create', OrderStatus::SUBMITTED);
+
+        $this->announcer->toStaff($order, $this->notice->staffNewRequest($order));
+
         return response()->json([
             'message' => 'Request sent to the store.',
             'order' => [
@@ -143,7 +149,6 @@ class AdvanceOrderController extends Controller implements HasMiddleware
         ]);
     }
 
-    /** FR-03.4 - registered customers only. */
     private function assertCustomer(Request $request): void
     {
         abort_unless(

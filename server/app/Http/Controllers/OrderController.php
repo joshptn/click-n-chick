@@ -13,6 +13,7 @@ use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\DiscountUsage;
 use App\Services\Orders\OrderAnnouncer;
+use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -180,6 +181,10 @@ class OrderController extends Controller implements HasMiddleware
         ])->save();
 
         $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
+
+        if ($order->isAdvance()) {
+            $this->announcer->toStaff($order, app(OrderNotice::class)->staffCancelled($order));
+        }
 
         return response()->json([
             'message' => $cancellation->outcomeMessage($policy),
