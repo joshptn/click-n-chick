@@ -14,6 +14,8 @@ class Order extends Model
 {
     private const QUEUE_ATTEMPTS = 3;
 
+    public const ADVANCE_PAYMENT_HOURS = 24;
+
     use HasFactory;
 
     protected $fillable = [
@@ -28,6 +30,7 @@ class Order extends Model
         'queue_date',
         'queued_at',
         'details_confirmed_at',
+        'accepted_at',
         'cancellation_reason',
         'cancelled_by',
         'refund_owed',
@@ -58,6 +61,7 @@ class Order extends Model
             'queue_number' => 'integer',
             'queued_at' => 'datetime',
             'details_confirmed_at' => 'datetime',
+            'accepted_at' => 'datetime',
             'closed_at' => 'datetime',
             'refund_owed' => 'decimal:2',
             'delivery_distance_km' => 'decimal:2',
@@ -82,14 +86,49 @@ class Order extends Model
         });
     }
 
+    public function isAdvance(): bool
+    {
+        return $this->scheduled_for !== null;
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->payment_status === 'paid';
+    }
+
+    public function paymentDueAt(): ?CarbonImmutable
+    {
+        if ($this->accepted_at === null) {
+            return null;
+        }
+
+        return CarbonImmutable::parse($this->accepted_at)
+            ->addHours(self::ADVANCE_PAYMENT_HOURS);
+    }
+
+    public function isPaymentOverdue(?CarbonInterface $at = null): bool
+    {
+        $due = $this->paymentDueAt();
+
+        if ($due === null || $this->isPaid()) {
+            return false;
+        }
+
+        return $due->lessThanOrEqualTo($at ? CarbonImmutable::parse($at) : CarbonImmutable::now());
+    }
+
     public function nextStatus(): ?string
     {
-        return OrderStatus::next((string) $this->status, $this->order_type);
+        return $this->isAdvance()
+            ? OrderStatus::advanceNext((string) $this->status)
+            : OrderStatus::next((string) $this->status, $this->order_type);
     }
 
     public function canTransitionTo(string $status): bool
     {
-        return OrderStatus::allows((string) $this->status, $status, $this->order_type);
+        return $this->isAdvance()
+            ? OrderStatus::allowsAdvance((string) $this->status, $status)
+            : OrderStatus::allows((string) $this->status, $status, $this->order_type);
     }
 
     public function isTerminal(): bool

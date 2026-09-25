@@ -22,7 +22,6 @@ final class OrderStatus
 
     public const CANCELLED = 'cancelled';
 
-    /** Advance orders only (BRD §3.2). Pickup, never delivery. */
     public const SUBMITTED = 'submitted';
 
     public const ACCEPTED = 'accepted';
@@ -42,10 +41,6 @@ final class OrderStatus
         return [self::PLACED, self::CONFIRMED, self::PREPARING, self::READY_FOR_PICKUP, self::COMPLETED];
     }
 
-    /**
-     * Once an advance order reaches `preparing` it is indistinguishable from an
-     * immediate pickup order, so the tail here is the pickup chain (BR-22c).
-     */
     public static function advanceChain(): array
     {
         return [
@@ -60,7 +55,6 @@ final class OrderStatus
         ];
     }
 
-    /** Statuses only an advance order ever holds. */
     public static function advanceOnly(): array
     {
         return [self::SUBMITTED, self::ACCEPTED, self::AWAITING_PAYMENT, self::SCHEDULED, self::REJECTED];
@@ -126,6 +120,37 @@ final class OrderStatus
         }
 
         return $chain[$at + 1] ?? null;
+    }
+
+    public static function advanceNext(string $from): ?string
+    {
+        $chain = self::advanceChain();
+        $at = array_search($from, $chain, true);
+
+        return $at === false ? null : ($chain[$at + 1] ?? null);
+    }
+
+    public static function advanceTransitionsFrom(string $from): array
+    {
+        if (self::isTerminal($from)) {
+            return [];
+        }
+
+        $next = self::advanceNext($from);
+        $options = $next === null ? [] : [$next];
+
+        if ($from === self::SUBMITTED) {
+            $options[] = self::REJECTED;
+        }
+
+        $options[] = self::CANCELLED;
+
+        return $options;
+    }
+
+    public static function allowsAdvance(string $from, string $to): bool
+    {
+        return in_array($to, self::advanceTransitionsFrom($from), true);
     }
 
     public static function transitionsFrom(string $from, ?string $fulfilmentType): array

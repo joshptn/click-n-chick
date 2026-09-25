@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\AdvanceOrderController;
+use App\Http\Controllers\AdvanceRequestController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
@@ -146,6 +147,14 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
     Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
     Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
+    
+    Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
+    Route::get('/agent/advance-requests/{order}', [AdvanceRequestController::class, 'show'])
+        ->whereNumber('order');
+    Route::post('/agent/advance-requests/{order}/accept', [AdvanceRequestController::class, 'accept'])
+        ->whereNumber('order');
+    Route::post('/agent/advance-requests/{order}/reject', [AdvanceRequestController::class, 'reject'])
+        ->whereNumber('order');
 });
 
 // Store Agent

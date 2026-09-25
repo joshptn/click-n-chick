@@ -86,6 +86,22 @@ class OrderQueueController extends Controller
             $this->authorize('confirmReceipt', $order);
         }
 
+        if ($to === OrderStatus::PREPARING && $order->isAdvance() && ! $order->isPaid()) {
+            return response()->json([
+                'message' => 'This order has not been paid for yet, so it cannot be prepared.',
+                'error_code' => 'ADVANCE_UNPAID',
+                'status' => $order->status,
+            ], 422);
+        }
+
+        if ($order->isAdvance() && $order->status === OrderStatus::SUBMITTED) {
+            return response()->json([
+                'message' => 'Accept or reject this request from the advance list.',
+                'error_code' => 'ADVANCE_NEEDS_DECISION',
+                'status' => $order->status,
+            ], 422);
+        }
+
         $order->status = $to;
         $order->save();
 

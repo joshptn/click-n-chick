@@ -59,6 +59,11 @@ class OrderPolicy
             || $user->hasRole(User::ROLE_ADMIN);
     }
 
+    public function decideAdvance(User $user, Order $order): bool
+    {
+        return $user->hasRole(User::ROLE_ADMIN) && $order->isAdvance();
+    }
+
     public function delete(User $user, Order $order): bool
     {
         return false;
