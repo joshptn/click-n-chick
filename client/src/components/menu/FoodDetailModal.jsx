@@ -13,7 +13,7 @@ import {
 
 import { fetchFood, formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
-function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
+function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdvance = false }) {
   const [quantity, setQuantity] = useState(1);
   const [selectedAddons, setSelectedAddons] = useState([]);
 
@@ -44,12 +44,12 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false }) {
   );
 
   if (!detail) return null;
-
-  const orderable = detail.is_orderable;
-  const label = stockLabel(detail);
+  
+  const orderable = isAdvance || detail.is_orderable;
+  const label = isAdvance ? null : stockLabel(detail);
   const lineTotal = (Number(detail.price) + addonsTotal) * quantity;
 
-  const maxQuantity = detail.stock_quantity ?? 99;
+  const maxQuantity = isAdvance ? 99 : (detail.stock_quantity ?? 99);
 
   const toggleAddon = (id) =>
     setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));

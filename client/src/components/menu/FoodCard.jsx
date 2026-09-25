@@ -5,21 +5,9 @@ import { formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
 const MotionArticle = motion.article;
 
-/**
- * One dish on the menu grid.
- *
- * The greyed-out state is driven entirely by `is_orderable`, which the server
- * computes from is_available AND stock_quantity. Nothing here re-derives it:
- * if the card looks orderable but the API disagrees, the API wins, and the
- * request it would send is refused anyway.
- *
- * A sold-out card is dimmed but stays readable and focusable - it is
- * information, not a disabled control. Only the Add button is actually
- * disabled.
- */
-function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0 }) {
-  const orderable = food.is_orderable;
-  const label = stockLabel(food);
+function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0, isAdvance = false }) {
+  const orderable = isAdvance || food.is_orderable;
+  const label = isAdvance ? null : stockLabel(food);
 
   return (
     <MotionArticle
