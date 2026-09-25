@@ -1,8 +1,9 @@
 import { Modal } from "@mantine/core";
 
 import CartPanel from "./CartPanel";
+import { CART_MODE } from "../../lib/cartModes";
 
-function CartModal({ opened, onClose, onCheckout }) {
+function CartModal({ opened, onClose, onCheckout, mode = CART_MODE.IMMEDIATE }) {
   return (
     <Modal
       opened={opened}
@@ -17,6 +18,7 @@ function CartModal({ opened, onClose, onCheckout }) {
     >
       <CartPanel
         className="max-h-[86vh] border-0"
+        mode={mode}
         onCheckout={(selectedIds) => {
           onClose();
           onCheckout?.(selectedIds);

@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import AuthContext from "./AuthContext";
+import { CART_MODE } from "../lib/cartModes";
 import { api, apiFetch } from "../lib/api";
 import toast from "../components/app/Toast";
 
 const CartContext = createContext(null);
-
-const CART_QUERY_KEY = ["cart"];
 
 const EMPTY = {
   cart: [],
@@ -18,21 +18,22 @@ const EMPTY = {
   has_unavailable_items: false,
 };
 
-export function CartProvider({ children }) {
-  const { token } = useContext(AuthContext);
+function useCartStore(mode, enabled) {
   const queryClient = useQueryClient();
 
+  const queryKey = useMemo(() => ["cart", mode], [mode]);
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: CART_QUERY_KEY,
-    queryFn: () => api.get("/api/cart"),
-    enabled: Boolean(token),
+    queryKey,
+    queryFn: () => api.get("/api/cart", { params: { mode } }),
+    enabled,
     staleTime: 30 * 1000,
   });
 
   const write = useCallback(
     (payload) => {
       if (payload?.cart) {
-        queryClient.setQueryData(CART_QUERY_KEY, {
+        queryClient.setQueryData(queryKey, {
           cart: payload.cart,
           item_count: payload.item_count,
           line_count: payload.line_count,
@@ -42,7 +43,7 @@ export function CartProvider({ children }) {
         });
       }
     },
-    [queryClient]
+    [queryClient, queryKey]
   );
 
   const onError = useCallback((error) => {
@@ -51,7 +52,12 @@ export function CartProvider({ children }) {
 
   const addItem = useMutation({
     mutationFn: ({ foodId, quantity = 1, addonIds = [] }) =>
-      api.post("/api/cart/items", { food_id: foodId, quantity, addon_ids: addonIds }),
+      api.post("/api/cart/items", {
+        food_id: foodId,
+        quantity,
+        addon_ids: addonIds,
+        mode,
+      }),
     onSuccess: (payload) => {
       write(payload);
       toast.success(payload.message, "Added to your order");
@@ -73,20 +79,19 @@ export function CartProvider({ children }) {
   });
 
   const clearCart = useMutation({
-    mutationFn: () => api.delete("/api/cart"),
+    mutationFn: () => apiFetch("/api/cart", { method: "DELETE", body: { mode } }),
     onSuccess: write,
     onError,
   });
 
   const removeSelected = useMutation({
-    mutationFn: (ids) => apiFetch("/api/cart/items", { method: "DELETE", body: { ids } }),
+    mutationFn: (ids) => apiFetch("/api/cart/items", { method: "DELETE", body: { ids, mode } }),
     onSuccess: write,
     onError,
   });
 
   const cart = data ?? EMPTY;
   const lines = cart.cart;
-
 
   const [deselectedIds, setDeselectedIds] = useState(() => new Set());
 
@@ -124,12 +129,14 @@ export function CartProvider({ children }) {
     [lines]
   );
 
-  const value = useMemo(
+  return useMemo(
     () => ({
       ...cart,
-      isLoading: Boolean(token) && isLoading,
+      mode,
+      isAdvance: mode === CART_MODE.ADVANCE,
+      isLoading: enabled && isLoading,
       isError,
-      isSignedIn: Boolean(token),
+      isSignedIn: enabled,
 
       addItem: (input) => addItem.mutateAsync(input),
       setQuantity: (input) => setQuantity.mutateAsync(input),
@@ -156,7 +163,8 @@ export function CartProvider({ children }) {
     }),
     [
       cart,
-      token,
+      mode,
+      enabled,
       isLoading,
       isError,
       addItem,
@@ -170,6 +178,23 @@ export function CartProvider({ children }) {
       selectAll,
       deselectAll,
     ]
+  );
+}
+
+export function CartProvider({ children }) {
+  const { token } = useContext(AuthContext);
+  const { pathname } = useLocation();
+
+  const signedIn = Boolean(token);
+
+  const onAdvancePages = pathname.startsWith("/advance-order");
+
+  const immediate = useCartStore(CART_MODE.IMMEDIATE, signedIn);
+  const advance = useCartStore(CART_MODE.ADVANCE, signedIn && onAdvancePages);
+
+  const value = useMemo(
+    () => ({ [CART_MODE.IMMEDIATE]: immediate, [CART_MODE.ADVANCE]: advance }),
+    [immediate, advance]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

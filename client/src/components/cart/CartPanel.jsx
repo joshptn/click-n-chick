@@ -1,13 +1,24 @@
 import { useMemo } from "react";
-import { IconAlertTriangle, IconMinus, IconPhotoOff, IconPlus, IconShoppingCart, IconTrash } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconCalendarPlus,
+  IconMinus,
+  IconPhotoOff,
+  IconPlus,
+  IconShoppingCart,
+  IconTrash,
+} from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { CART_MODE } from "../../lib/cartModes";
 import { formatPeso } from "../../lib/menu";
 import { useCart } from "../../context/useCart";
 
 const MotionLi = motion.li;
 
-function CartPanel({ onCheckout, className = "" }) {
+function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
+  const isAdvance = mode === CART_MODE.ADVANCE;
+
   const {
     cart,
     item_count: itemCount,
@@ -27,7 +38,7 @@ function CartPanel({ onCheckout, className = "" }) {
     selectedSubtotal,
     hasUnavailableSelected,
     allSelected,
-  } = useCart();
+  } = useCart(mode);
 
   const isEmpty = !isLoading && cart.length === 0;
 
@@ -41,11 +52,13 @@ function CartPanel({ onCheckout, className = "" }) {
 
   return (
     <section
-      aria-label="My orders"
+      aria-label={isAdvance ? "Advance order" : "My orders"}
       className={`flex min-h-0 flex-col overflow-hidden rounded-[16px] border border-[#f0e9df] bg-white ${className}`}
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#f0e9df] px-5 py-4">
-        <h2 className="m-0 font-display text-[16px] font-extrabold text-ink">My Orders</h2>
+        <h2 className="m-0 font-display text-[16px] font-extrabold text-ink">
+          {isAdvance ? "Advance Order" : "My Orders"}
+        </h2>
 
         <span className="rounded-full bg-brand-500 px-3 py-1 font-display text-[11px] font-bold text-white">
           {itemCount} item{itemCount === 1 ? "" : "s"}
@@ -99,8 +112,12 @@ function CartPanel({ onCheckout, className = "" }) {
           <div className="grid h-full min-h-[260px] place-items-center px-6 py-10 text-center">
             <div>
               <IconShoppingCart size={40} stroke={1.4} aria-hidden="true" className="mx-auto text-[#d9d3cb]" />
-              <p className="mt-3 font-display text-[14px] font-semibold text-[#8d8884]">Your cart is empty</p>
-              <p className="m-0 font-display text-[12.5px] text-[#b3aca4]">Add items to get started</p>
+              <p className="mt-3 font-display text-[14px] font-semibold text-[#8d8884]">
+                {isAdvance ? "Nothing scheduled yet" : "Your cart is empty"}
+              </p>
+              <p className="m-0 font-display text-[12.5px] text-[#b3aca4]">
+                {isAdvance ? "Add what you want us to prepare" : "Add items to get started"}
+              </p>
             </div>
           </div>
         )}
@@ -228,14 +245,20 @@ function CartPanel({ onCheckout, className = "" }) {
           disabled={selectedCount === 0 || hasUnavailableSelected || isMutating}
           className="mt-4 inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-brand-500 font-display text-[15px] font-bold text-white transition-all duration-150 hover:bg-brand-600 active:translate-y-px disabled:cursor-not-allowed disabled:bg-brand-200"
         >
-          <IconShoppingCart size={18} stroke={2} aria-hidden="true" />
-          Checkout
+          {isAdvance ? (
+            <IconCalendarPlus size={18} stroke={2} aria-hidden="true" />
+          ) : (
+            <IconShoppingCart size={18} stroke={2} aria-hidden="true" />
+          )}
+          {isAdvance ? "Choose a Date" : "Checkout"}
         </button>
 
         <p className="m-0 mt-2.5 text-center font-display text-[10.5px] leading-snug text-[#a39f9b]">
           {cart.length > 0 && selectedCount === 0
-            ? "Tick at least one item to check out"
-            : "🔒 Secure checkout · Orders can’t be cancelled once confirmed"}
+            ? `Tick at least one item to ${isAdvance ? "continue" : "check out"}`
+            : isAdvance
+              ? "For collection at the store · a Store Agent confirms before you pay"
+              : "🔒 Secure checkout · cancel any time before the kitchen starts"}
         </p>
       </footer>
     </section>

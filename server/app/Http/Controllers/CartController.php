@@ -11,11 +11,24 @@ use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
+    private function modeFor(Request $request): string
+    {
+        return $request->input('mode') === Cart::MODE_ADVANCE
+            ? Cart::MODE_ADVANCE
+            : Cart::MODE_IMMEDIATE;
+    }
+
     private function cartFor(Request $request): Cart
     {
-        return Cart::firstOrCreate(
-            ['user_id' => $request->user()->id, 'cart_status' => 'active'],
-        );
+        return Cart::firstOrCreate([
+            'user_id' => $request->user()->id,
+            'cart_status' => Cart::statusForMode($this->modeFor($request)),
+        ]);
+    }
+
+    private function cartOwning(Request $request, CartItem $cartItem): Cart
+    {
+        return $cartItem->cart ?? $this->cartFor($request);
     }
 
     public function index(Request $request)
@@ -30,11 +43,15 @@ class CartController extends Controller
             'quantity' => ['sometimes', 'integer', 'min:1', 'max:99'],
             'addon_ids' => ['sometimes', 'array'],
             'addon_ids.*' => ['integer', 'distinct', 'exists:addons,id'],
+            'mode' => ['sometimes', 'in:'.Cart::MODE_IMMEDIATE.','.Cart::MODE_ADVANCE],
         ]);
 
         $food = Food::findOrFail($validated['food_id']);
 
-        if (! $food->is_orderable) {
+        $cart = $this->cartFor($request);
+        $isAdvance = $cart->isAdvance();
+
+        if (! $isAdvance && ! $food->is_orderable) {
             return response()->json([
                 'message' => $food->is_available
                     ? 'Sorry, '.$food->food_name.' just sold out.'
@@ -47,19 +64,17 @@ class CartController extends Controller
 
         $addonIds = $food->addons()
             ->whereIn('addons.id', $validated['addon_ids'] ?? [])
-            ->where('availability', true)
+            ->when(! $isAdvance, fn ($query) => $query->where('availability', true))
             ->pluck('addons.id')
             ->sort()
             ->values()
             ->all();
 
-        $cart = $this->cartFor($request);
-
-        $item = DB::transaction(function () use ($cart, $food, $quantity, $addonIds) {
+        $item = DB::transaction(function () use ($cart, $food, $quantity, $addonIds, $isAdvance) {
             $existing = $this->matchingLine($cart, $food->id, $addonIds);
 
             if ($existing) {
-                $existing->quantity = $this->clampToStock($food, $existing->quantity + $quantity);
+                $existing->quantity = $this->clampToStock($food, $existing->quantity + $quantity, $isAdvance);
                 $existing->save();
 
                 return $existing;
@@ -68,7 +83,7 @@ class CartController extends Controller
             $line = $cart->items()->create([
                 'user_id' => $cart->user_id,
                 'food_id' => $food->id,
-                'quantity' => $this->clampToStock($food, $quantity),
+                'quantity' => $this->clampToStock($food, $quantity, $isAdvance),
             ]);
 
             $line->selectedAddons()->sync($addonIds);
@@ -90,7 +105,8 @@ class CartController extends Controller
             'quantity' => ['required', 'integer', 'min:0', 'max:99'],
         ]);
 
-        $cart = $this->cartFor($request);
+        $cart = $this->cartOwning($request, $cartItem);
+        $isAdvance = $cart->isAdvance();
 
         if ($validated['quantity'] === 0) {
             $cartItem->selectedAddons()->detach();
@@ -101,14 +117,14 @@ class CartController extends Controller
 
         $food = $cartItem->food;
 
-        if ($food && ! $food->is_orderable) {
+        if (! $isAdvance && $food && ! $food->is_orderable) {
             return response()->json([
                 'message' => $food->food_name.' is no longer available.',
                 'error_code' => 'FOOD_UNAVAILABLE',
             ], 422);
         }
 
-        $cartItem->quantity = $this->clampToStock($food, $validated['quantity']);
+        $cartItem->quantity = $this->clampToStock($food, $validated['quantity'], $isAdvance);
         $cartItem->save();
 
         return response()->json($this->payload($cart->fresh()));
@@ -118,7 +134,7 @@ class CartController extends Controller
     {
         $this->assertOwned($request, $cartItem);
 
-        $cart = $this->cartFor($request);
+        $cart = $this->cartOwning($request, $cartItem);
 
         $cartItem->selectedAddons()->detach();
         $cartItem->delete();
@@ -131,6 +147,7 @@ class CartController extends Controller
         $validated = $request->validate([
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
+            'mode' => ['sometimes', 'in:'.Cart::MODE_IMMEDIATE.','.Cart::MODE_ADVANCE],
         ]);
 
         $cart = $this->cartFor($request);
@@ -171,9 +188,9 @@ class CartController extends Controller
                 ->pluck('id')->sort()->values()->all() === $addonIds);
     }
 
-    private function clampToStock(?Food $food, int $quantity): int
+    private function clampToStock(?Food $food, int $quantity, bool $isAdvance = false): int
     {
-        if ($food === null || $food->stock_quantity === null) {
+        if ($isAdvance || $food === null || $food->stock_quantity === null) {
             return max(1, $quantity);
         }
 
@@ -187,9 +204,11 @@ class CartController extends Controller
 
     private function payload(Cart $cart): array
     {
+        $isAdvance = $cart->isAdvance();
+
         $items = $cart->items()->with(['food.category', 'selectedAddons'])->orderByDesc('id')->get();
 
-        $lines = $items->map(function (CartItem $item) {
+        $lines = $items->map(function (CartItem $item) use ($isAdvance) {
             $food = $item->food;
             $addons = $item->selectedAddons;
 
@@ -211,14 +230,14 @@ class CartController extends Controller
                 'addons_total' => $addonTotal,
                 'unit_price' => $unitPrice,
                 'subtotal' => $unitPrice * $item->quantity,
-
-                'is_orderable' => $food?->is_orderable ?? false,
-                'stock_status' => $food?->stock_status,
-                'stock_quantity' => $food?->stock_quantity,
+                'is_orderable' => $isAdvance ? $food !== null : ($food?->is_orderable ?? false),
+                'stock_status' => $isAdvance ? null : $food?->stock_status,
+                'stock_quantity' => $isAdvance ? null : $food?->stock_quantity,
             ];
         });
 
         return [
+            'mode' => $isAdvance ? Cart::MODE_ADVANCE : Cart::MODE_IMMEDIATE,
             'cart' => $lines,
             'item_count' => (int) $items->sum('quantity'),
             'line_count' => $lines->count(),

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Indicator, Menu, Modal } from "@mantine/core";
 import {
   IconBell,
@@ -16,6 +16,7 @@ import {
 import AuthContext from "../../context/AuthContext";
 import Button from "../ui/Button";
 import LogoIcon from "../../assets/logo-icon.png";
+import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
 import { useCart } from "../../context/useCart";
@@ -26,10 +27,12 @@ function AppHeader({
   onSearchChange,
   searchPlaceholder = "What do you want to eat today...",
   onOpenCart,
+  cartMode = CART_MODE.IMMEDIATE,
 }) {
   const nav = useNavigate();
+  const { pathname } = useLocation();
   const { user, logOut } = useContext(AuthContext);
-  const { item_count: itemCount } = useCart();
+  const { item_count: itemCount } = useCart(cartMode);
   const { isOpen, status: storeStatus } = useStoreStatus();
   const { notifications, unreadCount, isConnected, isConfigured, isReady, markAllRead } = useRealtime();
 
@@ -37,10 +40,8 @@ function AppHeader({
 
   const showSearch = typeof onSearchChange === "function";
 
-  // Advance ordering is for registered customers only (FR-03.4). Staff can reach
-  // the storefront, so the entrance is gated on the role rather than on being
-  // signed in.
-  const canOrderInAdvance = user?.role === ROLES.CUSTOMER;
+  const canOrderInAdvance =
+    user?.role === ROLES.CUSTOMER && !pathname.startsWith("/advance-order");
 
   const displayName = user?.first_name
     ? `${user.first_name} ${user.last_name?.charAt(0) ?? ""}.`.trim()
