@@ -323,6 +323,10 @@ class RecaptchaTest extends TestCase
             'POST api/user/password' => RecaptchaAction::PASSWORD_CHANGE,
             // FR-02.11 - final order submission.
             'POST api/order/place' => RecaptchaAction::PLACE_ORDER,
+            // Sending an advance request is the same kind of submission: it
+            // creates an order the kitchen has to answer, so it is guarded like
+            // one even though no money moves yet.
+            'POST api/advance-orders' => RecaptchaAction::PLACE_ORDER,
         ];
 
         $actual = [];

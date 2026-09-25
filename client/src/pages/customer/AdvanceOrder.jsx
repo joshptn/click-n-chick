@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { IconMoodEmpty, IconSearchOff } from "@tabler/icons-react";
 
@@ -11,7 +11,7 @@ import CartPanel from "../../components/cart/CartPanel";
 import CategoryTabs from "../../components/menu/CategoryTabs";
 import FoodCard from "../../components/menu/FoodCard";
 import FoodDetailModal from "../../components/menu/FoodDetailModal";
-import toast from "../../components/app/Toast";
+
 import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
 import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
@@ -28,6 +28,7 @@ function AdvanceOrder() {
   const [selectedFood, setSelectedFood] = useState(null);
   const [cartOpen, setCartOpen] = useState(false);
 
+  const navigate = useNavigate();
   const { addItem, isAdding } = useCart(CART_MODE.ADVANCE);
 
   useEffect(() => {
@@ -62,8 +63,8 @@ function AdvanceOrder() {
       .catch(() => {});
   };
 
-  const handleContinue = () => {
-    toast.info("Picking a collection date is the next piece of work.", "Almost there");
+  const handleContinue = (ids) => {
+    navigate("/advance-order/schedule", { state: { selectedIds: ids ?? null } });
   };
 
   if (user && user.role !== ROLES.CUSTOMER) {

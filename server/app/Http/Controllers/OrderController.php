@@ -5,17 +5,16 @@ namespace App\Http\Controllers;
 use App\Exceptions\DiscountAlreadyUsed;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\CartItem;
-use App\Models\Discount;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
 use App\Models\User;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
+use App\Services\Orders\DiscountUsage;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
-use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -152,15 +151,7 @@ class OrderController extends Controller implements HasMiddleware
 
     private function discountSpentToday(User $user): bool
     {
-        $today = CarbonImmutable::now(Discount::USAGE_TIMEZONE);
-
-        return $user->orders()
-            ->where('discount_amount', '>', 0)
-            ->whereBetween('created_at', [
-                $today->startOfDay()->utc(),
-                $today->endOfDay()->utc(),
-            ])
-            ->exists();
+        return app(DiscountUsage::class)->usedToday($user);
     }
 
     public function cancelOrder(Request $request, $orderId)

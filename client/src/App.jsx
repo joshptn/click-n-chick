@@ -13,6 +13,8 @@ import LandingPage from './pages/LandingPage'
 import Unauthorized from './pages/Unauthorized'
 import Home from './pages/customer/Home'
 import AdvanceOrder from './pages/customer/AdvanceOrder'
+import AdvanceCheckout from './pages/customer/AdvanceCheckout'
+import AdvanceSubmitted from './pages/customer/AdvanceSubmitted'
 import Checkout from './pages/customer/Checkout'
 import Orders from './pages/customer/Orders'
 import OrderTracking from './pages/customer/OrderTracking'
@@ -40,6 +42,8 @@ function App() {
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route path="/home" element={<Home />} />
           <Route path="/advance-order" element={<AdvanceOrder />} />
+          <Route path="/advance-order/schedule" element={<AdvanceCheckout />} />
+          <Route path="/advance-order/sent/:orderId" element={<AdvanceSubmitted />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:orderId" element={<OrderTracking />} />

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AddressController;
+use App\Http\Controllers\AdvanceOrderController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
@@ -122,6 +123,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
         ->middleware('throttle:user-update');
     Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder'])
         ->middleware('throttle:user-update');
+
+    Route::post('/advance-orders/quote', [AdvanceOrderController::class, 'quote']);
+    Route::post('/advance-orders', [AdvanceOrderController::class, 'submit'])
+        ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
 });
 
 // Superadmin and Admin
