@@ -31,6 +31,8 @@ const STEPS = [
 ];
 
 const QUOTE_DEBOUNCE_MS = 400;
+const PIN_DEBOUNCE_MS = 900;
+const QUOTE_STALE_MS = 30 * 1000;
 
 const PAYMENT_AVAILABLE = false;
 
@@ -109,8 +111,6 @@ function Checkout() {
       address_id: dispatchState.addressId,
       latitude: dispatchState.destination?.latitude ?? null,
       longitude: dispatchState.destination?.longitude ?? null,
-      full_address: dispatchState.destination?.full_address ?? null,
-      location: dispatchState.destination?.locality ?? null,
       pickup_at:
         dispatchState.fulfilmentType === FULFILMENT.PICKUP
           ? pickupTimeToIso(dispatchState.pickupTime)
@@ -124,8 +124,27 @@ function Checkout() {
 
   const [debouncedInput, setDebouncedInput] = useState(quoteInput);
 
+  const settledPin = useRef({
+    latitude: quoteInput.latitude,
+    longitude: quoteInput.longitude,
+  });
+
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedInput(quoteInput), QUOTE_DEBOUNCE_MS);
+    const moved =
+      quoteInput.latitude !== settledPin.current.latitude ||
+      quoteInput.longitude !== settledPin.current.longitude;
+
+    const timer = window.setTimeout(
+      () => {
+        settledPin.current = {
+          latitude: quoteInput.latitude,
+          longitude: quoteInput.longitude,
+        };
+
+        setDebouncedInput(quoteInput);
+      },
+      moved ? PIN_DEBOUNCE_MS : QUOTE_DEBOUNCE_MS
+    );
 
     return () => window.clearTimeout(timer);
   }, [quoteInput]);
@@ -138,7 +157,7 @@ function Checkout() {
     queryKey: ["checkout", "quote", debouncedInput],
     queryFn: () => fetchCheckoutQuote(debouncedInput),
     enabled: Boolean(cartItemIds),
-    staleTime: 0,
+    staleTime: QUOTE_STALE_MS,
     placeholderData: (previous) => previous,
     retry: false,
   });

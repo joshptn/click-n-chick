@@ -40,8 +40,6 @@ class EncodedPolyline
 
                 do {
                     if ($index >= $length) {
-                        // Truncated input. Return what decoded cleanly rather
-                        // than a half-formed final point.
                         return $points;
                     }
 
@@ -50,7 +48,6 @@ class EncodedPolyline
                     $shift += 5;
                 } while ($byte >= 0x20);
 
-                // The low bit is the sign, and negatives are stored inverted.
                 $delta = ($result & 1) ? ~($result >> 1) : ($result >> 1);
 
                 if ($axis === 'lat') {

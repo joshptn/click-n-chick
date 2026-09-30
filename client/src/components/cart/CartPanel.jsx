@@ -113,7 +113,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
             <div>
               <IconShoppingCart size={40} stroke={1.4} aria-hidden="true" className="mx-auto text-[#d9d3cb]" />
               <p className="mt-3 font-display text-[14px] font-semibold text-[#8d8884]">
-                {isAdvance ? "Nothing scheduled yet" : "Your cart is empty"}
+                {"Your cart is empty"}
               </p>
               <p className="m-0 font-display text-[12.5px] text-[#b3aca4]">
                 {isAdvance ? "Add what you want us to prepare" : "Add items to get started"}

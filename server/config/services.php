@@ -72,6 +72,8 @@ return [
         'timeout' => (int) env('ROUTING_TIMEOUT', 6),
         'connect_timeout' => (int) env('ROUTING_CONNECT_TIMEOUT', 3),
         'cache_ttl' => (int) env('ROUTING_CACHE_TTL', 604800),
+
+        'lock_wait' => (int) env('ROUTING_LOCK_WAIT', 3),
     ],
 
     'session_security' => [

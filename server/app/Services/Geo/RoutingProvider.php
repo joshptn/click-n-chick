@@ -14,12 +14,6 @@ namespace App\Services\Geo;
 interface RoutingProvider
 {
     /**
-     * The road distance, and the line it follows.
-     *
-     * Never returns an estimate or a fallback. A provider that cannot answer
-     * throws, so the caller decides what an unanswerable route means - which
-     * for checkout is "delivery is briefly unavailable", never "guess".
-     *
      * @throws RoutingUnavailable
      */
     public function route(float $latitude, float $longitude): Route;
