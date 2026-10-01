@@ -6,21 +6,16 @@ use App\Exceptions\DiscountAlreadyUsed;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
 use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\OrderItemAddon;
-use App\Models\User;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
-use App\Services\Orders\DiscountUsage;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderNotice;
+use App\Services\Orders\OrderPlacement;
 use App\Services\Orders\OrderStatus;
-use App\Services\Store\StoreAvailability;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
@@ -79,63 +74,8 @@ class OrderController extends Controller implements HasMiddleware
             ], 409);
         }
 
-        $selectedIds = collect($quote['items'])->pluck('id')->all();
-        $isDelivery = $quote['fulfilment_type'] === StoreAvailability::TYPE_DELIVERY;
-        $destination = $quote['destination'];
-
         try {
-            $order = DB::transaction(function () use ($user, $cart, $quote, $selectedIds, $isDelivery, $destination) {
-                if ((float) $quote['discount']['amount'] > 0 && $this->discountSpentToday($user)) {
-                    throw new DiscountAlreadyUsed;
-                }
-
-                $order = Order::create([
-                    'user_id' => $user->id,
-                    'order_type' => $quote['fulfilment_type'],
-                    'address_id' => $isDelivery ? ($destination['address_id'] ?? null) : null,
-                    'status' => OrderStatus::PLACED,
-                    'subtotal' => $quote['subtotal'],
-                    'discount_amount' => $quote['discount']['amount'],
-                    'delivery_fee' => $quote['delivery_fee'],
-                    'delivery_distance_km' => $isDelivery ? ($quote['delivery']['distance_km'] ?? null) : null,
-                    'total_amount' => $quote['total'],
-                    'total_price' => $quote['total'],
-                    'pickup_at' => $isDelivery ? null : ($quote['pickup']['requested_at'] ?? null),
-                    'full_address' => $isDelivery ? ($destination['full_address'] ?? null) : null,
-                    'latitude' => $isDelivery ? ($destination['latitude'] ?? null) : null,
-                    'longitude' => $isDelivery ? ($destination['longitude'] ?? null) : null,
-                    'location' => $isDelivery ? ($destination['locality'] ?? null) : null,
-                    'delivery_note' => $isDelivery ? ($destination['delivery_note'] ?? null) : null,
-                    'payment_status' => 'unpaid',
-                ]);
-
-                foreach ($quote['items'] as $line) {
-                    $item = OrderItem::create([
-                        'order_id' => $order->id,
-                        'food_id' => $line['food_id'],
-                        'quantity' => $line['quantity'],
-                        'price' => $line['unit_price'],
-                        'unit_price' => $line['unit_price'],
-                        'subtotal' => $line['subtotal'],
-                    ]);
-
-                    foreach ($line['addons'] ?? [] as $addon) {
-                        OrderItemAddon::create([
-                            'order_item_id' => $item->id,
-                            'addon_id' => $addon['id'],
-                            'unit_price' => $addon['addon_price'],
-                        ]);
-                    }
-                }
-
-                // Scoped to the cart, not to the customer: a cart line carries a
-                // nullable user_id, and keying the clear on it leaves the cart
-                // full after a successful order wherever that column is null.
-                // can_place is false for an empty selection, so a cart exists here.
-                $cart->items()->whereIn('id', $selectedIds)->delete();
-
-                return $order;
-            });
+            $order = app(OrderPlacement::class)->place($user, $cart, $quote);
         } catch (DiscountAlreadyUsed) {
             return response()->json([
                 'message' => 'You have already used your discount today. It resets tomorrow.',
@@ -153,11 +93,6 @@ class OrderController extends Controller implements HasMiddleware
             'message' => 'Order Placed',
             'order' => $order,
         ], 201);
-    }
-
-    private function discountSpentToday(User $user): bool
-    {
-        return app(DiscountUsage::class)->usedToday($user);
     }
 
     public function cancelOrder(Request $request, $orderId)
