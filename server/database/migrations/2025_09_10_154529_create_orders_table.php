@@ -45,6 +45,7 @@ return new class extends Migration
             $table->string('guest_name')->nullable();
             $table->string('guest_phone')->nullable();
             $table->string('guest_email')->nullable();
+            $table->string('guest_token_hash')->nullable()->unique();
 
             $table->string('full_address')->nullable();
             $table->string('longitude')->nullable();

@@ -91,6 +91,31 @@ class Order extends Model
         return $this->scheduled_for !== null;
     }
 
+    public function isGuest(): bool
+    {
+        return $this->user_id === null;
+    }
+
+    /**
+     * Mint the tracking credential and return the only copy of it.
+     *
+     * Kept off $fillable deliberately: a verifier must never be settable from
+     * request input, so this is the one way it is written.
+     */
+    public function mintGuestToken(): string
+    {
+        $token = bin2hex(random_bytes(32));
+
+        $this->forceFill(['guest_token_hash' => static::hashGuestToken($token)])->save();
+
+        return $token;
+    }
+
+    public static function hashGuestToken(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
     public function isPaid(): bool
     {
         return $this->payment_status === 'paid';
