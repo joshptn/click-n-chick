@@ -20,7 +20,7 @@ class CheckoutQuote
         private DiscountUsage $discountUsage,
     ) {}
 
-    public function build(User $user, ?Cart $cart, array $input): array
+    public function build(?User $user, ?Cart $cart, array $input): array
     {
         $type = in_array($input['fulfilment_type'] ?? null, [StoreAvailability::TYPE_PICKUP, StoreAvailability::TYPE_DELIVERY], true)
             ? $input['fulfilment_type']
@@ -102,7 +102,11 @@ class CheckoutQuote
             'subtotal' => $subtotal,
             'discount_base' => $discountBase,
             'destination' => $destination,
-            'contact' => ['name' => $contact['name'], 'phone' => $contact['phone']],
+            'contact' => [
+                'name' => $contact['name'],
+                'phone' => $contact['phone'],
+                'email' => $contact['email'],
+            ],
             'delivery' => $delivery,
             'delivery_fee' => round($deliveryFee, 2),
             'pickup' => $pickup,
@@ -170,11 +174,13 @@ class CheckoutQuote
         });
     }
 
-    private function destination(User $user, array $input): array
+    private function destination(?User $user, array $input): array
     {
         $addressId = $input['address_id'] ?? null;
 
-        if ($addressId !== null) {
+        // A guest has no address book, so an id in the body names nothing and the
+        // pinned coordinates below are the only destination they can have.
+        if ($addressId !== null && $user !== null) {
             $address = $user->addresses()->find($addressId);
 
             if ($address !== null && $address->latitude !== null && $address->longitude !== null) {
@@ -289,35 +295,50 @@ class CheckoutQuote
         return [$payload, null];
     }
 
-    private function contact(User $user, string $type, array $input): array
+    private function contact(?User $user, string $type, array $input): array
     {
         $typed = trim((string) ($input['contact_name'] ?? ''));
-        $fromAccount = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
+        $fromAccount = $user === null
+            ? ''
+            : trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
 
         $name = $typed !== '' ? $typed : $fromAccount;
         $typedPhone = trim((string) ($input['contact_phone'] ?? ''));
 
         $phone = $typedPhone !== ''
             ? ($this->normalizePhone($typedPhone) ?? '')
-            : ($this->normalizePhone($user->phone_number ?? null) ?? '');
+            : ($this->normalizePhone($user?->phone_number) ?? '');
 
-        $blocker = null;
+        $typedEmail = trim((string) ($input['contact_email'] ?? ''));
+        $email = $typedEmail !== '' ? $typedEmail : trim((string) ($user->email ?? ''));
 
-        if (trim($name) === '') {
-            $blocker = [
+        $blocker = match (true) {
+            trim($name) === '' => [
                 'code' => 'CONTACT_NAME_REQUIRED',
                 'message' => $type === StoreAvailability::TYPE_DELIVERY
                     ? 'Enter the name of whoever will receive the order.'
                     : 'Enter the name of whoever will collect the order.',
-            ];
-        } elseif ($phone === '') {
-            $blocker = [
+            ],
+            $phone === '' => [
                 'code' => 'CONTACT_PHONE_INVALID',
                 'message' => 'Enter an 11-digit mobile number, starting 09.',
-            ];
-        }
+            ],
+            $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) === false => [
+                'code' => 'CONTACT_EMAIL_INVALID',
+                'message' => 'That email address does not look right. Please check it.',
+            ],
+            // UC-GUEST-003, and required of a guest only: an account already has
+            // a verified address on file. For a guest this is the sole lasting
+            // way to reach them, and the only route by which a lost tracking
+            // link could ever be sent again.
+            $user === null && $email === '' => [
+                'code' => 'CONTACT_EMAIL_REQUIRED',
+                'message' => 'Enter your email address so we can send your order details.',
+            ],
+            default => null,
+        };
 
-        return ['name' => trim($name), 'phone' => $phone, 'blocker' => $blocker];
+        return ['name' => trim($name), 'phone' => $phone, 'email' => $email, 'blocker' => $blocker];
     }
 
     private function normalizePhone(mixed $raw): ?string
@@ -335,8 +356,30 @@ class CheckoutQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    private function discount(User $user, float $base, bool $requested): array
+    private function discount(?User $user, float $base, bool $requested): array
     {
+        // A guest may not claim a statutory discount. Asking for one is a
+        // blocker rather than a silent refusal, so a crafted request cannot
+        // quietly price itself below what the screen showed.
+        if ($user === null) {
+            return [
+                'eligible' => false,
+                'status' => 'none',
+                'type' => null,
+                'type_label' => null,
+                'percentage' => Discount::currentPercentage(),
+                'used_today' => false,
+                'can_apply' => false,
+                'available_amount' => 0.0,
+                'applied' => false,
+                'amount' => 0.0,
+                'blocker' => $requested ? [
+                    'code' => 'DISCOUNT_NOT_ELIGIBLE',
+                    'message' => 'Sign in to a verified account to use a Senior Citizen or PWD discount.',
+                ] : null,
+            ];
+        }
+
         $latest = $user->latestDiscountClaim()->first();
         $approved = $latest?->isApproved() ?? false;
 
