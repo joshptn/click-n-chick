@@ -8,6 +8,7 @@
  */
 
 import { deviceHeader } from "./deviceId";
+import { guestHeader } from "./guest";
 import { endSession } from "./session";
 
 const BASE_URL = import.meta.env.VITE_API_URL;
@@ -54,6 +55,10 @@ export async function apiFetch(path, { method = "GET", body, params, signal, aut
       // Lets the server keep this install's device row current, and tell the
       // device list which entry is "this device".
       ...deviceHeader(),
+      // Sent whenever one exists, including while signed in: the server ignores
+      // it for an authenticated request, and it is how the account later finds
+      // the cart this browser built before signing in.
+      ...guestHeader(),
     },
     body: body ? JSON.stringify(body) : undefined,
     credentials: "include",

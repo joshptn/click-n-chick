@@ -38,9 +38,9 @@ function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<LandingPage />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
+        <Route path="/home" element={<Home />} />
 
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
-          <Route path="/home" element={<Home />} />
           <Route path="/advance-order" element={<AdvanceOrder />} />
           <Route path="/advance-order/schedule" element={<AdvanceCheckout />} />
           <Route path="/advance-order/sent/:orderId" element={<AdvanceSubmitted />} />

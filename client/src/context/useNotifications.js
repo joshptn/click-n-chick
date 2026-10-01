@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useContext, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import AuthContext from "./AuthContext";
 import { useRealtime } from "./useRealtime";
 import {
   NOTIFICATIONS_KEY,
@@ -10,11 +11,15 @@ import {
 
 export function useNotifications() {
   const { notifications: live, markAllRead: clearLive } = useRealtime();
+  const { token } = useContext(AuthContext);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: NOTIFICATIONS_KEY,
     queryFn: ({ signal }) => fetchNotifications({ signal }),
+    // An inbox needs an account. Without this a guest browsing the menu would
+    // ask for one and be refused on every page.
+    enabled: Boolean(token),
     staleTime: 30 * 1000,
     retry: false,
   });

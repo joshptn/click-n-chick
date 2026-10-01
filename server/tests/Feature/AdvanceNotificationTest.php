@@ -39,6 +39,14 @@ class AdvanceNotificationTest extends TestCase
 
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-05 10:00:00', 'Asia/Manila')->utc());
 
+        // The suite runs the queue inline, so an unfaked broadcast is a real HTTP
+        // call to a Reverb server that is not running. Everything the announcer
+        // sends is wrapped in its own try/catch and merely slow, but the reminder
+        // endpoint stores its notification directly - there the failed call came
+        // back as a 500, and whether it did depended on how fast the connection
+        // gave up. Faking it here asserts nothing; it keeps the network out.
+        Event::fake([NotificationBroadcast::class]);
+
         Setting::put(Setting::STORE_OPENS_AT, '07:00');
         Setting::put(Setting::STORE_CLOSES_AT, '20:00');
     }

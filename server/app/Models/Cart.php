@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Cart extends Model
 {
@@ -36,6 +37,28 @@ class Cart extends Model
             ->where('user_id', $user->getKey())
             ->where('cart_status', self::STATUS_IMMEDIATE)
             ->first();
+    }
+
+    public static function forGuestToken(?string $token): ?self
+    {
+        if (! is_string($token) || trim($token) === '') {
+            return null;
+        }
+
+        return static::query()
+            ->whereNull('user_id')
+            ->where('guest_token', $token)
+            ->where('cart_status', self::STATUS_IMMEDIATE)
+            ->first();
+    }
+
+    public static function startForGuest(): self
+    {
+        return static::create([
+            'user_id' => null,
+            'guest_token' => Str::random(40),
+            'cart_status' => self::STATUS_IMMEDIATE,
+        ]);
     }
 
     public function isAdvance(): bool

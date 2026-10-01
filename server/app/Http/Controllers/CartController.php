@@ -11,29 +11,49 @@ use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
+    public const GUEST_HEADER = 'X-Guest-Token';
+
     private function modeFor(Request $request): string
     {
-        return $request->input('mode') === Cart::MODE_ADVANCE
-            ? Cart::MODE_ADVANCE
-            : Cart::MODE_IMMEDIATE;
+        $advance = $request->input('mode') === Cart::MODE_ADVANCE;
+
+        abort_if($advance && $request->user() === null, 403, 'Sign in to book an order ahead.');
+
+        return $advance ? Cart::MODE_ADVANCE : Cart::MODE_IMMEDIATE;
     }
 
-    private function cartFor(Request $request): Cart
+    /**
+     * The cart this request acts on.
+     *
+     * Null only for a guest who has not added anything yet: an unauthenticated
+     * read must not be able to create rows, and an absent cart is an empty one.
+     */
+    private function cartFor(Request $request): ?Cart
     {
-        return Cart::firstOrCreate([
-            'user_id' => $request->user()->id,
-            'cart_status' => Cart::statusForMode($this->modeFor($request)),
-        ]);
+        $mode = $this->modeFor($request);
+        $user = $request->user();
+
+        if ($user !== null) {
+            return Cart::firstOrCreate([
+                'user_id' => $user->id,
+                'cart_status' => Cart::statusForMode($mode),
+            ]);
+        }
+
+        return Cart::forGuestToken($request->header(self::GUEST_HEADER));
     }
 
-    private function cartOwning(Request $request, CartItem $cartItem): Cart
+    /** As cartFor(), except a guest adding their first item is given a cart and a token. */
+    private function cartForWriting(Request $request): Cart
     {
-        return $cartItem->cart ?? $this->cartFor($request);
+        return $this->cartFor($request) ?? Cart::startForGuest();
     }
 
     public function index(Request $request)
     {
-        return response()->json($this->payload($this->cartFor($request)));
+        $cart = $this->cartFor($request);
+
+        return response()->json($cart === null ? $this->emptyPayload() : $this->payload($cart));
     }
 
     public function store(Request $request)
@@ -48,7 +68,7 @@ class CartController extends Controller
 
         $food = Food::findOrFail($validated['food_id']);
 
-        $cart = $this->cartFor($request);
+        $cart = $this->cartForWriting($request);
         $isAdvance = $cart->isAdvance();
 
         if (! $isAdvance && ! $food->is_orderable) {
@@ -105,7 +125,8 @@ class CartController extends Controller
             'quantity' => ['required', 'integer', 'min:0', 'max:99'],
         ]);
 
-        $cart = $this->cartOwning($request, $cartItem);
+        // assertOwned has already established the item has a cart, and whose it is.
+        $cart = $cartItem->cart;
         $isAdvance = $cart->isAdvance();
 
         if ($validated['quantity'] === 0) {
@@ -134,7 +155,8 @@ class CartController extends Controller
     {
         $this->assertOwned($request, $cartItem);
 
-        $cart = $this->cartOwning($request, $cartItem);
+        // assertOwned has already established the item has a cart, and whose it is.
+        $cart = $cartItem->cart;
 
         $cartItem->selectedAddons()->detach();
         $cartItem->delete();
@@ -152,6 +174,10 @@ class CartController extends Controller
 
         $cart = $this->cartFor($request);
 
+        if ($cart === null) {
+            return response()->json(array_merge(['message' => 'Items removed.'], $this->emptyPayload()));
+        }
+
         DB::transaction(function () use ($cart, $validated) {
             $items = $cart->items()->whereIn('id', $validated['ids'])->get();
 
@@ -167,6 +193,10 @@ class CartController extends Controller
     public function clear(Request $request)
     {
         $cart = $this->cartFor($request);
+
+        if ($cart === null) {
+            return response()->json(array_merge(['message' => 'Your order is empty.'], $this->emptyPayload()));
+        }
 
         DB::transaction(function () use ($cart) {
             foreach ($cart->items as $item) {
@@ -197,9 +227,25 @@ class CartController extends Controller
         return max(1, min($quantity, $food->stock_quantity));
     }
 
+    /**
+     * Whether this requester may touch this line.
+     *
+     * Keyed on the cart rather than on cart_items.user_id, because that column is
+     * nullable - a guest's line would compare against null and admit anyone.
+     */
     private function assertOwned(Request $request, CartItem $cartItem): void
     {
-        abort_unless($cartItem->user_id === $request->user()->id, 403, 'That item is not in your cart.');
+        $cart = $cartItem->cart;
+        $user = $request->user();
+        $token = trim((string) $request->header(self::GUEST_HEADER));
+
+        $mine = match (true) {
+            $cart === null => false,
+            $user !== null => (int) $cart->user_id === (int) $user->getKey(),
+            default => $cart->user_id === null && $token !== '' && $cart->guest_token === $token,
+        };
+
+        abort_unless($mine, 403, 'That item is not in your cart.');
     }
 
     private function payload(Cart $cart): array
@@ -244,6 +290,23 @@ class CartController extends Controller
             'subtotal' => (float) $lines->sum('subtotal'),
             'total' => (float) $lines->sum('subtotal'),
             'has_unavailable_items' => $lines->contains(fn ($line) => ! $line['is_orderable']),
+            // Null for an account. A guest's browser stores this and replays it.
+            'guest_token' => $cart->guest_token,
+        ];
+    }
+
+    /** A guest who has added nothing has no cart row, and does not need one yet. */
+    private function emptyPayload(): array
+    {
+        return [
+            'mode' => Cart::MODE_IMMEDIATE,
+            'cart' => [],
+            'item_count' => 0,
+            'line_count' => 0,
+            'subtotal' => 0.0,
+            'total' => 0.0,
+            'has_unavailable_items' => false,
+            'guest_token' => null,
         ];
     }
 }

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AuthContext from "./AuthContext";
 import { CART_MODE } from "../lib/cartModes";
 import { api, apiFetch } from "../lib/api";
+import { rememberGuestToken } from "../lib/guest";
 import toast from "../components/app/Toast";
 
 const CartContext = createContext(null);
@@ -18,20 +19,29 @@ const EMPTY = {
   has_unavailable_items: false,
 };
 
-function useCartStore(mode, enabled) {
+/** Scope is in the key as well as the path, so one never serves the other's cache. */
+const SCOPE = { ACCOUNT: "account", GUEST: "guest" };
+
+function useCartStore(mode, enabled, scope) {
   const queryClient = useQueryClient();
 
-  const queryKey = useMemo(() => ["cart", mode], [mode]);
+  const base = scope === SCOPE.GUEST ? "/api/guest/cart" : "/api/cart";
+
+  const queryKey = useMemo(() => ["cart", scope, mode], [scope, mode]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey,
-    queryFn: () => api.get("/api/cart", { params: { mode } }),
+    queryFn: () => api.get(base, { params: { mode } }),
     enabled,
     staleTime: 30 * 1000,
   });
 
   const write = useCallback(
     (payload) => {
+      // A guest's first write is what mints the token; every call after replays
+      // it from storage. Null on an account response, where it is ignored.
+      rememberGuestToken(payload?.guest_token);
+
       if (payload?.cart) {
         queryClient.setQueryData(queryKey, {
           cart: payload.cart,
@@ -52,7 +62,7 @@ function useCartStore(mode, enabled) {
 
   const addItem = useMutation({
     mutationFn: ({ foodId, quantity = 1, addonIds = [] }) =>
-      api.post("/api/cart/items", {
+      api.post(`${base}/items`, {
         food_id: foodId,
         quantity,
         addon_ids: addonIds,
@@ -67,25 +77,25 @@ function useCartStore(mode, enabled) {
 
   const setQuantity = useMutation({
     mutationFn: ({ cartItemId, quantity }) =>
-      api.patch(`/api/cart/items/${cartItemId}`, { quantity }),
+      api.patch(`${base}/items/${cartItemId}`, { quantity }),
     onSuccess: write,
     onError,
   });
 
   const removeItem = useMutation({
-    mutationFn: ({ cartItemId }) => api.delete(`/api/cart/items/${cartItemId}`),
+    mutationFn: ({ cartItemId }) => api.delete(`${base}/items/${cartItemId}`),
     onSuccess: write,
     onError,
   });
 
   const clearCart = useMutation({
-    mutationFn: () => apiFetch("/api/cart", { method: "DELETE", body: { mode } }),
+    mutationFn: () => apiFetch(base, { method: "DELETE", body: { mode } }),
     onSuccess: write,
     onError,
   });
 
   const removeSelected = useMutation({
-    mutationFn: (ids) => apiFetch("/api/cart/items", { method: "DELETE", body: { ids, mode } }),
+    mutationFn: (ids) => apiFetch(`${base}/items`, { method: "DELETE", body: { ids, mode } }),
     onSuccess: write,
     onError,
   });
@@ -136,7 +146,6 @@ function useCartStore(mode, enabled) {
       isAdvance: mode === CART_MODE.ADVANCE,
       isLoading: enabled && isLoading,
       isError,
-      isSignedIn: enabled,
 
       addItem: (input) => addItem.mutateAsync(input),
       setQuantity: (input) => setQuantity.mutateAsync(input),
@@ -189,8 +198,16 @@ export function CartProvider({ children }) {
 
   const onAdvancePages = pathname.startsWith("/advance-order");
 
-  const immediate = useCartStore(CART_MODE.IMMEDIATE, signedIn);
-  const advance = useCartStore(CART_MODE.ADVANCE, signedIn && onAdvancePages);
+  // Always on: a guest has a cart too, it just lives against a token.
+  const immediate = useCartStore(
+    CART_MODE.IMMEDIATE,
+    true,
+    signedIn ? SCOPE.ACCOUNT : SCOPE.GUEST
+  );
+
+  // Advance ordering is for account holders (FR-03.4), so this store has no
+  // guest scope at all rather than a guest scope that would be refused.
+  const advance = useCartStore(CART_MODE.ADVANCE, signedIn && onAdvancePages, SCOPE.ACCOUNT);
 
   const value = useMemo(
     () => ({ [CART_MODE.IMMEDIATE]: immediate, [CART_MODE.ADVANCE]: advance }),

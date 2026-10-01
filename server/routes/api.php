@@ -51,6 +51,15 @@ Route::get('/category/{category}', [CategoryController::class, 'show']);
 Route::get('/posters', [PosterController::class, 'index']);
 Route::get('/store/status', [StoreStatusController::class, 'show']);
 
+Route::prefix('guest')->group(function () {
+    Route::get('/cart', [CartController::class, 'index']);
+    Route::post('/cart/items', [CartController::class, 'store']);
+    Route::patch('/cart/items/{cartItem}', [CartController::class, 'updateQuantity']);
+    Route::delete('/cart/items', [CartController::class, 'destroyMany']);
+    Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
+    Route::delete('/cart', [CartController::class, 'clear']);
+});
+
 // Customer
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(function () {
     Route::get('/user', [AuthController::class, 'userDetails']);

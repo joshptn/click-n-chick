@@ -33,7 +33,8 @@ function AppHeader({
 }) {
   const nav = useNavigate();
   const { pathname } = useLocation();
-  const { user, logOut } = useContext(AuthContext);
+  const { user, token, logOut } = useContext(AuthContext);
+  const signedIn = Boolean(token);
   const { item_count: itemCount } = useCart(cartMode);
   const { isOpen, status: storeStatus } = useStoreStatus();
   const { isConnected, isConfigured, isReady } = useRealtime();
@@ -157,6 +158,7 @@ function AppHeader({
             )}
           </button>
 
+          {signedIn && (
           <Menu
             opened={notificationsOpen}
             onChange={setNotificationsOpen}
@@ -253,6 +255,7 @@ function AppHeader({
               )}
             </Menu.Dropdown>
           </Menu>
+          )}
 
           {canOrderInAdvance && (
             <>
@@ -274,6 +277,7 @@ function AppHeader({
             </>
           )}
 
+          {signedIn ? (
           <Menu position="bottom-end" width={210} shadow="md" radius="md">
             <Menu.Target>
               <button
@@ -322,6 +326,14 @@ function AppHeader({
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          ) : (
+            <Link
+              to="/login"
+              className="inline-flex h-[38px] shrink-0 items-center rounded-full bg-brand-500 px-4 font-display text-[13px] font-semibold text-white no-underline transition-colors hover:bg-brand-600"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
 
