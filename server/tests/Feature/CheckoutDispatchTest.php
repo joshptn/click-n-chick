@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Events\NotificationBroadcast;
 use App\Events\OrderBroadcast;
 use App\Models\Address;
+use App\Models\CartItem;
 use App\Models\Food;
 use App\Models\Order;
 use App\Models\Setting;
@@ -913,6 +914,24 @@ class CheckoutDispatchTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'cart')
             ->assertJsonPath('cart.0.food_name', 'Buttered Corn');
+    }
+
+    /**
+     * A cart line's user_id is nullable, so it cannot be what the clear is keyed
+     * on: keyed there, a line with a null user_id survives the order that bought
+     * it and the customer is left looking at a cart they have already paid for.
+     */
+    public function test_the_cart_is_cleared_by_cart_rather_than_by_customer(): void
+    {
+        [$user, $lineId] = $this->customerWithCart();
+
+        CartItem::whereKey($lineId)->update(['user_id' => null]);
+
+        $this->actingAs($user, 'sanctum')
+            ->postJson('/api/order/place', $this->pickupBody())
+            ->assertCreated();
+
+        $this->assertDatabaseMissing('cart_items', ['id' => $lineId]);
     }
 
     public function test_placing_an_order_without_a_fulfilment_type_is_refused(): void

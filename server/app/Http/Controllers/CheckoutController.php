@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Cart;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\DeliveryQuote;
 use Illuminate\Http\Request;
@@ -31,7 +32,9 @@ class CheckoutController extends Controller
             'apply_discount' => ['sometimes', 'boolean'],
         ]);
 
-        return response()->json($this->checkout->build($request->user(), $validated));
+        $user = $request->user();
+
+        return response()->json($this->checkout->build($user, Cart::immediateFor($user), $validated));
     }
     
     public function deliveryQuote(Request $request)

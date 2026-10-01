@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\DiscountAlreadyUsed;
 use App\Http\Resources\OrderTrackingResource;
-use App\Models\CartItem;
+use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
@@ -67,7 +67,8 @@ class OrderController extends Controller implements HasMiddleware
             ], 422);
         }
 
-        $quote = app(CheckoutQuote::class)->build($user, $validated);
+        $cart = Cart::immediateFor($user);
+        $quote = app(CheckoutQuote::class)->build($user, $cart, $validated);
 
         if (! $quote['can_place']) {
             return response()->json([
@@ -83,7 +84,7 @@ class OrderController extends Controller implements HasMiddleware
         $destination = $quote['destination'];
 
         try {
-            $order = DB::transaction(function () use ($user, $quote, $selectedIds, $isDelivery, $destination) {
+            $order = DB::transaction(function () use ($user, $cart, $quote, $selectedIds, $isDelivery, $destination) {
                 if ((float) $quote['discount']['amount'] > 0 && $this->discountSpentToday($user)) {
                     throw new DiscountAlreadyUsed;
                 }
@@ -127,7 +128,11 @@ class OrderController extends Controller implements HasMiddleware
                     }
                 }
 
-                CartItem::where('user_id', $user->id)->whereIn('id', $selectedIds)->delete();
+                // Scoped to the cart, not to the customer: a cart line carries a
+                // nullable user_id, and keying the clear on it leaves the cart
+                // full after a successful order wherever that column is null.
+                // can_place is false for an empty selection, so a cart exists here.
+                $cart->items()->whereIn('id', $selectedIds)->delete();
 
                 return $order;
             });

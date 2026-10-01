@@ -20,13 +20,13 @@ class CheckoutQuote
         private DiscountUsage $discountUsage,
     ) {}
 
-    public function build(User $user, array $input): array
+    public function build(User $user, ?Cart $cart, array $input): array
     {
         $type = in_array($input['fulfilment_type'] ?? null, [StoreAvailability::TYPE_PICKUP, StoreAvailability::TYPE_DELIVERY], true)
             ? $input['fulfilment_type']
             : StoreAvailability::TYPE_PICKUP;
 
-        $lines = $this->lines($user, $input['cart_item_ids'] ?? null);
+        $lines = $this->lines($cart, $input['cart_item_ids'] ?? null);
         $blockers = [];
 
         if ($storeBlocker = $this->store->blocker($type)) {
@@ -125,13 +125,8 @@ class CheckoutQuote
         ];
     }
 
-    public function lines(User $user, ?array $ids): Collection
+    public function lines(?Cart $cart, ?array $ids): Collection
     {
-        $cart = Cart::query()
-            ->where('user_id', $user->getKey())
-            ->where('cart_status', 'active')
-            ->first();
-
         if ($cart === null) {
             return collect();
         }

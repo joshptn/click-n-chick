@@ -30,6 +30,14 @@ class Cart extends Model
         return $mode === self::MODE_ADVANCE ? self::STATUS_ADVANCE : self::STATUS_IMMEDIATE;
     }
 
+    public static function immediateFor(User $user): ?self
+    {
+        return static::query()
+            ->where('user_id', $user->getKey())
+            ->where('cart_status', self::STATUS_IMMEDIATE)
+            ->first();
+    }
+
     public function isAdvance(): bool
     {
         return $this->cart_status === self::STATUS_ADVANCE;
