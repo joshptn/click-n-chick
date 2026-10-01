@@ -129,6 +129,24 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(90)->by($request->user()?->id ?: $request->ip());
         });
 
+        // Tighter than the signed-in equivalents, and with a shared daily ceiling
+        // on top: a per-IP limit alone cannot bound what a crowd of IPs spends on
+        // a third party's free tier. See config/store.php for why the quote
+        // ceiling stands in for the routing budget.
+        RateLimiter::for('guest-quote', function (Request $request) {
+            return [
+                Limit::perMinute((int) config('store.guest.quote_per_minute'))->by($request->ip()),
+                Limit::perDay((int) config('store.guest.quote_per_day'))->by('guest-quote'),
+            ];
+        });
+
+        RateLimiter::for('guest-geocode', function (Request $request) {
+            return [
+                Limit::perMinute((int) config('store.guest.geocode_per_minute'))->by($request->ip()),
+                Limit::perDay((int) config('store.guest.geocode_per_day'))->by('guest-geocode'),
+            ];
+        });
+
         RateLimiter::for('geocode', function (Request $request) {
             return [
                 Limit::perMinute(20)->by('geocode:user:'.($request->user()?->id ?: $request->ip())),
