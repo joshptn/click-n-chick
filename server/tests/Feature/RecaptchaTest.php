@@ -327,6 +327,9 @@ class RecaptchaTest extends TestCase
             // creates an order the kitchen has to answer, so it is guarded like
             // one even though no money moves yet.
             'POST api/advance-orders' => RecaptchaAction::PLACE_ORDER,
+            // UC-GUEST-005. The one guarded endpoint with no session behind it,
+            // which is also why it is the one that cannot offer a step-up.
+            'POST api/guest/orders' => RecaptchaAction::PLACE_ORDER,
         ];
 
         $actual = [];
