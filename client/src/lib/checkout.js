@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, authToken } from "./api";
 
 
 export const FULFILMENT = {
@@ -6,20 +6,24 @@ export const FULFILMENT = {
   DELIVERY: "delivery",
 };
 
+function base() {
+  return authToken() ? "/api" : "/api/guest";
+}
+
 export function fetchCheckoutQuote(payload, options) {
-  return api.post("/api/checkout/quote", payload, options);
+  return api.post(`${base()}/checkout/quote`, payload, options);
 }
 
 export function fetchDeliveryQuote({ latitude, longitude }, options) {
-  return api.post("/api/delivery/quote", { latitude, longitude }, options);
+  return api.post(`${base()}/delivery/quote`, { latitude, longitude }, options);
 }
 
 export function searchAddress(query, { signal } = {}) {
-  return api.get("/api/geocode/search", { params: { q: query }, signal });
+  return api.get(`${base()}/geocode/search`, { params: { q: query }, signal });
 }
 
 export function reverseGeocode({ latitude, longitude }, { signal } = {}) {
-  return api.get("/api/geocode/reverse", { params: { latitude, longitude }, signal });
+  return api.get(`${base()}/geocode/reverse`, { params: { latitude, longitude }, signal });
 }
 
 export function fetchAddresses() {
@@ -77,6 +81,8 @@ export const DISPATCH_BLOCKERS = [
   "PICKUP_TIME_TOO_LATE",
   "CONTACT_NAME_REQUIRED",
   "CONTACT_PHONE_INVALID",
+  "CONTACT_EMAIL_REQUIRED",
+  "CONTACT_EMAIL_INVALID",
   "EMPTY_SELECTION",
   "ITEM_UNAVAILABLE",
 ];
