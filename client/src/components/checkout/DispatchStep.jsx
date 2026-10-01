@@ -87,6 +87,7 @@ function DispatchStep({
   addresses = [],
   storeStatus,
   showFieldErrors = false,
+  requireEmail = false,
   onContinue,
   onBack,
 }) {
@@ -122,6 +123,29 @@ function DispatchStep({
   );
   const phoneBlocker = whenSubmitted(blockerFor(quote, "CONTACT_PHONE_INVALID"));
   const nameBlocker = whenSubmitted(blockerFor(quote, "CONTACT_NAME_REQUIRED"));
+  const emailBlocker = whenSubmitted(
+    blockerFor(quote, "CONTACT_EMAIL_REQUIRED", "CONTACT_EMAIL_INVALID")
+  );
+
+  const emailField = requireEmail ? (
+    <Field
+      label="Email Address"
+      error={emailBlocker?.message}
+      hint="Your receipt and tracking link go here."
+    >
+      {(id) => (
+        <Input
+          id={id}
+          type="email"
+          value={value.contactEmail ?? ""}
+          onChange={(event) => onChange({ contactEmail: event.target.value })}
+          placeholder="you@example.com"
+          autoComplete="email"
+          invalid={Boolean(emailBlocker)}
+        />
+      )}
+    </Field>
+  ) : null;
 
   const adoptPoint = useCallback(
     async ({ latitude, longitude }, { label, fullAddress, locality, addressId = null } = {}) => {
@@ -250,6 +274,8 @@ function DispatchStep({
                     />
                   )}
                 </Field>
+
+                {emailField}
               </div>
 
               <div>
@@ -410,6 +436,8 @@ function DispatchStep({
                     />
                   )}
                 </Field>
+
+                {emailField}
 
                 <Field
                   label="Time"

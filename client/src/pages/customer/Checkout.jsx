@@ -30,6 +30,10 @@ const STEPS = [
   { id: "payment", label: "Payment", shortLabel: "Pay" },
 ];
 
+// A guest may not claim a statutory discount so the step is absent
+// rather than present and refusing. The server says the same thing if asked.
+const GUEST_STEPS = STEPS.filter((step) => step.id !== "discount");
+
 const QUOTE_DEBOUNCE_MS = 400;
 const PIN_DEBOUNCE_MS = 900;
 const QUOTE_STALE_MS = 30 * 1000;
@@ -39,7 +43,10 @@ const PAYMENT_AVAILABLE = false;
 function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useContext(AuthContext);
+  const { user, token } = useContext(AuthContext);
+  const signedIn = Boolean(token);
+  const steps = signedIn ? STEPS : GUEST_STEPS;
+  const stepNumber = (id) => steps.findIndex((entry) => entry.id === id) + 1;
   const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCart();
   const { status: storeStatus } = useStoreStatus();
 
@@ -60,6 +67,7 @@ function Checkout() {
     lastName: "",
     contactName: "",
     contactPhone: "",
+    contactEmail: "",
     pickupTime: "",
     addressId: null,
     destination: null,
@@ -75,6 +83,7 @@ function Checkout() {
       contactName:
         prev.contactName || [user.first_name, user.last_name].filter(Boolean).join(" "),
       contactPhone: prev.contactPhone || toLocalMobile(user.phone_number),
+      contactEmail: prev.contactEmail || user.email || "",
     }));
   }, [user]);
 
@@ -94,6 +103,8 @@ function Checkout() {
   const { data: addressPayload } = useQuery({
     queryKey: ["addresses"],
     queryFn: fetchAddresses,
+    // A guest has no address book, and asking for one would only be refused.
+    enabled: signedIn,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -117,6 +128,7 @@ function Checkout() {
           : null,
       contact_name: contactName,
       contact_phone: dispatchState.contactPhone,
+      contact_email: dispatchState.contactEmail,
       apply_discount: applyDiscount,
     }),
     [dispatchState, cartItemIds, contactName, applyDiscount]
@@ -183,7 +195,7 @@ function Checkout() {
     }
 
     setCompleted((prev) => (prev.includes("dispatch") ? prev : [...prev, "dispatch"]));
-    setStep("discount");
+    setStep(signedIn ? "discount" : "payment");
   };
 
   const handleDiscountContinue = () => {
@@ -235,13 +247,13 @@ function Checkout() {
 
       <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-5">
-          <CheckoutStepper steps={STEPS} current={step} completed={completed} />
+          <CheckoutStepper steps={steps} current={step} completed={completed} />
         </div>
 
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-w-0 flex-col gap-3.5">
             <StepCard
-              index={1}
+              index={stepNumber("dispatch")}
               title="Order Dispatch"
               state={stateFor("dispatch")}
               summary={dispatchSummary}
@@ -264,29 +276,32 @@ function Checkout() {
                 addresses={addresses}
                 storeStatus={storeStatus}
                 showFieldErrors={attemptedContinue}
+                requireEmail={!signedIn}
                 onContinue={handleContinue}
                 onBack={() => navigate("/home")}
               />
             </StepCard>
 
-            <StepCard
-              index={2}
-              title="Senior / PWD Discount"
-              state={stateFor("discount")}
-              summary={discountSummary}
-              onReopen={() => setStep("discount")}
-            >
-              <DiscountStep
-                discount={quote?.discount ?? null}
-                applied={applyDiscount}
-                onChange={setApplyDiscount}
-                isQuoting={quoteFetching && !quoteLoading}
-                onContinue={handleDiscountContinue}
-                onBack={() => setStep("dispatch")}
-              />
-            </StepCard>
+            {signedIn && (
+              <StepCard
+                index={stepNumber("discount")}
+                title="Senior / PWD Discount"
+                state={stateFor("discount")}
+                summary={discountSummary}
+                onReopen={() => setStep("discount")}
+              >
+                <DiscountStep
+                  discount={quote?.discount ?? null}
+                  applied={applyDiscount}
+                  onChange={setApplyDiscount}
+                  isQuoting={quoteFetching && !quoteLoading}
+                  onContinue={handleDiscountContinue}
+                  onBack={() => setStep("dispatch")}
+                />
+              </StepCard>
+            )}
 
-            <StepCard index={3} title="Secure Payment" state={stateFor("payment")}>
+            <StepCard index={stepNumber("payment")} title="Secure Payment" state={stateFor("payment")}>
               <p className="m-0 flex items-center gap-2 font-display text-[13px] text-[#8d8884]">
                 <IconLock size={15} stroke={2} aria-hidden="true" />
                 Payment is coming next.
