@@ -63,8 +63,6 @@ export default function MenuSection() {
   const [offset, setOffset] = useState(0);
   const [paused, setPaused] = useState(false);
 
-  // The same catalogue the customer home page reads. Best sellers only: this
-  // is a marketing rail, not the full menu.
   const { data } = useQuery({
     queryKey: ['foods', 'landing'],
     queryFn: () => fetchFoods({ bestSeller: true }),
@@ -128,7 +126,7 @@ export default function MenuSection() {
               variant="outline"
               radius="xl"
               size="md"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/home')}
               className="border-white/70 px-7 font-display text-[12px] font-semibold tracking-wider text-white transition-colors duration-200 hover:border-white hover:bg-white/10"
             >
               EXPLORE FULL MENU
@@ -164,7 +162,7 @@ export default function MenuSection() {
                       exit={{ opacity: 0, y: -18 }}
                       transition={{ duration: 0.35, delay: slot * 0.07, ease: 'easeOut' }}
                     >
-                      <MenuCard item={item} onSelect={() => navigate('/login')} />
+                      <MenuCard item={item} onSelect={() => navigate('/home')} />
                     </MotionDiv>
                   </AnimatePresence>
                 </MotionDiv>

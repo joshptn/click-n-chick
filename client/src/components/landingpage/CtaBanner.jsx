@@ -26,7 +26,7 @@ export default function CtaBanner() {
           </h2>
 
           <Button
-            onClick={() => navigate('/login')}
+            onClick={() => navigate('/home')}
             radius="xl"
             size="xl"
             className="bg-cocoa-700 px-12 font-display text-[14px] font-bold tracking-[0.14em] text-white shadow-[0_10px_28px_rgba(65,33,17,0.28)] transition-transform duration-200 hover:scale-105 hover:bg-cocoa-900"

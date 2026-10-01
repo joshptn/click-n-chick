@@ -59,7 +59,7 @@ export default function SiteHeader({ active, onNavigate, scrolled }) {
 
             <Group gap="xs" wrap="nowrap">
               <Button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/home')}
                 radius="xl"
                 className="h-[42px] bg-brand-500 px-6 text-[12px] font-extrabold tracking-wider shadow-[0_4px_12px_rgba(255,139,43,0.28)] transition-transform duration-200 hover:scale-105 hover:bg-brand-600 sm:px-8"
               >
@@ -96,7 +96,7 @@ export default function SiteHeader({ active, onNavigate, scrolled }) {
             </Text>
           ))}
 
-          <Button onClick={() => navigate('/login')} radius="xl" fullWidth className="mt-2 h-[46px] bg-brand-500 font-extrabold tracking-wider hover:bg-brand-600">
+          <Button onClick={() => navigate('/home')} radius="xl" fullWidth className="mt-2 h-[46px] bg-brand-500 font-extrabold tracking-wider hover:bg-brand-600">
             ORDER NOW
           </Button>
         </Stack>
