@@ -32,6 +32,7 @@
         <env name="STORE_MAX_DRIVING_KM" value="45"/>
         <env name="STORE_QUEUE_LABEL_PREFIX" value="CNC"/>
         <env name="ORS_API_KEY" value=""/>
+        <env name="CLOUDINARY_URL" value=""/>
         <env name="RECAPTCHA_ENABLED" value="false"/>
         <env name="RECAPTCHA_SITE_KEY" value=""/>
         <env name="RECAPTCHA_SECRET_KEY" value=""/>
