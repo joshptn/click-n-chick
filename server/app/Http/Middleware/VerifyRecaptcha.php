@@ -65,9 +65,12 @@ class VerifyRecaptcha
         }
 
         return response()->json([
-            'message' => $result->reason === RecaptchaResult::LOW_SCORE
-                ? 'This request looked automated. Please try again.'
-                : 'We could not verify that this request came from a browser. Please reload the page and try again.',
+            'message' => match (true) {
+                $result->reason !== RecaptchaResult::LOW_SCORE => 'We could not verify that this request came from a browser. Please reload the page and try again.',
+                // the way past a low score is an account that does, and the copy has to say so rather than inviting a retry that will score the same.
+                $request->user() === null => 'This request looked automated. Please sign in to continue.',
+                default => 'This request looked automated. Please try again.',
+            },
             'error_code' => 'RECAPTCHA_FAILED',
             'reason' => $result->reason,
         ], 422);
