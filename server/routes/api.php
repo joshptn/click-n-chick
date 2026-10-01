@@ -11,6 +11,7 @@ use App\Http\Controllers\DeviceSessionController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\GeocodingController;
+use App\Http\Controllers\GuestOrderController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderModificationController;
@@ -58,6 +59,19 @@ Route::prefix('guest')->group(function () {
     Route::delete('/cart/items', [CartController::class, 'destroyMany']);
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
+
+    Route::post('/checkout/quote', [GuestOrderController::class, 'quote'])
+        ->middleware('throttle:guest-quote');
+    Route::post('/delivery/quote', [CheckoutController::class, 'deliveryQuote'])
+        ->middleware('throttle:guest-quote');
+
+    Route::get('/geocode/search', [GeocodingController::class, 'search'])
+        ->middleware('throttle:guest-geocode');
+    Route::get('/geocode/reverse', [GeocodingController::class, 'reverse'])
+        ->middleware('throttle:guest-geocode');
+
+    Route::post('/orders', [GuestOrderController::class, 'store'])
+        ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
 });
 
 // Customer
