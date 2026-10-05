@@ -45,10 +45,36 @@ export function RealtimeProvider({ children }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  const markSubscribed = useCallback(
+    (name) => setSubscribed((prev) => (prev.includes(name) ? prev : [...prev, name])),
+    []
+  );
+
+  // Declared before the subscriptions so that on sign-out the order is: drop the
+  // socket, then let the public effect below build a fresh one. The private
+  // subscriptions on the old socket were authorized as whoever was signed in, so
+  // it is not reused - but a guest who never had a token has nothing to drop,
+  // which is why this keys on the transition rather than on the absence.
+  const hadToken = useRef(false);
+
   useEffect(() => {
-    if (!token || !isRealtimeConfigured()) {
-      setStatus(isRealtimeConfigured() ? "idle" : "unconfigured");
+    if (token) {
+      hadToken.current = true;
+
+      return;
+    }
+
+    if (hadToken.current) {
+      hadToken.current = false;
       disconnectEcho();
+    }
+  }, [token]);
+
+  // --- Connection and public channels, session or not ---------------
+  useEffect(() => {
+    if (!isRealtimeConfigured()) {
+      setStatus("unconfigured");
+
       return undefined;
     }
 
@@ -62,6 +88,28 @@ export function RealtimeProvider({ children }) {
     connection?.bind("state_change", onState);
     setStatus(connection?.state ?? "connecting");
 
+    // Live availability and stock. A guest browsing the menu needs this as much
+    // as a customer does (UC-MENU-006); it used to sit inside the signed-in
+    // effect, so a signed-out visitor got no stock updates at all.
+    echo.channel("menu")
+      .subscribed(() => markSubscribed("menu"))
+      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }));
+
+    return () => {
+      connection?.unbind("state_change", onState);
+      echo.leave("menu");
+      setSubscribed((prev) => prev.filter((name) => name !== "menu"));
+    };
+  }, [token, queryClient, markSubscribed]);
+
+  // --- The session's own channels -----------------------------------
+  useEffect(() => {
+    if (!token || !isRealtimeConfigured()) return undefined;
+
+    const echo = getEcho();
+
+    if (!echo) return undefined;
+
     const currentUser = userRef.current;
     const channels = [];
 
@@ -70,7 +118,7 @@ export function RealtimeProvider({ children }) {
       const name = `notifications.${currentUser.id}`;
 
       echo.private(name)
-        .subscribed(() => setSubscribed((prev) => (prev.includes(name) ? prev : [...prev, name])))
+        .subscribed(() => markSubscribed(name))
         .listen(".notification", (payload) => {
         const notification = payload?.notification;
 
@@ -103,7 +151,7 @@ export function RealtimeProvider({ children }) {
 
     if (isStaff) {
       echo.private("admin.orders")
-        .subscribed(() => setSubscribed((prev) => (prev.includes("admin.orders") ? prev : [...prev, "admin.orders"])))
+        .subscribed(() => markSubscribed("admin.orders"))
         .listen(".order", (payload) => {
         setLastOrderEvent(payload);
         queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -116,29 +164,16 @@ export function RealtimeProvider({ children }) {
       channels.push("admin.orders");
     }
 
-    // --- Live menu availability (public) ----------------------------
-    // Backs the low-stock indicator on the home page: when the Store Agent
-    // changes stock, every open menu updates without a refresh.
-    echo.channel("menu")
-      .subscribed(() => setSubscribed((prev) => (prev.includes("menu") ? prev : [...prev, "menu"])))
-      .listen(".food", () => {
-      queryClient.invalidateQueries({ queryKey: ["foods"] });
-    });
-
-    channels.push("menu");
-
     return () => {
-      connection?.unbind("state_change", onState);
-      setSubscribed([]);
+      setSubscribed((prev) => prev.filter((name) => !channels.includes(name)));
 
       channels.forEach((name) => {
         // leave() drops the private- prefixed variant too.
         echo.leave(name);
       });
     };
-  }, [token, user?.id, user?.role, queryClient]);
+  }, [token, user?.id, user?.role, queryClient, markSubscribed]);
 
-  // Sign-out must drop the socket: the authorizer holds the old token.
   useEffect(() => {
     if (!token) {
       setNotifications([]);
