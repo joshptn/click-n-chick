@@ -29,6 +29,31 @@ export function confirmReceipt(id) {
   return api.post(`/api/orders/${id}/received`);
 }
 
+/**
+ * Tracking without an account 
+ *
+ * The token comes from the link rather than from storage, so it is passed per
+ * call. There is no id in any of these paths - the token names the order, which
+ * is why none of them can be probed by guessing a number.
+ */
+export const guestOrderKey = (token) => ["guest-order", token];
+
+function holding(token) {
+  return { headers: { "X-Order-Token": token } };
+}
+
+export function fetchGuestOrder(token, { signal } = {}) {
+  return api.get("/api/guest/order", { ...holding(token), signal });
+}
+
+export function cancelGuestOrder(token) {
+  return api.post("/api/guest/order/cancel", undefined, holding(token));
+}
+
+export function confirmGuestReceipt(token) {
+  return api.post("/api/guest/order/received", undefined, holding(token));
+}
+
 export const ORDER_FILTERS = [
   { id: "active", label: "Active" },
   { id: "past", label: "Past" },
