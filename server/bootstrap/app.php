@@ -4,6 +4,7 @@ use App\Http\Middleware\DetectDeviceMismatch;
 use App\Http\Middleware\EnforceStaffIdleTimeout;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\RequirePasswordConfirmation;
+use App\Http\Middleware\ResolveGuestOrder;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\VerifyRecaptcha;
 use Illuminate\Auth\AuthenticationException;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'device-check' => DetectDeviceMismatch::class,
             'staff-idle' => EnforceStaffIdleTimeout::class,
             'confirm-password' => RequirePasswordConfirmation::class,
+            'guest-order' => ResolveGuestOrder::class,
         ]);
 
         $middleware->throttleApi();
