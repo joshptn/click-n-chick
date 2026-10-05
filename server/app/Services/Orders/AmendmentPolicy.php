@@ -25,9 +25,7 @@ class AmendmentPolicy
 
     public function canConfirmDetails(Order $order): bool
     {
-        // "Go ahead and start" means nothing on an order booked for a date
-        // weeks away - it is scheduled, not queued (BR-22c).
-        if ($order->isAdvance()) {
+        if ($order->isAdvance() || $order->isGuest()) {
             return false;
         }
 
@@ -57,7 +55,7 @@ class AmendmentPolicy
 
     private function stillWithTheKitchen(Order $order): bool
     {
-        if ($order->isAdvance()) {
+        if ($order->isAdvance() || $order->isGuest()) {
             return false;
         }
 
