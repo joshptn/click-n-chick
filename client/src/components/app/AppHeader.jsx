@@ -88,7 +88,7 @@ function AppHeader({
       <div className="mx-auto flex h-[68px] w-full max-w-[1440px] items-center gap-3 px-4 sm:gap-5 sm:px-6 lg:px-8">
 
         <Link
-          to="/home"
+          to="/"
           className="flex shrink-0 items-center gap-2 no-underline transition-opacity hover:opacity-80"
           aria-label="Click n Chick — home"
         >
