@@ -2,20 +2,30 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\ResolveGuestOrder;
+use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
+use App\Models\Order;
+use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\OrderAnnouncer;
+use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
+use App\Services\Orders\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class GuestOrderController extends Controller
 {
+    private const WITH = ['items.food', 'items.addons', 'user'];
+
     public function __construct(
         private CheckoutQuote $checkout,
         private OrderPlacement $placement,
         private OrderAnnouncer $announcer,
+        private OrderCancellation $cancellation,
+        private CancellationPolicy $policy,
     ) {}
 
     public function quote(Request $request)
@@ -68,6 +78,76 @@ class GuestOrderController extends Controller
             // send the customer back to.
             'tracking_token' => $token,
         ], 201);
+    }
+
+    public function show(Request $request)
+    {
+        $order = $this->order($request);
+
+        return response()->json([
+            'order' => new OrderTrackingResource($order->load(self::WITH)),
+            'channel' => $order->guestChannel(),
+        ]);
+    }
+
+    public function cancel(Request $request)
+    {
+        $order = $this->order($request);
+
+        $decision = $this->cancellation->cancel($order, null);
+
+        if (! $decision['can_cancel']) {
+            return response()->json([
+                'message' => $decision['message'],
+                'error_code' => $decision['code'],
+            ], 400);
+        }
+
+        return response()->json([
+            'message' => $this->policy->outcomeMessage($decision),
+            'refunded' => $decision['refundable'],
+            'refund_amount' => $decision['refund_amount'],
+            'refund_code' => $decision['code'],
+            'order' => new OrderTrackingResource($order->load(self::WITH)),
+        ]);
+    }
+
+    public function confirmReceipt(Request $request)
+    {
+        $order = $this->order($request);
+
+        if ($order->order_type !== 'delivery') {
+            return response()->json([
+                'message' => 'Only a delivery can be confirmed as received.',
+                'error_code' => 'NOT_A_DELIVERY',
+            ], 422);
+        }
+
+        if ($order->status !== OrderStatus::ON_THE_WAY) {
+            return response()->json([
+                'message' => $order->status === OrderStatus::DELIVERED
+                    ? 'This order is already marked delivered.'
+                    : 'This order is not on its way yet.',
+                'error_code' => 'NOT_ON_THE_WAY',
+                'status' => $order->status,
+            ], 422);
+        }
+
+        $order->status = OrderStatus::DELIVERED;
+        $order->save();
+
+        $this->announcer->statusChanged($order);
+
+        return response()->json([
+            'message' => 'Thanks for confirming. Enjoy your meal!',
+            'order' => new OrderTrackingResource($order->load(self::WITH)),
+        ]);
+    }
+
+    /** Put there by the guest-order middleware, which every tracking route carries. */
+    private function order(Request $request): Order
+    {
+        return $request->attributes->get(ResolveGuestOrder::ATTRIBUTE);
     }
 
     private function cart(Request $request): ?Cart
