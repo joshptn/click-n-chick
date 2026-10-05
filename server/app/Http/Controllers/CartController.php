@@ -208,6 +208,80 @@ class CartController extends Controller
         return response()->json(array_merge(['message' => 'Your order is empty.'], $this->payload($cart->fresh())));
     }
 
+    /**
+     * Fold the cart this browser built before signing in into the account's own.
+     *
+     * The client calls this once a session exists. The guest token still arrives
+     * on the header - the browser keeps sending it after sign-in for exactly this
+     * - and the lookup goes through Cart::forGuestToken, so the fence holds and an
+     * account's cart can never be on the giving end.
+     *
+     * Additive, the same as adding an item twice: a line already in the account
+     * cart with the same food and the same add-ons absorbs the guest quantity,
+     * clamped to stock; anything else moves across whole, add-ons included. The
+     * guest cart is then deleted, which is what makes a second call - another tab,
+     * a retry - a no-op rather than a double count.
+     */
+    public function mergeGuest(Request $request)
+    {
+        $user = $request->user();
+
+        $target = Cart::firstOrCreate([
+            'user_id' => $user->id,
+            'cart_status' => Cart::STATUS_IMMEDIATE,
+        ]);
+
+        $merged = DB::transaction(function () use ($request, $user, $target) {
+            $found = Cart::forGuestToken($request->header(self::GUEST_HEADER));
+
+            if ($found === null) {
+                return 0;
+            }
+
+            // Re-read under a lock by key, so the fence stays in forGuestToken
+            // alone. A concurrent merge that got here first will have deleted it.
+            $guest = Cart::query()->whereKey($found->getKey())->lockForUpdate()->first();
+
+            if ($guest === null) {
+                return 0;
+            }
+
+            $lines = $guest->items()->with(['food', 'selectedAddons'])->get();
+
+            foreach ($lines as $line) {
+                $addonIds = $line->selectedAddons->pluck('id')->sort()->values()->all();
+                $existing = $this->matchingLine($target, $line->food_id, $addonIds);
+
+                if ($existing) {
+                    $existing->quantity = $this->clampToStock($line->food, $existing->quantity + $line->quantity);
+                    $existing->save();
+
+                    continue;
+                }
+
+                // Moved rather than copied, so its add-on rows come with it.
+                $line->forceFill([
+                    'cart_id' => $target->getKey(),
+                    'user_id' => $user->getKey(),
+                    'quantity' => $this->clampToStock($line->food, $line->quantity),
+                ])->save();
+            }
+
+            // Whatever is still attached was absorbed into an existing line, and
+            // goes with the cart.
+            $guest->delete();
+
+            return $lines->count();
+        });
+
+        return response()->json(array_merge([
+            'message' => $merged > 0
+                ? 'What you picked before signing in is in your cart.'
+                : 'There was nothing to bring across.',
+            'merged' => $merged,
+        ], $this->payload($target->fresh())));
+    }
+
     private function matchingLine(Cart $cart, int $foodId, array $addonIds): ?CartItem
     {
         return $cart->items()
