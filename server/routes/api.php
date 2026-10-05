@@ -72,6 +72,14 @@ Route::prefix('guest')->group(function () {
 
     Route::post('/orders', [GuestOrderController::class, 'store'])
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
+
+    Route::middleware('guest-order')->group(function () {
+        Route::get('/order', [GuestOrderController::class, 'show']);
+        Route::post('/order/cancel', [GuestOrderController::class, 'cancel'])
+            ->middleware('throttle:user-update');
+        Route::post('/order/received', [GuestOrderController::class, 'confirmReceipt'])
+            ->middleware('throttle:user-update');
+    });
 });
 
 // Customer
@@ -122,6 +130,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::delete('/cart/items', [CartController::class, 'destroyMany']);
     Route::delete('/cart/items/{cartItem}', [CartController::class, 'destroy']);
     Route::delete('/cart', [CartController::class, 'clear']);
+    Route::post('/cart/merge', [CartController::class, 'mergeGuest'])
+        ->middleware('throttle:user-update');
 
     Route::post('/checkout/quote', [CheckoutController::class, 'quote'])
         ->middleware('throttle:checkout-quote');
