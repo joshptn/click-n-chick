@@ -9,7 +9,7 @@ use App\Models\Order;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\OrderAnnouncer;
-use App\Services\Orders\OrderNotice;
+use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -104,8 +104,7 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        $cancellation = app(CancellationPolicy::class);
-        $policy = $cancellation->for($order);
+        $policy = app(OrderCancellation::class)->cancel($order, $user);
 
         if (! $policy['can_cancel']) {
             return response()->json([
@@ -114,20 +113,8 @@ class OrderController extends Controller implements HasMiddleware
             ], 400);
         }
 
-        $order->forceFill([
-            'status' => OrderStatus::CANCELLED,
-            'cancelled_by' => $user->getKey(),
-            'refund_owed' => $policy['refund_amount'],
-        ])->save();
-
-        $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
-
-        if ($order->isAdvance()) {
-            $this->announcer->toStaff($order, app(OrderNotice::class)->staffCancelled($order));
-        }
-
         return response()->json([
-            'message' => $cancellation->outcomeMessage($policy),
+            'message' => app(CancellationPolicy::class)->outcomeMessage($policy),
             'refunded' => $policy['refundable'],
             'refund_amount' => $policy['refund_amount'],
             'refund_code' => $policy['code'],
