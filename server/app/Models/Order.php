@@ -116,6 +116,66 @@ class Order extends Model
         return hash('sha256', $token);
     }
 
+    /**
+     * The order a tracking token names, if any.
+     *
+     * The whereNull is the fence, as it is on the cart: no token may ever resolve
+     * to an order that belongs to an account.
+     */
+    public static function forGuestToken(?string $token): ?self
+    {
+        if (! is_string($token) || trim($token) === '') {
+            return null;
+        }
+
+        return static::query()
+            ->whereNull('user_id')
+            ->where('guest_token_hash', static::hashGuestToken($token))
+            ->first();
+    }
+
+    /**
+     * The public channel this order's events are broadcast on for its guest.
+     *
+     * Derived from the stored verifier rather than from the token, because the
+     * token is deliberately not stored and so is unavailable at broadcast time.
+     * Domain-separated all the same, so the channel name cannot be turned back
+     * into the value the database holds.
+     */
+    public function guestChannel(): ?string
+    {
+        return $this->guest_token_hash === null
+            ? null
+            : hash('sha256', 'channel|'.$this->guest_token_hash);
+    }
+
+    /**
+     * When the tracking link stops working.
+     *
+     * One predicate for both surfaces - the HTTP routes and broadcasting consult
+     * this and nothing else, so the two windows cannot drift apart.
+     */
+    public function guestAccessExpiresAt(): ?CarbonImmutable
+    {
+        if ($this->guest_token_hash === null) {
+            return null;
+        }
+
+        return $this->closed_at === null
+            ? CarbonImmutable::parse($this->created_at)
+                ->addDays((int) config('store.guest.track_days_ceiling'))
+            : CarbonImmutable::parse($this->closed_at)
+                ->addDays((int) config('store.guest.track_days_after_close'));
+    }
+
+    public function guestAccessIsLive(?CarbonInterface $at = null): bool
+    {
+        $expires = $this->guestAccessExpiresAt();
+
+        return $expires !== null
+            && $expires->greaterThan($at ? CarbonImmutable::parse($at) : CarbonImmutable::now());
+    }
+
     public function isPaid(): bool
     {
         return $this->payment_status === 'paid';
