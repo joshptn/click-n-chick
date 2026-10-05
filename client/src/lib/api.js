@@ -43,7 +43,10 @@ function buildUrl(path, params) {
   return url.toString();
 }
 
-export async function apiFetch(path, { method = "GET", body, params, signal, auth = true } = {}) {
+export async function apiFetch(
+  path,
+  { method = "GET", body, params, signal, auth = true, headers: extraHeaders } = {}
+) {
   const token = auth ? authToken() : null;
 
   const response = await fetch(buildUrl(path, params), {
@@ -59,6 +62,9 @@ export async function apiFetch(path, { method = "GET", body, params, signal, aut
       // it for an authenticated request, and it is how the account later finds
       // the cart this browser built before signing in.
       ...guestHeader(),
+      // Per-call, for the one credential that is not ambient: a tracking token
+      // belongs to a single order and comes out of the link, not from storage.
+      ...(extraHeaders ?? {}),
     },
     body: body ? JSON.stringify(body) : undefined,
     credentials: "include",
