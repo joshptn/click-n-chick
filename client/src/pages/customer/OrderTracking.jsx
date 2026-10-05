@@ -14,16 +14,20 @@ import toast from "../../components/app/Toast";
 import {
   ORDERS_KEY,
   amendOrder,
+  cancelGuestOrder,
   cancelOrder,
   cancelPrompt,
   confirmDetails,
+  confirmGuestReceipt,
   confirmReceipt,
+  fetchGuestOrder,
   fetchOrder,
   feedbackMailto,
+  guestOrderKey,
   orderKey,
   statusBadgeClass,
 } from "../../lib/orders";
-import { useOrderChannel } from "../../context/useRealtime";
+import { useOrderChannel, usePublicOrderChannel } from "../../context/useRealtime";
 
 const IN_LINE_POLL_MS = 30 * 1000;
 
@@ -39,19 +43,33 @@ function TrackingSkeleton() {
   );
 }
 
-function OrderTracking() {
-  const { orderId } = useParams();
+/**
+ * One tracking screen for both kinds of customer.
+ *
+ * A guest arrives by link, so the order is named by the token in the path rather
+ * than by an id, and the live feed comes over a public channel the response names
+ * instead of a private one. Everything the screen renders - the step chain, the
+ * status copy, the cancel prompt, the receipt - is the same resource either way,
+ * which is what stops the two experiences drifting apart.
+ */
+function OrderTracking({ guest = false }) {
+  const { orderId, token } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const queryKey = guest ? guestOrderKey(token) : orderKey(orderId);
+  const backTo = guest ? "/home" : "/orders";
+  const backLabel = guest ? "Back to the menu" : "Back to my orders";
 
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState(null);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: orderKey(orderId),
-    queryFn: ({ signal }) => fetchOrder(orderId, { signal }),
-    enabled: Boolean(orderId),
+    queryKey,
+    queryFn: ({ signal }) =>
+      guest ? fetchGuestOrder(token, { signal }) : fetchOrder(orderId, { signal }),
+    enabled: Boolean(guest ? token : orderId),
     retry: false,
   });
 
@@ -64,32 +82,37 @@ function OrderTracking() {
     if (!inLine) return undefined;
 
     const timer = window.setInterval(
-      () => queryClient.invalidateQueries({ queryKey: orderKey(orderId) }),
+      () => queryClient.invalidateQueries({ queryKey }),
       IN_LINE_POLL_MS
     );
 
     return () => window.clearInterval(timer);
-  }, [inLine, orderId, queryClient]);
+  }, [inLine, queryKey, queryClient]);
 
-  const lastEvent = useOrderChannel(order ? orderId : null);
+  // Both hooks always run, one of them with a null subject.
+  const privateEvent = useOrderChannel(!guest && order ? orderId : null);
+  const publicEvent = usePublicOrderChannel(guest ? (data?.channel ?? null) : null);
+  const lastEvent = guest ? publicEvent : privateEvent;
 
   useEffect(() => {
     if (!lastEvent) return;
 
-    queryClient.invalidateQueries({ queryKey: orderKey(orderId) });
+    queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
-  }, [lastEvent, orderId, queryClient]);
+  }, [lastEvent, queryKey, queryClient]);
 
+  // Merged rather than replaced: a guest's cached entry also holds the channel
+  // name, and dropping it would silently unsubscribe them from their own order.
   const settle = (payload) => {
     if (payload?.order) {
-      queryClient.setQueryData(orderKey(orderId), { order: payload.order });
+      queryClient.setQueryData(queryKey, (prev) => ({ ...prev, order: payload.order }));
     }
 
     queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
   };
 
   const cancelling = useMutation({
-    mutationFn: () => cancelOrder(orderId),
+    mutationFn: () => (guest ? cancelGuestOrder(token) : cancelOrder(orderId)),
     onSuccess: (payload) => {
       settle(payload);
       setConfirmingCancel(false);
@@ -98,7 +121,7 @@ function OrderTracking() {
     onError: (err) => {
       setConfirmingCancel(false);
       toast.error(err?.message ?? "That order could not be cancelled.", "Cancellation failed");
-      queryClient.invalidateQueries({ queryKey: orderKey(orderId) });
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 
@@ -124,14 +147,14 @@ function OrderTracking() {
   });
 
   const confirming = useMutation({
-    mutationFn: () => confirmReceipt(orderId),
+    mutationFn: () => (guest ? confirmGuestReceipt(token) : confirmReceipt(orderId)),
     onSuccess: (payload) => {
       settle(payload);
       toast.success("Thanks for confirming. Enjoy your meal!", "Order received");
     },
     onError: (err) => {
       toast.error(err?.message ?? "That could not be confirmed.", "Something went wrong");
-      queryClient.invalidateQueries({ queryKey: orderKey(orderId) });
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 
@@ -143,8 +166,8 @@ function OrderTracking() {
         <div className="mb-5 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate("/orders")}
-            aria-label="Back to my orders"
+            onClick={() => navigate(backTo)}
+            aria-label={backLabel}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#f0e9df] bg-white text-ink transition-colors hover:bg-[#f7f4f0]"
           >
             <IconArrowLeft size={18} stroke={2.2} />
@@ -173,18 +196,24 @@ function OrderTracking() {
         {isError && (
           <section className="rounded-[16px] border border-[#f0e9df] bg-white px-6 py-12 text-center">
             <h2 className="m-0 font-display text-[17px] font-extrabold text-ink">
-              {error?.status === 403 || error?.status === 404
-                ? "We can't find that order"
-                : "That order could not be loaded"}
+              {error?.status === 410
+                ? "This link has expired"
+                : error?.status === 403 || error?.status === 404
+                  ? "We can't find that order"
+                  : "That order could not be loaded"}
             </h2>
             <p className="m-0 mx-auto mt-1.5 max-w-[380px] font-display text-[13px] leading-relaxed text-[#6f6b68]">
-              {error?.status === 403 || error?.status === 404
-                ? "It may belong to another account, or the link may be out of date."
-                : "Please check your connection and try again."}
+              {/* A guest has no account it could "belong to", and the server's
+                  wording for an expired or unknown link is already the right one. */}
+              {guest && error?.payload?.message
+                ? error.payload.message
+                : error?.status === 403 || error?.status === 404
+                  ? "It may belong to another account, or the link may be out of date."
+                  : "Please check your connection and try again."}
             </p>
 
-            <Button size="md" className="mt-5" onClick={() => navigate("/orders")}>
-              Back to my orders
+            <Button size="md" className="mt-5" onClick={() => navigate(backTo)}>
+              {backLabel}
             </Button>
           </section>
         )}

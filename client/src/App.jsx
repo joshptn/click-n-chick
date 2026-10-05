@@ -40,6 +40,7 @@ function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/home" element={<Home />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/track/:token" element={<OrderTracking guest />} />
 
         <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route path="/advance-order" element={<AdvanceOrder />} />
