@@ -1,0 +1,96 @@
+services:
+  - type: web
+    name: click-n-chick-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    healthCheckPath: /up
+    buildFilter:
+      paths:
+        - server/**
+    envVars:
+      - key: APP_NAME
+        value: Click n Chick
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        sync: false
+
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: FILESYSTEM_DISK
+        value: local
+
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      - key: BROADCAST_CONNECTION
+        value: reverb
+      - key: REVERB_APP_ID
+        sync: false
+      - key: REVERB_APP_KEY
+        sync: false
+      - key: REVERB_APP_SECRET
+        sync: false
+      - key: REVERB_ALLOWED_ORIGINS
+        sync: false
+      - key: REVERB_HOST
+        value: 127.0.0.1
+      - key: REVERB_PORT
+        value: "8080"
+      - key: REVERB_SCHEME
+        value: http
+      - key: REVERB_SERVER_HOST
+        value: 127.0.0.1
+      - key: REVERB_SERVER_PORT
+        value: "8080"
+
+      - key: RECAPTCHA_SITE_KEY
+        sync: false
+      - key: RECAPTCHA_SECRET_KEY
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: ORS_API_KEY
+        sync: false
+
+      - key: SMS_DRIVER
+        sync: false
+      - key: SEMAPHORE_API_KEY
+        sync: false
+      - key: SEMAPHORE_SENDER_NAME
+        sync: false
+
+      - key: MAIL_MAILER
+        sync: false
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM_ADDRESS
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Click n Chick
