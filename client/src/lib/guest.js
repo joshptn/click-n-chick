@@ -7,8 +7,8 @@
  * token that comes later is a different value, handled separately, because that
  * one really does grant something.
  *
- * Deliberately survives signing in: the cart it names still exists, and folding
- * it into the account is its own step.
+ * Survives signing in just long enough for the account to absorb the cart it
+ * names (CartProvider), and is forgotten once that merge succeeds.
  */
 
 const STORAGE_KEY = "guest_token";
@@ -30,6 +30,15 @@ export function rememberGuestToken(token) {
     localStorage.setItem(STORAGE_KEY, token);
   } catch {
     // As above.
+  }
+}
+
+/** Once the cart it names has been folded into an account, the key is dead weight. */
+export function forgetGuestToken() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing stored, so nothing to forget.
   }
 }
 

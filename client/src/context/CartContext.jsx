@@ -1,11 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import AuthContext from "./AuthContext";
 import { CART_MODE } from "../lib/cartModes";
 import { api, apiFetch } from "../lib/api";
-import { rememberGuestToken } from "../lib/guest";
+import { forgetGuestToken, guestToken, rememberGuestToken } from "../lib/guest";
 import toast from "../components/app/Toast";
 
 const CartContext = createContext(null);
@@ -193,10 +193,47 @@ function useCartStore(mode, enabled, scope) {
 export function CartProvider({ children }) {
   const { token } = useContext(AuthContext);
   const { pathname } = useLocation();
+  const queryClient = useQueryClient();
 
   const signedIn = Boolean(token);
 
   const onAdvancePages = pathname.startsWith("/advance-order");
+
+  /**
+   * Bring a pre-sign-in cart into the account.
+   *
+   * Keyed on the session existing rather than on any one sign-in screen, because
+   * login, registration and the two-factor challenge all end the same way - and a
+   * reload while signed in retries a merge that failed earlier. The token is only
+   * forgotten once the server has answered, so a dropped request is not lost.
+   *
+   * The ref stops StrictMode's doubled effect sending two requests; the server
+   * deletes the guest cart as it merges, so a second one would count nothing anyway.
+   */
+  const merging = useRef(false);
+
+  useEffect(() => {
+    if (!signedIn || !guestToken() || merging.current) return;
+
+    merging.current = true;
+
+    api
+      .post("/api/cart/merge")
+      .then((payload) => {
+        forgetGuestToken();
+        queryClient.removeQueries({ queryKey: ["cart", SCOPE.GUEST] });
+        queryClient.invalidateQueries({ queryKey: ["cart", SCOPE.ACCOUNT] });
+
+        if (payload?.merged > 0) {
+          toast.info(payload.message, "Your cart came with you");
+        }
+      })
+      // Kept on failure: the next load while signed in tries again.
+      .catch(() => {})
+      .finally(() => {
+        merging.current = false;
+      });
+  }, [signedIn, queryClient]);
 
   // Always on: a guest has a cart too, it just lives against a token.
   const immediate = useCartStore(
