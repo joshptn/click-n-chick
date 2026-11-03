@@ -42,6 +42,14 @@ return [
         'sender_name' => env('SEMAPHORE_SENDER_NAME'),
     ],
 
+    'gmail' => [
+        'client_id' => env('GMAIL_CLIENT_ID'),
+        'client_secret' => env('GMAIL_CLIENT_SECRET'),
+        'refresh_token' => env('GMAIL_REFRESH_TOKEN'),
+        'endpoint' => env('GMAIL_ENDPOINT', 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'),
+        'timeout' => (int) env('GMAIL_TIMEOUT', 10),
+    ],
+
     'nominatim' => [
         'endpoint' => env('NOMINATIM_ENDPOINT', 'https://nominatim.openstreetmap.org'),
 

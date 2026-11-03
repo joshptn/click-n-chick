@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Services\Geo\OpenRouteServiceClient;
 use App\Services\Geo\RoutingProvider;
+use App\Services\Mail\GmailOAuth;
+use App\Services\Mail\GmailTransport;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SemaphoreClient;
 use App\Services\Sms\SmsSender;
@@ -13,6 +15,7 @@ use App\Services\Verification\EmailVerificationChannel;
 use App\Services\Verification\SmsVerificationChannel;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -56,6 +59,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureRateLimiting();
+
+        Mail::extend('gmail', fn () => new GmailTransport(
+            GmailOAuth::fromConfig(),
+            (string) config('services.gmail.endpoint'),
+            (int) config('services.gmail.timeout', 10),
+        ));
     }
 
     protected function configureRateLimiting(): void
