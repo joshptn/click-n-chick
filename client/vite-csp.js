@@ -57,7 +57,7 @@ export function buildPolicy(env, { dev = false } = {}) {
       "https://api.simplesvg.com",
       ...(dev ? ["ws:", "wss:"] : []),
     ],
-    "frame-src": ["https://www.google.com/recaptcha/"],
+    "frame-src": ["https://www.google.com/recaptcha/", "https://recaptcha.google.com/recaptcha/"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
