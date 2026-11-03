@@ -81,14 +81,12 @@ services:
         sync: false
 
       - key: MAIL_MAILER
+        value: gmail
+      - key: GMAIL_CLIENT_ID
         sync: false
-      - key: MAIL_HOST
+      - key: GMAIL_CLIENT_SECRET
         sync: false
-      - key: MAIL_PORT
-        sync: false
-      - key: MAIL_USERNAME
-        sync: false
-      - key: MAIL_PASSWORD
+      - key: GMAIL_REFRESH_TOKEN
         sync: false
       - key: MAIL_FROM_ADDRESS
         sync: false
