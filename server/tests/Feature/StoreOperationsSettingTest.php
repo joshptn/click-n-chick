@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Events\StoreBroadcast;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Store\StoreAvailability;
-use App\Services\Verification\Channel;
+use App\Services\Verification\Channel as VerificationChannel;
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -33,7 +37,7 @@ class StoreOperationsSettingTest extends TestCase
             'password' => Hash::make('Password123!'),
             'phone_number' => $phone,
             'phone_number_hash' => User::hashPhoneNumber($phone),
-            'verification_channel' => Channel::Email->value,
+            'verification_channel' => VerificationChannel::Email->value,
             'email_verified_at' => now(),
             'account_status' => User::STATUS_ACTIVE,
         ])->fresh();
@@ -153,5 +157,87 @@ class StoreOperationsSettingTest extends TestCase
             ->patchJson('/api/admin/store/toggles', ['ordering_override' => 'auto'])
             ->assertOk()
             ->assertJsonPath('status.ordering_override', 'auto');
+    }
+
+    // -----------------------------------------------------------------
+    // Open pages hear about it without polling
+    // -----------------------------------------------------------------
+
+    public function test_pausing_ordering_broadcasts_the_new_state(): void
+    {
+        Event::fake([StoreBroadcast::class]);
+
+        $this->actingAs($this->userWithRole(User::ROLE_ADMIN), 'sanctum')
+            ->patchJson('/api/admin/store/toggles', ['ordering_override' => 'closed'])
+            ->assertOk();
+
+        Event::assertDispatched(
+            StoreBroadcast::class,
+            fn (StoreBroadcast $event) => $event->store['ordering_override'] === 'closed'
+                && $event->store['accepting_orders'] === false
+        );
+    }
+
+    public function test_switching_delivery_off_broadcasts_the_new_state(): void
+    {
+        Event::fake([StoreBroadcast::class]);
+
+        $this->actingAs($this->userWithRole(User::ROLE_ADMIN), 'sanctum')
+            ->patchJson('/api/admin/store/toggles', ['delivery_enabled' => false])
+            ->assertOk();
+
+        Event::assertDispatched(
+            StoreBroadcast::class,
+            fn (StoreBroadcast $event) => $event->store['delivery_enabled'] === false
+                && $event->store['accepting_delivery'] === false
+        );
+    }
+
+    public function test_changing_the_hours_broadcasts_the_new_state(): void
+    {
+        Event::fake([StoreBroadcast::class]);
+
+        $this->actingAs($this->userWithRole(User::ROLE_SUPER_ADMIN), 'sanctum')
+            ->putJson('/api/admin/settings/store', ['opens_at' => '08:00', 'closes_at' => '21:00'])
+            ->assertOk();
+
+        Event::assertDispatched(
+            StoreBroadcast::class,
+            fn (StoreBroadcast $event) => $event->store['opens_at'] === '08:00'
+                && $event->store['closes_at'] === '21:00'
+        );
+    }
+
+    public function test_a_refused_change_broadcasts_nothing(): void
+    {
+        Event::fake([StoreBroadcast::class]);
+
+        $this->actingAs($this->userWithRole(User::ROLE_ADMIN), 'sanctum')
+            ->patchJson('/api/admin/store/toggles', [])
+            ->assertStatus(422);
+
+        $this->actingAs($this->userWithRole(User::ROLE_CUSTOMER), 'sanctum')
+            ->patchJson('/api/admin/store/toggles', ['ordering_override' => 'closed'])
+            ->assertForbidden();
+
+        Event::assertNotDispatched(StoreBroadcast::class);
+    }
+
+    public function test_the_store_broadcast_is_public_and_carries_only_the_public_status(): void
+    {
+        $event = new StoreBroadcast(app(StoreAvailability::class)->snapshot());
+
+        $channel = $event->broadcastOn()[0];
+
+        $this->assertInstanceOf(Channel::class, $channel);
+        $this->assertNotInstanceOf(PrivateChannel::class, $channel);
+        $this->assertSame('store', $channel->name);
+        $this->assertSame('status', $event->broadcastAs());
+
+        // The same document GET /api/store/status gives to anyone.
+        $this->assertSame(
+            array_keys($this->getJson('/api/store/status')->json()),
+            array_keys($event->broadcastWith()['store'])
+        );
     }
 }

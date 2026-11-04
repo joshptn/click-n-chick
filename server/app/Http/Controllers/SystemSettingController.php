@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Events\NotificationBroadcast;
+use App\Events\StoreBroadcast;
 use App\Models\Discount;
 use App\Models\Notification;
 use App\Models\Setting;
@@ -147,6 +148,8 @@ class SystemSettingController extends Controller
         Setting::put(Setting::STORE_OPENS_AT, $validated['opens_at'], $actor);
         Setting::put(Setting::STORE_CLOSES_AT, $validated['closes_at'], $actor);
 
+        $this->announceStoreChange();
+
         return response()->json([
             'success' => true,
             'message' => 'Operating hours updated.',
@@ -177,10 +180,26 @@ class SystemSettingController extends Controller
             Setting::put(Setting::STORE_DELIVERY_ENABLED, (bool) $validated['delivery_enabled'], $actor);
         }
 
+        $this->announceStoreChange();
+
         return response()->json([
             'success' => true,
             'message' => 'Store availability updated.',
         ] + $this->storePayload());
+    }
+
+    /**
+     * Push the new trading state to every open page. The setting is already
+     * saved, so a failed broadcast is logged rather than failing the request -
+     * pages still pick it up on their next status poll.
+     */
+    private function announceStoreChange(): void
+    {
+        try {
+            StoreBroadcast::dispatch(app(StoreAvailability::class)->snapshot());
+        } catch (Throwable $e) {
+            Log::warning('Could not broadcast a store status change.', ['error' => $e->getMessage()]);
+        }
     }
 
     private function announceRateChange(float $previous, float $next): void
