@@ -40,9 +40,13 @@ return [
                 'port' => env('REVERB_PORT', 443),
                 'scheme' => env('REVERB_SCHEME', 'https'),
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
+                // Events publish inside the request that raised them (App\Events\LiveBroadcast),
+                // so a Reverb that is not answering may hold that request this long at most.
+                // Pusher sets this on every call, overriding a Guzzle timeout.
+                'timeout' => (float) env('REVERB_PUBLISH_TIMEOUT', 3),
             ],
             'client_options' => [
-                // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                'connect_timeout' => (float) env('REVERB_PUBLISH_CONNECT_TIMEOUT', 1),
             ],
         ],
 

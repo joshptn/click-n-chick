@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\NotificationBroadcast;
 use App\Events\StoreBroadcast;
+use App\Jobs\NotifyEveryAccount;
 use App\Models\Discount;
-use App\Models\Notification;
 use App\Models\Setting;
-use App\Models\User;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\DeliveryPricing;
 use App\Services\Orders\OrderStatus;
@@ -209,27 +207,7 @@ class SystemSettingController extends Controller
             .'%, changed from '.$this->format($previous).'%.';
 
         try {
-            User::query()
-                ->select('id')
-                ->chunkById(500, function ($users) use ($title, $body) {
-                    foreach ($users as $user) {
-                        $notification = Notification::create([
-                            'user_id' => $user->id,
-                            'title' => $title,
-                            'body' => $body,
-                            'is_read' => false,
-                        ]);
-
-                        try {
-                            NotificationBroadcast::dispatch($notification, (int) $user->id);
-                        } catch (Throwable $e) {
-                            Log::warning('Could not broadcast a discount rate change.', [
-                                'user_id' => $user->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                    }
-                });
+            NotifyEveryAccount::dispatch($title, $body);
         } catch (Throwable $e) {
             Log::warning('Could not announce the discount rate change.', ['error' => $e->getMessage()]);
         }
