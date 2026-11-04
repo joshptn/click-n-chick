@@ -28,7 +28,8 @@ class OrderQueueResource extends JsonResource
             'queue_label' => $this->queueLabel(),
             'queue_position' => $this->position,
             'queued_at' => $this->queued_at?->toIso8601String(),
-            'waiting_minutes' => $this->queued_at?->diffInMinutes(now()),
+            // Whole minutes: Carbon 3 returns a float here.
+            'waiting_minutes' => $this->queued_at ? (int) $this->queued_at->diffInMinutes(now()) : null,
 
             'status' => $this->status,
             'status_label' => OrderStatus::label((string) $this->status),
@@ -69,6 +70,10 @@ class OrderQueueResource extends JsonResource
                 'id' => $item->id,
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'quantity' => $item->quantity,
+                // The kitchen cooks to the add-ons, so they ride with the line.
+                'addons' => $item->relationLoaded('addons')
+                    ? $item->addons->pluck('addon_name')->values()
+                    : [],
             ])->values()),
 
             'subtotal' => $this->subtotal,
@@ -76,8 +81,13 @@ class OrderQueueResource extends JsonResource
             'delivery_fee' => $this->delivery_fee,
             'total_amount' => $this->total_amount,
             'payment_status' => $this->payment_status,
+            'payment_method' => $this->whenLoaded(
+                'payments',
+                fn () => $this->payments->sortByDesc('id')->first()?->payment_method
+            ),
 
             'created_at' => $this->created_at?->toIso8601String(),
+            'closed_at' => $this->closed_at?->toIso8601String(),
         ];
     }
 }

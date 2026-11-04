@@ -16,7 +16,10 @@ class OrderQueueController extends Controller
 {
     use AuthorizesRequests;
 
-    private const WITH = ['items.food', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'payments'];
+
+    /** The board shows the day's latest finishes; the summary still counts them all. */
+    private const COMPLETED_SHOWN = 50;
 
     public function __construct(
         private StoreAvailability $store,
@@ -32,6 +35,15 @@ class OrderQueueController extends Controller
         $line = $this->onDay($date, OrderStatus::inLine());
         $handover = $this->onDay($date, [OrderStatus::READY_FOR_PICKUP, OrderStatus::ON_THE_WAY]);
 
+        $completed = Order::query()
+            ->where('queue_date', $date)
+            ->whereIn('status', [OrderStatus::COMPLETED, OrderStatus::DELIVERED])
+            ->with(self::WITH)
+            ->orderByDesc('closed_at')
+            ->orderByDesc('queue_number')
+            ->limit(self::COMPLETED_SHOWN)
+            ->get();
+
         return response()->json([
             'date' => $date,
             'store' => $this->store->snapshot(),
@@ -40,6 +52,7 @@ class OrderQueueController extends Controller
                 fn (Order $order, int $index) => (new OrderQueueResource($order))->withPosition($index + 1)
             ),
             'handover' => OrderQueueResource::collection($handover),
+            'completed' => OrderQueueResource::collection($completed),
 
             'summary' => [
                 'in_line' => $line->count(),
@@ -48,7 +61,9 @@ class OrderQueueController extends Controller
                 'completed_today' => $this->countOnDay($date, [OrderStatus::COMPLETED, OrderStatus::DELIVERED]),
                 'cancelled_today' => $this->countOnDay($date, [OrderStatus::CANCELLED]),
 
-                'longest_wait_minutes' => $line->first()?->queued_at?->diffInMinutes(now()),
+                'longest_wait_minutes' => $line->first()?->queued_at
+                    ? (int) $line->first()->queued_at->diffInMinutes(now())
+                    : null,
             ],
         ]);
     }

@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Events\OrderBroadcast;
+use App\Models\Addon;
 use App\Models\Food;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Payment;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
@@ -111,6 +113,69 @@ class AgentQueueTest extends TestCase
             ->assertJsonCount(0, 'handover')
             ->assertJsonPath('summary.completed_today', 1)
             ->assertJsonPath('summary.cancelled_today', 1);
+    }
+
+    public function test_todays_finished_orders_are_listed_newest_first(): void
+    {
+        $earlier = $this->queued('pickup', OrderStatus::COMPLETED);
+        $earlier->forceFill(['closed_at' => now()->subMinutes(30)])->save();
+
+        $later = $this->queued('delivery', OrderStatus::DELIVERED);
+        $later->forceFill(['closed_at' => now()->subMinutes(5)])->save();
+
+        $this->queued('pickup', OrderStatus::CANCELLED);
+        $this->queued('pickup', OrderStatus::PREPARING);
+
+        $this->actingAs($this->staff(), 'sanctum')
+            ->getJson('/api/agent/queue')
+            ->assertOk()
+            ->assertJsonCount(2, 'completed')
+            ->assertJsonPath('completed.0.id', $later->id)
+            ->assertJsonPath('completed.1.id', $earlier->id)
+            ->assertJsonPath('summary.completed_today', 2);
+    }
+
+    public function test_waits_are_reported_in_whole_minutes(): void
+    {
+        $this->queued('pickup', OrderStatus::PLACED, CarbonImmutable::now()->subSeconds(10 * 60 + 35));
+
+        $response = $this->actingAs($this->staff(), 'sanctum')
+            ->getJson('/api/agent/queue')
+            ->assertOk();
+
+        $this->assertSame(10, $response->json('line.0.waiting_minutes'));
+        $this->assertSame(10, $response->json('summary.longest_wait_minutes'));
+    }
+
+    public function test_yesterdays_finished_orders_are_not_listed(): void
+    {
+        $this->queued('pickup', OrderStatus::COMPLETED, CarbonImmutable::now('Asia/Manila')->subDay());
+
+        $this->actingAs($this->staff(), 'sanctum')
+            ->getJson('/api/agent/queue')
+            ->assertOk()
+            ->assertJsonCount(0, 'completed');
+    }
+
+    public function test_each_line_carries_its_addons_and_the_order_its_payment_method(): void
+    {
+        $order = $this->queued();
+        $item = OrderItem::create([
+            'order_id' => $order->id,
+            'food_id' => $this->food()->id,
+            'quantity' => 1,
+            'price' => 120,
+        ]);
+        $addon = Addon::create(['addon_name' => 'Extra Gravy', 'addon_price' => 15]);
+        $item->addons()->attach($addon->id, ['unit_price' => 15]);
+
+        Payment::create(['order_id' => $order->id, 'payment_method' => 'gcash', 'payment_status' => 'paid']);
+
+        $this->actingAs($this->staff(), 'sanctum')
+            ->getJson('/api/agent/queue')
+            ->assertOk()
+            ->assertJsonPath('line.0.items.0.addons', ['Extra Gravy'])
+            ->assertJsonPath('line.0.payment_method', 'gcash');
     }
 
     public function test_the_summary_reports_the_shape_of_the_day(): void
