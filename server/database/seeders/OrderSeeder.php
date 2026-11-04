@@ -19,8 +19,6 @@ class OrderSeeder extends Seeder
 {
     private const TAG = 'DEMO';
 
-    private const DEFAULT_CUSTOMER = 'customer@chicknclick.test';
-
     public function run(): void
     {
         if (app()->environment('production')) {
@@ -64,9 +62,11 @@ class OrderSeeder extends Seeder
             return collect([$user]);
         }
 
-        $seeded = User::where('email', self::DEFAULT_CUSTOMER)
-            ->where('role', User::ROLE_CUSTOMER)
-            ->first();
+        $seededEmail = config('seeding.accounts.customer.email');
+
+        $seeded = $seededEmail
+            ? User::where('email', $seededEmail)->where('role', User::ROLE_CUSTOMER)->first()
+            : null;
 
         $newest = User::where('role', User::ROLE_CUSTOMER)->latest('id')->first();
 

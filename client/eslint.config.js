@@ -26,4 +26,11 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Run by Node, not the browser: the e2e suite and the build configuration.
+    files: ['e2e/**/*.js', '*.config.js'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
 ])

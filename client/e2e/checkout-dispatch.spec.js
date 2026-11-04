@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
+import { CUSTOMER } from "./accounts.js";
+
 /**
  * The Dispatch step of checkout, in a real browser (UC-ORD-001..004, UC-DEL-*).
  *
@@ -19,8 +21,6 @@ import { expect, test } from "@playwright/test";
  */
 
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../server");
-
-const CUSTOMER = { email: "customer@chicknclick.test", password: "Password123!" };
 
 function artisan(args) {
   return execFileSync("php", ["artisan", ...args], {
