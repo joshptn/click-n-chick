@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Events\NotificationBroadcast;
+use App\Jobs\NotifyEveryAccount;
 use App\Models\Discount;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -217,6 +221,39 @@ class DiscountRateSettingTest extends TestCase
                 'title' => 'Discount rate updated',
             ]);
         }
+    }
+
+    /** Writing and broadcasting to every account grows with the accounts, so it is not done in the request. */
+    public function test_the_announcement_is_left_to_the_queue(): void
+    {
+        Queue::fake();
+        $manager = $this->user(User::ROLE_SUPER_ADMIN);
+
+        $this->actingAs($manager, 'sanctum')
+            ->putJson('/api/admin/settings/discount', ['percentage' => 25, 'password' => self::PASSWORD])
+            ->assertOk();
+
+        Queue::assertPushed(
+            NotifyEveryAccount::class,
+            fn (NotifyEveryAccount $job) => $job->title === 'Discount rate updated'
+                && $job->body === 'The Senior Citizen and PWD discount is now 25%, changed from 20%.'
+        );
+        $this->assertDatabaseMissing('notifications', ['title' => 'Discount rate updated']);
+    }
+
+    public function test_the_announcement_reaches_every_account_live(): void
+    {
+        Event::fake([NotificationBroadcast::class]);
+        $users = [$this->user(User::ROLE_CUSTOMER), $this->user(User::ROLE_ADMIN), $this->user(User::ROLE_SUPER_ADMIN)];
+
+        (new NotifyEveryAccount('Discount rate updated', 'Now 25%.'))->handle();
+
+        foreach ($users as $user) {
+            $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'body' => 'Now 25%.']);
+            Event::assertDispatched(NotificationBroadcast::class, fn (NotificationBroadcast $e) => $e->userId === $user->id);
+        }
+
+        Event::assertDispatchedTimes(NotificationBroadcast::class, 3);
     }
 
     /** Re-saving the same value should not spam every account. */
