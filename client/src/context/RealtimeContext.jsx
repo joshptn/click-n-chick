@@ -21,6 +21,7 @@ const RealtimeContext = createContext(null);
  *
  *   private-notifications.{id}  every signed-in user, their own only
  *   private-admin.orders        staff firehose (admin, super_admin)
+ *   private-admin.discounts     discount review queue (admin, super_admin)
  *   menu                        public; live availability and stock
  *   store                       public; ordering paused, delivery, hours
  *
@@ -194,6 +195,14 @@ export function RealtimeProvider({ children }) {
       });
 
       channels.push("admin.orders");
+
+      // A discount application arrived or was decided: the review queue and
+      // the sidebar count refetch. The payload names the claim only.
+      echo.private("admin.discounts")
+        .subscribed(() => markSubscribed("admin.discounts"))
+        .listen(".claim", () => queryClient.invalidateQueries({ queryKey: ["discount-claims"] }));
+
+      channels.push("admin.discounts");
     }
 
     return () => {

@@ -25,11 +25,15 @@ import {
   staffNotificationTarget,
 } from "../../lib/agent";
 
-function Badge({ count }) {
+function Badge({ count, inverted = false }) {
   if (!count) return null;
 
   return (
-    <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-brand-500 px-1.5 font-display text-[10px] font-bold text-white">
+    <span
+      className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1.5 font-display text-[10px] font-bold ${
+        inverted ? "bg-white text-brand-600" : "bg-brand-500 text-white"
+      }`}
+    >
       {count > 99 ? "99+" : count}
     </span>
   );
@@ -55,10 +59,14 @@ function StaffSidebar({ onNavigate }) {
     refetchInterval: 60 * 1000,
   });
 
+  const pages = [
+    { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
+    { label: "Pending Verification", icon: IconIdBadge2, to: "/admin/verification", count: discounts.data?.total ?? 0 },
+  ];
+
   // Built next, in sidebar order. Shown now so the navigation does not shift
   // under the agent as each page lands, with the counts already live.
   const upcoming = [
-    { label: "Pending Verification", icon: IconIdBadge2, count: discounts.data?.total ?? 0 },
     { label: "Advance Order Request", icon: IconCalendarTime, count: advance.data?.summary?.awaiting_decision ?? 0 },
     { label: "Pending Order", icon: IconHourglassHigh },
     { label: "Product Availability", icon: IconToolsKitchen2 },
@@ -80,21 +88,33 @@ function StaffSidebar({ onNavigate }) {
       </div>
 
       <nav aria-label="Staff" className="flex flex-col gap-0.5 px-2.5">
-        <NavLink
-          to="/admin"
-          end
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            `${rowClass} ${
-              isActive
-                ? "bg-brand-500 font-semibold text-white shadow-[0_6px_16px_-6px_rgba(255,139,43,0.6)]"
-                : "text-[#6f6b68] hover:bg-[#faf6f0] hover:text-ink"
-            }`
-          }
-        >
-          <IconClipboardList size={17} stroke={1.9} className="shrink-0" />
-          <span className="flex-1">All Orders</span>
-        </NavLink>
+        {pages.map((entry) => {
+          const Icon = entry.icon;
+
+          return (
+            <NavLink
+              key={entry.to}
+              to={entry.to}
+              end={entry.end}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                `${rowClass} ${
+                  isActive
+                    ? "bg-brand-500 font-semibold text-white shadow-[0_6px_16px_-6px_rgba(255,139,43,0.6)]"
+                    : "text-[#6f6b68] hover:bg-[#faf6f0] hover:text-ink"
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={17} stroke={1.9} className="shrink-0" />
+                  <span className="flex-1 leading-snug">{entry.label}</span>
+                  <Badge count={entry.count} inverted={isActive} />
+                </>
+              )}
+            </NavLink>
+          );
+        })}
 
         {upcoming.map((entry) => {
           const Icon = entry.icon;

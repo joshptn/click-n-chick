@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\DiscountClaimBroadcast;
 use App\Events\NotificationBroadcast;
 use App\Models\Discount;
 use App\Models\Notification;
@@ -27,6 +28,9 @@ use Throwable;
 class DiscountController extends Controller
 {
     use AuthorizesRequests;
+
+    /** notifications.notification_type of a "new application to review" notice. */
+    public const NOTICE_REVIEW = 'discount_review';
 
     /** GET /api/discount - the caller's own standing. */
     public function show(Request $request)
@@ -86,6 +90,8 @@ class DiscountController extends Controller
 
         $this->notifyReviewers($claim, $user);
 
+        DiscountClaimBroadcast::dispatch($claim, DiscountClaimBroadcast::SUBMITTED);
+
         return response()->json([
             'success' => true,
             'message' => 'Your ID has been sent to a Store Agent for review.',
@@ -110,18 +116,38 @@ class DiscountController extends Controller
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
+        $status = $validated['status'] ?? Discount::STATUS_PENDING;
+
         $claims = Discount::query()
             ->with([
                 'user:id,first_name,last_name,email,phone_number',
                 'verifier:id,first_name,last_name',
             ])
-            ->where('discount_status', $validated['status'] ?? Discount::STATUS_PENDING)
-            // Oldest first: a review queue that serves the newest first
-            // starves whoever has waited longest.
-            ->orderBy('created_at')
+            ->where('discount_status', $status)
+            // Pending, oldest first: a review queue that serves the newest
+            // first starves whoever has waited longest. Decided, latest first:
+            // that list is a record, read for what just happened.
+            ->when(
+                $status === Discount::STATUS_PENDING,
+                fn ($query) => $query->orderBy('created_at')->orderBy('id'),
+                fn ($query) => $query->orderByDesc('verified_at')->orderByDesc('id'),
+            )
             ->paginate($validated['per_page'] ?? 20);
 
-        return response()->json($claims);
+        $counts = Discount::query()
+            ->selectRaw('discount_status, count(*) as total')
+            ->groupBy('discount_status')
+            ->pluck('total', 'discount_status');
+
+        return response()->json($claims->toArray() + [
+            'counts' => [
+                Discount::STATUS_PENDING => (int) ($counts[Discount::STATUS_PENDING] ?? 0),
+                Discount::STATUS_APPROVED => (int) ($counts[Discount::STATUS_APPROVED] ?? 0),
+                Discount::STATUS_REJECTED => (int) ($counts[Discount::STATUS_REJECTED] ?? 0),
+            ],
+            // What an approval grants, read live like the customer's own page.
+            'percentage' => Discount::currentPercentage(),
+        ]);
     }
 
     /** POST /api/admin/discount-claims/{discount}/approve */
@@ -182,6 +208,8 @@ class DiscountController extends Controller
 
         $this->notifyClaimant($settled);
 
+        DiscountClaimBroadcast::dispatch($settled, DiscountClaimBroadcast::DECIDED);
+
         return response()->json([
             'success' => true,
             'message' => $settled->isApproved()
@@ -198,9 +226,7 @@ class DiscountController extends Controller
     /**
      * Tell the Store Agents there is something to review.
      *
-     * This is the "directed to the store agent" step. There is no agent screen
-     * yet, so the notification plus GET /api/admin/discount-claims is the whole
-     * hand-off - the work is queued and visible even without a UI to browse it.
+     * Typed, so the staff bell can open the Pending Verification queue.
      */
     private function notifyReviewers(Discount $claim, User $claimant): void
     {
@@ -214,7 +240,8 @@ class DiscountController extends Controller
             $this->push(
                 (int) $reviewer->id,
                 'Discount application to review',
-                "{$name} submitted a {$claim->typeLabel()} ID for approval."
+                "{$name} submitted a {$claim->typeLabel()} ID for approval.",
+                self::NOTICE_REVIEW
             );
         }
     }
@@ -239,13 +266,14 @@ class DiscountController extends Controller
      * runs, so a broadcast transport that is down must not turn a completed
      * approval into a 500 telling the agent it failed.
      */
-    private function push(int $userId, string $title, string $body): void
+    private function push(int $userId, string $title, string $body, ?string $type = null): void
     {
         try {
             $notification = Notification::create([
                 'user_id' => $userId,
                 'title' => $title,
                 'body' => $body,
+                'notification_type' => $type,
                 'is_read' => false,
             ]);
 

@@ -112,6 +112,25 @@ class BroadcastChannelAuthTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_the_discount_review_channel_allows_admin_roles_only(): void
+    {
+        foreach (['admin', 'super_admin'] as $role) {
+            $this->actingAs($this->user($role), 'sanctum')
+                ->postJson('/api/broadcasting/auth', [
+                    'channel_name' => 'private-admin.discounts',
+                    'socket_id' => '123.456',
+                ])
+                ->assertOk();
+        }
+
+        $this->actingAs($this->user('customer'), 'sanctum')
+            ->postJson('/api/broadcasting/auth', [
+                'channel_name' => 'private-admin.discounts',
+                'socket_id' => '123.456',
+            ])
+            ->assertForbidden();
+    }
+
     // ---------------------------------------------------------------
     // notifications.{userId} - recipient only, NOT admin
     // ---------------------------------------------------------------

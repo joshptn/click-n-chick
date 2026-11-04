@@ -11,7 +11,32 @@ export const AGENT_QUEUE_KEY = ["orders", "agent-queue"];
 
 export const ADVANCE_REQUESTS_KEY = ["orders", "advance-requests"];
 
+/**
+ * Everything discount-review is keyed under "discount-claims", which
+ * RealtimeContext invalidates on every admin.discounts broadcast.
+ */
 export const DISCOUNT_CLAIMS_KEY = ["discount-claims", "pending-count"];
+
+export const discountQueueKey = (status) => ["discount-claims", "queue", status];
+
+export const CLAIM_TABS = [
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
+
+export const CLAIM_TYPE = {
+  senior: { short: "Senior", card: "Senior Citizen ID" },
+  pwd: { short: "PWD", card: "Persons With Disabilities ID" },
+};
+
+/** Presets for the reason the customer reads. The server requires one. */
+export const CLAIM_REJECTION_REASONS = [
+  "The ID photo is too blurry to read.",
+  "The name on the ID does not match the account.",
+  "The ID has expired.",
+  "This is not a Senior Citizen or PWD ID.",
+];
 
 export function fetchAgentQueue({ signal } = {}) {
   return api.get("/api/agent/queue", { signal });
@@ -37,9 +62,84 @@ export function fetchPendingDiscountClaims({ signal } = {}) {
   return api.get("/api/admin/discount-claims", { signal, params: { per_page: 1 } });
 }
 
-/** Staff notifications open the order on the board rather than the customer tracker. */
+export function fetchDiscountClaims({ status = "pending", page = 1, perPage = 30, signal } = {}) {
+  return api.get("/api/admin/discount-claims", { signal, params: { status, page, per_page: perPage } });
+}
+
+export function approveDiscountClaim(id) {
+  return api.post(`/api/admin/discount-claims/${id}/approve`);
+}
+
+export function rejectDiscountClaim(id, reason) {
+  return api.post(`/api/admin/discount-claims/${id}/reject`, { rejection_reason: reason });
+}
+
+/**
+ * Staff notifications open the order on the board rather than the customer
+ * tracker, and a new discount application opens the review queue.
+ */
 export function staffNotificationTarget(notification) {
+  if (notification?.notification_type === "discount_review") return "/admin/verification";
+
   return notification?.order_id ? `/admin?order=${notification.order_id}` : null;
+}
+
+/** "003": the application's number as the queue shows it. */
+export function claimLabel(claim) {
+  return String(claim?.id ?? "").padStart(3, "0");
+}
+
+export function claimantName(claim) {
+  const name = [claim?.user?.first_name, claim?.user?.last_name].filter(Boolean).join(" ").trim();
+
+  return name || "Customer";
+}
+
+export function initialsOf(name) {
+  const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) return "?";
+
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+export function matchesClaim(claim, search) {
+  const needle = search.trim().toLowerCase();
+
+  if (!needle) return true;
+
+  return [claimLabel(claim), String(claim.id), claimantName(claim), claim.user?.email, claim.user?.phone_number]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(needle.replace(/^#/, "")));
+}
+
+/** "12 min ago" for the queue, where how long someone has waited is the point. */
+export function timeAgo(iso, now = Date.now()) {
+  if (!iso) return "";
+
+  const minutes = Math.floor((now - new Date(iso).getTime()) / 60000);
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) return `${hours} h ago`;
+
+  const days = Math.floor(hours / 24);
+
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+export function formatStamp(iso) {
+  if (!iso) return "";
+
+  return new Date(iso).toLocaleString("en-PH", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /** The board's columns, in the order an order moves through them. */

@@ -21,6 +21,7 @@ import OrderTracking from './pages/customer/OrderTracking'
 import Profile from './pages/account/Profile'
 import Security from './pages/account/Security'
 import AdminDashboard from './pages/admin/Dashboard'
+import Verification from './pages/admin/Verification'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
 import UserManagement from './pages/superadmin/UserManagement'
 
@@ -56,6 +57,7 @@ function App() {
         <Route element={<PrivateRoutes allowedRoles={[ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
           <Route element={<AdminRoutes/>}>
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/verification" element={<Verification />} />
           </Route>
         </Route>
         

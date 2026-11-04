@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\DiscountClaimBroadcast;
 use App\Events\LiveBroadcast;
 use App\Events\MenuBroadcast;
 use App\Events\NotificationBroadcast;
@@ -156,6 +157,7 @@ class RealtimeConfigTest extends TestCase
             MenuBroadcast::class,
             StoreBroadcast::class,
             SessionRevoked::class,
+            DiscountClaimBroadcast::class,
         ] as $event) {
             $this->assertTrue(is_subclass_of($event, ShouldBroadcast::class), $event.' will never reach Reverb.');
 
