@@ -4,10 +4,9 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
-const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../server");
+import { CUSTOMER, STAFF } from "./accounts.js";
 
-const CUSTOMER = { email: "customer@chicknclick.test", password: "Password123!" };
-const STAFF = { email: "admin@chicknclick.test", password: "Password123!" };
+const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../server");
 
 /** Run an artisan command against the same database the app is serving. */
 function artisan(args) {
@@ -125,7 +124,7 @@ test.describe("GATE-3 - real-time verified in a browser", () => {
     // Create an order owned by the customer, then change its status the way
     // updateOrderStatus does. Staff subscribe to private-admin.orders.
     const orderId = artisan(["tinker", "--execute", [
-      "$u = App\\Models\\User::where('email','customer@chicknclick.test')->first();",
+      `$u = App\\Models\\User::where('email','${CUSTOMER.email}')->first();`,
       "$o = App\\Models\\Order::create(['user_id'=>$u->id,'total_price'=>250,'status'=>'pending']);",
       "echo $o->id;",
     ].join(" ")]).trim().split(/\s+/).pop();
