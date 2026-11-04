@@ -1,42 +1,267 @@
-import { Card, Stack, Text, Title } from "@mantine/core";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { IconAlertTriangle, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
 
-import AppHeader from "../../components/app/AppHeader";
+import AuthContext from "../../context/AuthContext";
+import CancelOrderModal from "../../components/staff/CancelOrderModal";
+import OrderBoard from "../../components/staff/OrderBoard";
+import OrderDetailDrawer from "../../components/staff/OrderDetailDrawer";
+import StaffLayout from "../../components/staff/StaffLayout";
+import StatusSummary from "../../components/staff/StatusSummary";
+import Button from "../../components/ui/Button";
+import { useAgentBoard } from "../../hooks/useAgentBoard";
 import { useRealtime } from "../../context/useRealtime";
+import { BOARD_COLUMNS, columnFor, matchesSearch } from "../../lib/agent";
+import { ROLES } from "../../lib/roles";
+import { formatStoreTime } from "../../lib/store";
 
-/**
- * Staff landing page.
- *
- * Renders the global AppHeader so staff get the same app chrome as customers -
- * and, for GATE-3, so the realtime indicator and the notification bell exist on
- * a staff page at all. Without the header mounted here the admin.orders
- * firehose would be subscribed but have nowhere to surface.
- */
-function AdminDashboard() {
-  const { lastOrderEvent } = useRealtime();
+const PAGE_TITLE = "Orders · Click n Chick";
+
+function boardDate(date) {
+  if (!date) return "";
+
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-PH", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function LivePill() {
+  const { isConfigured, isConnected, lastOrderEvent } = useRealtime();
+
+  if (!isConfigured) return null;
 
   return (
-    <div className="min-h-dvh bg-[#fdfaf6] font-display text-ink">
-      <AppHeader />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 font-display text-[10.5px] text-[#6f6b68] ring-1 ring-[#f0e9df]">
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${isConnected ? "animate-pulse bg-[#2f9e44]" : "bg-[#d9d3cb]"}`}
+        aria-hidden="true"
+      />
+      {isConnected ? "Live" : "Reconnecting…"}
+      {lastOrderEvent?.order && (
+        <span data-testid="last-order-event" className="hidden text-[#a39f9b] sm:inline">
+          · order #{lastOrderEvent.order.id} {String(lastOrderEvent.order.status ?? "").replaceAll("_", " ")}
+        </span>
+      )}
+    </span>
+  );
+}
 
-      <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-        <Card shadow="sm" radius="md" p="xl" withBorder>
-          <Stack gap="xs">
-            <Title order={2}>Admin Dashboard</Title>
-            <Text c="dimmed">Placeholder. Pending the order and menu management modules.</Text>
+function StoreNotice({ store }) {
+  if (!store) return null;
 
-            {lastOrderEvent && (
-              <Text
-                data-testid="last-order-event"
-                size="sm"
-                className="font-display text-brand-600"
-              >
-                Live: order #{lastOrderEvent.order?.id} &rarr; {lastOrderEvent.order?.status}
-              </Text>
-            )}
-          </Stack>
-        </Card>
+  if (!store.accepting_orders) {
+    const reason =
+      store.ordering_override === "closed"
+        ? "Ordering is paused from the sidebar."
+        : `Online ordering runs ${formatStoreTime(store.opens_at)} – ${formatStoreTime(store.closes_at)}.`;
+
+    return (
+      <p className="m-0 flex items-start gap-2 rounded-[10px] bg-[#fff8e1] px-3.5 py-2.5 font-display text-[12px] text-[#8a5d00] ring-1 ring-inset ring-[#ffe59a]">
+        <IconAlertTriangle size={15} stroke={2} className="mt-[1px] shrink-0" />
+        <span>
+          <strong className="font-semibold">Customers cannot check out right now.</strong> {reason} Orders already
+          placed stay on the board.
+        </span>
+      </p>
+    );
+  }
+
+  if (!store.accepting_delivery) {
+    return (
+      <p className="m-0 rounded-[10px] bg-white px-3.5 py-2.5 font-display text-[12px] text-[#6f6b68] ring-1 ring-inset ring-[#f0e9df]">
+        Delivery is off - new orders are pickup only.
+      </p>
+    );
+  }
+
+  return null;
+}
+
+/**
+ * The Store Agent's board: every order in today's line, from arrival to handover.
+ *
+ * Moves go through /api/agent/orders/{id}/advance, which walks the order's own
+ * lifecycle, so the board never decides a target status. Another agent's moves
+ * arrive over admin.orders.
+ */
+function AdminDashboard() {
+  const { user } = useContext(AuthContext);
+  const board = useAgentBoard();
+  const columnRefs = useRef({});
+
+  const [search, setSearch] = useState("");
+  const [activeColumn, setActiveColumn] = useState("new");
+  const [cancelling, setCancelling] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const selectedId = searchParams.get("order");
+  const canConfirmDelivery = user?.role === ROLES.ADMIN;
+  const searching = search.trim() !== "";
+
+  const columns = useMemo(() => {
+    return BOARD_COLUMNS.map((column) => {
+      const all = board.orders.filter((order) => columnFor(order.status) === column.key);
+      const orders = searching ? all.filter((order) => matchesSearch(order, search)) : all;
+      const total =
+        column.key === "completed" ? Math.max(board.queue?.summary?.completed_today ?? 0, all.length) : all.length;
+
+      return { ...column, orders, total };
+    });
+  }, [board.orders, board.queue, search, searching]);
+
+  const newCount = columns[0].total;
+
+  useEffect(() => {
+    document.title = newCount > 0 ? `(${newCount}) New order${newCount === 1 ? "" : "s"} · Click n Chick` : PAGE_TITLE;
+  }, [newCount]);
+
+  useEffect(() => () => {
+    document.title = "Chick N' Click";
+  }, []);
+
+  const selected = selectedId ? board.orders.find((order) => String(order.id) === selectedId) ?? null : null;
+
+  const openOrder = (order) => {
+    setSearchParams((params) => {
+      params.set("order", String(order.id));
+
+      return params;
+    });
+  };
+
+  const closeOrder = () => {
+    setSearchParams((params) => {
+      params.delete("order");
+
+      return params;
+    });
+  };
+
+  const jumpTo = (key) => {
+    setActiveColumn(key);
+    columnRefs.current[key]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  };
+
+  const confirmCancel = async (options) => {
+    try {
+      await board.cancel(cancelling.order, options);
+      setCancelling(null);
+
+      if (selected?.id === cancelling.order.id) closeOrder();
+    } catch {
+      // The hook has already said why.
+    }
+  };
+
+  const cardProps = {
+    isBusy: board.isBusy,
+    canConfirmDelivery,
+    onAdvance: board.advance,
+    onReject: (order) => setCancelling({ order, mode: "reject" }),
+    onOpen: openOrder,
+  };
+
+  const summary = board.queue?.summary;
+
+  return (
+    <StaffLayout>
+      <main className="flex flex-1 flex-col">
+        <header className="border-b border-[#f0e9df] bg-white px-4 py-4 sm:px-6 lg:px-7">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Today&rsquo;s Orders</h1>
+                <LivePill />
+              </div>
+              <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
+                {boardDate(board.queue?.date)}
+                {summary?.longest_wait_minutes != null && ` · longest wait ${summary.longest_wait_minutes} min`}
+                {summary?.cancelled_today > 0 && ` · ${summary.cancelled_today} cancelled`}
+              </p>
+            </div>
+
+            <div className="relative w-full text-[12.5px] md:max-w-[280px]">
+              <IconSearch
+                size={15}
+                stroke={2.2}
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a39f9b]"
+              />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search orders…"
+                title="Search by order number, customer, phone or item"
+                aria-label="Search orders"
+                className="h-[36px] w-full rounded-full border border-[#ece7e0] bg-[#faf7f3] pl-9 pr-8 font-display text-[12.5px] text-ink outline-none transition-colors placeholder:text-[#a39f9b] focus:border-brand-300 focus:bg-white [&::-webkit-search-cancel-button]:appearance-none"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent text-[#a39f9b] transition-colors hover:text-ink"
+                >
+                  <IconX size={14} stroke={2.4} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <StatusSummary columns={columns} onSelect={jumpTo} loading={board.isLoading} />
+          </div>
+        </header>
+
+        <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
+          <StoreNotice store={board.queue?.store} />
+
+          {board.isError ? (
+            <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
+              <p className="m-0 font-display text-[15px] font-semibold text-ink">The board could not be loaded.</p>
+              <p className="m-0 font-display text-[13px] text-[#8d8884]">{board.error?.message}</p>
+              <Button size="sm" variant="outline" onClick={() => board.refetch()}>
+                <IconRefresh size={16} stroke={2} />
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <OrderBoard
+              columns={columns}
+              activeColumn={activeColumn}
+              onActiveColumnChange={setActiveColumn}
+              loading={board.isLoading}
+              searching={searching}
+              columnRefs={columnRefs}
+              cardProps={cardProps}
+            />
+          )}
+        </div>
       </main>
-    </div>
+
+      <OrderDetailDrawer
+        order={selected}
+        opened={Boolean(selectedId) && !board.isLoading}
+        onClose={closeOrder}
+        busy={selected ? board.isBusy(selected.id) : false}
+        canConfirmDelivery={canConfirmDelivery}
+        onAdvance={board.advance}
+        onReject={(order) => setCancelling({ order, mode: "reject" })}
+        onCancel={(order) => setCancelling({ order, mode: "cancel" })}
+      />
+
+      <CancelOrderModal
+        order={cancelling?.order}
+        mode={cancelling?.mode}
+        opened={Boolean(cancelling)}
+        onClose={() => setCancelling(null)}
+        onConfirm={confirmCancel}
+        loading={board.isCancelling}
+      />
+    </StaffLayout>
   );
 }
 
