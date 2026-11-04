@@ -13,7 +13,7 @@ import { useAgentBoard } from "../../hooks/useAgentBoard";
 import { useRealtime } from "../../context/useRealtime";
 import { BOARD_COLUMNS, columnFor, matchesSearch } from "../../lib/agent";
 import { ROLES } from "../../lib/roles";
-import { formatStoreTime } from "../../lib/store";
+import { formatStoreTime, useStoreStatus } from "../../lib/store";
 
 const PAGE_TITLE = "Orders · Click n Chick";
 
@@ -89,6 +89,8 @@ function StoreNotice({ store }) {
 function AdminDashboard() {
   const { user } = useContext(AuthContext);
   const board = useAgentBoard();
+  // The live copy: the store broadcast updates it the moment staff anywhere flip a switch.
+  const { status: storeStatus } = useStoreStatus();
   const columnRefs = useRef({});
 
   const [search, setSearch] = useState("");
@@ -217,7 +219,7 @@ function AdminDashboard() {
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
-          <StoreNotice store={board.queue?.store} />
+          <StoreNotice store={storeStatus ?? board.queue?.store} />
 
           {board.isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">

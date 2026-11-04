@@ -5,6 +5,7 @@ import AuthContext from "./AuthContext";
 import toast from "../components/app/Toast";
 import { ROLES } from "../lib/roles";
 import { disconnectEcho, getEcho, isRealtimeConfigured } from "../lib/echo";
+import { STORE_STATUS_KEY } from "../lib/store";
 import { endSession, sessionDeviceId } from "../lib/session";
 
 const RealtimeContext = createContext(null);
@@ -21,6 +22,7 @@ const RealtimeContext = createContext(null);
  *   private-notifications.{id}  every signed-in user, their own only
  *   private-admin.orders        staff firehose (admin, super_admin)
  *   menu                        public; live availability and stock
+ *   store                       public; ordering paused, delivery, hours
  *
  * Per-order channels (private-orders.{id}) are joined on demand by
  * useOrderChannel below, since a customer only watches an order while it is
@@ -95,10 +97,26 @@ export function RealtimeProvider({ children }) {
       .subscribed(() => markSubscribed("menu"))
       .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }));
 
+    // Ordering paused or resumed, delivery switched, hours moved. The payload is
+    // the same snapshot /api/store/status returns, so it replaces the cache as
+    // is; the checkout quote carries the store's blockers and is asked again.
+    echo.channel("store")
+      .subscribed(() => markSubscribed("store"))
+      .listen(".status", (payload) => {
+        if (payload?.store) {
+          queryClient.setQueryData(STORE_STATUS_KEY, payload.store);
+        } else {
+          queryClient.invalidateQueries({ queryKey: STORE_STATUS_KEY });
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+      });
+
     return () => {
       connection?.unbind("state_change", onState);
       echo.leave("menu");
-      setSubscribed((prev) => prev.filter((name) => name !== "menu"));
+      echo.leave("store");
+      setSubscribed((prev) => prev.filter((name) => name !== "menu" && name !== "store"));
     };
   }, [token, queryClient, markSubscribed]);
 
