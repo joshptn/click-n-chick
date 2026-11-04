@@ -1,16 +1,17 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { IconAlertTriangle, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import CancelOrderModal from "../../components/staff/CancelOrderModal";
+import LivePill from "../../components/staff/LivePill";
 import OrderBoard from "../../components/staff/OrderBoard";
 import OrderDetailDrawer from "../../components/staff/OrderDetailDrawer";
 import StaffLayout from "../../components/staff/StaffLayout";
+import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useAgentBoard } from "../../hooks/useAgentBoard";
-import { useRealtime } from "../../context/useRealtime";
 import { BOARD_COLUMNS, columnFor, matchesSearch } from "../../lib/agent";
 import { ROLES } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
@@ -25,27 +26,6 @@ function boardDate(date) {
     month: "long",
     day: "numeric",
   });
-}
-
-function LivePill() {
-  const { isConfigured, isConnected, lastOrderEvent } = useRealtime();
-
-  if (!isConfigured) return null;
-
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 font-display text-[10.5px] text-[#6f6b68] ring-1 ring-[#f0e9df]">
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${isConnected ? "animate-pulse bg-[#2f9e44]" : "bg-[#d9d3cb]"}`}
-        aria-hidden="true"
-      />
-      {isConnected ? "Live" : "Reconnecting…"}
-      {lastOrderEvent?.order && (
-        <span data-testid="last-order-event" className="hidden text-[#a39f9b] sm:inline">
-          · order #{lastOrderEvent.order.id} {String(lastOrderEvent.order.status ?? "").replaceAll("_", " ")}
-        </span>
-      )}
-    </span>
-  );
 }
 
 function StoreNotice({ store }) {
@@ -175,7 +155,7 @@ function AdminDashboard() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Today&rsquo;s Orders</h1>
-                <LivePill />
+                <LivePill showLastOrder />
               </div>
               <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
                 {boardDate(board.queue?.date)}
@@ -184,33 +164,13 @@ function AdminDashboard() {
               </p>
             </div>
 
-            <div className="relative w-full text-[12.5px] md:max-w-[280px]">
-              <IconSearch
-                size={15}
-                stroke={2.2}
-                aria-hidden="true"
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#a39f9b]"
-              />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search orders…"
-                title="Search by order number, customer, phone or item"
-                aria-label="Search orders"
-                className="h-[36px] w-full rounded-full border border-[#ece7e0] bg-[#faf7f3] pl-9 pr-8 font-display text-[12.5px] text-ink outline-none transition-colors placeholder:text-[#a39f9b] focus:border-brand-300 focus:bg-white [&::-webkit-search-cancel-button]:appearance-none"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent text-[#a39f9b] transition-colors hover:text-ink"
-                >
-                  <IconX size={14} stroke={2.4} />
-                </button>
-              )}
-            </div>
+            <StaffSearch
+              value={search}
+              onChange={setSearch}
+              placeholder="Search orders…"
+              title="Search by order number, customer, phone or item"
+              label="Search orders"
+            />
           </div>
 
           <div className="mt-4">
