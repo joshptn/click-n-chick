@@ -5,13 +5,11 @@ namespace App\Events;
 use App\Models\Food;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
 
-class MenuBroadcast implements ShouldBroadcast
+class MenuBroadcast implements LiveBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, InteractsWithSockets;
 
     public function __construct(
         public Food $food,

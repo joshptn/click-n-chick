@@ -8,6 +8,8 @@ use App\Models\Notification;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Broadcast;
+use Throwable;
 
 /**
  * Emit a real broadcast, for end-to-end verification (GATE-3).
@@ -17,11 +19,9 @@ use Illuminate\Console\Command;
  * same channels - so a browser receiving one of these has proven the whole
  * path works, not that a test double fired.
  *
- * Note the queue: these events implement ShouldBroadcast, and
- * QUEUE_CONNECTION is 'database', so nothing reaches Reverb unless
- * `php artisan queue:work` is running. That is a real operational dependency,
- * not a test artefact - the command reports it rather than letting the
- * broadcast vanish silently.
+ * The events publish immediately and a failed publish is logged, not thrown
+ * (App\Events\LiveBroadcast). So Reverb is asked first whether it is
+ * answering, rather than letting the ping vanish into the log.
  */
 class EmitRealtimePing extends Command
 {
@@ -42,16 +42,18 @@ class EmitRealtimePing extends Command
             return self::FAILURE;
         }
 
-        $pending = $this->pendingBroadcastJobs();
+        try {
+            Broadcast::connection('reverb')->getPusher()->get('/channels', [], true);
+        } catch (Throwable $e) {
+            $this->error('Reverb is not answering at '.$this->reverbAddress().': '.strtok($e->getMessage(), '('));
 
-        if ($this->option('order')) {
-            return $this->emitOrder($pending);
+            return self::FAILURE;
         }
 
-        return $this->emitNotification($pending);
+        return $this->option('order') ? $this->emitOrder() : $this->emitNotification();
     }
 
-    private function emitNotification(int $pendingBefore): int
+    private function emitNotification(): int
     {
         $userId = $this->option('user')
             ?: User::where('role', User::ROLE_CUSTOMER)->value('id');
@@ -78,12 +80,12 @@ class EmitRealtimePing extends Command
         $this->line('  event   : .notification');
         $this->line('  body    : '.$body);
 
-        $this->reportQueue($pendingBefore);
+        $this->published();
 
         return self::SUCCESS;
     }
 
-    private function emitOrder(int $pendingBefore): int
+    private function emitOrder(): int
     {
         $order = Order::find($this->option('order'));
 
@@ -104,44 +106,21 @@ class EmitRealtimePing extends Command
         $this->line('  event    : .order');
         $this->line('  status   : '.$order->status);
 
-        $this->reportQueue($pendingBefore);
+        $this->published();
 
         return self::SUCCESS;
     }
 
-    private function pendingBroadcastJobs(): int
+    private function published(): void
     {
-        if (config('queue.default') !== 'database') {
-            return 0;
-        }
-
-        try {
-            return (int) \DB::table('jobs')->count();
-        } catch (\Throwable) {
-            return 0;
-        }
+        $this->newLine();
+        $this->info('Published to Reverb at '.$this->reverbAddress().'.');
     }
 
-    private function reportQueue(int $pendingBefore): void
+    private function reverbAddress(): string
     {
-        if (config('queue.default') === 'sync') {
-            $this->newLine();
-            $this->info('QUEUE_CONNECTION=sync - the broadcast went out immediately.');
+        $options = config('broadcasting.connections.reverb.options');
 
-            return;
-        }
-
-        $now = $this->pendingBroadcastJobs();
-
-        $this->newLine();
-        $this->warn('These events implement ShouldBroadcast and QUEUE_CONNECTION is "'.config('queue.default').'".');
-
-        if ($now > $pendingBefore) {
-            $this->warn('The broadcast is QUEUED and has not reached Reverb yet.');
-            $this->line('Run a worker for it to be delivered:  php artisan queue:work');
-            $this->line('Pending jobs: '.$now);
-        } else {
-            $this->info('A worker appears to be draining the queue (pending jobs: '.$now.').');
-        }
+        return $options['scheme'].'://'.$options['host'].':'.$options['port'];
     }
 }

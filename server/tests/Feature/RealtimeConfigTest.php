@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Events\LiveBroadcast;
 use App\Events\MenuBroadcast;
 use App\Events\NotificationBroadcast;
 use App\Events\OrderBroadcast;
+use App\Events\SessionRevoked;
+use App\Events\StoreBroadcast;
 use App\Models\Food;
 use App\Models\Notification;
 use App\Models\Order;
@@ -145,13 +148,20 @@ class RealtimeConfigTest extends TestCase
         $this->assertArrayHasKey('stock_status', $payload['food']);
     }
 
-    public function test_every_broadcast_event_implements_should_broadcast(): void
+    public function test_every_broadcast_event_is_published_live(): void
     {
-        foreach ([OrderBroadcast::class, NotificationBroadcast::class, MenuBroadcast::class] as $event) {
-            $this->assertTrue(
-                is_subclass_of($event, ShouldBroadcast::class),
-                $event.' will never reach Reverb.'
-            );
+        foreach ([
+            OrderBroadcast::class,
+            NotificationBroadcast::class,
+            MenuBroadcast::class,
+            StoreBroadcast::class,
+            SessionRevoked::class,
+        ] as $event) {
+            $this->assertTrue(is_subclass_of($event, ShouldBroadcast::class), $event.' will never reach Reverb.');
+
+            // Queued, it waits for a worker to poll the jobs table - seconds on
+            // the production instance - and stops entirely if the worker does.
+            $this->assertTrue(is_subclass_of($event, LiveBroadcast::class), $event.' would wait in the queue.');
         }
     }
 

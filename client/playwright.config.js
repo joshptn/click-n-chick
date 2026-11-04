@@ -3,14 +3,14 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * End-to-end verification for GATE-3.
  *
- * These tests need four processes already running - Reverb, the Laravel API,
- * a queue worker, and Vite - because the point is to prove a real browser
- * receives a real broadcast over a real websocket. Spawning them from here
- * would hide exactly the wiring being verified. See e2e/README.md.
+ * These tests need three processes already running - Reverb, the Laravel API,
+ * and Vite - because the point is to prove a real browser receives a real
+ * broadcast over a real websocket. Spawning them from here would hide exactly
+ * the wiring being verified. See e2e/README.md.
  */
 export default defineConfig({
   testDir: "./e2e",
-  // A websocket round trip plus a queue worker pickup is not instant.
+  // Sign-in, channel auth and a websocket round trip are not instant.
   timeout: 60_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,

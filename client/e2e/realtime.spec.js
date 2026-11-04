@@ -88,7 +88,7 @@ test.describe("GATE-3 - real-time verified in a browser", () => {
     const body = `E2E realtime check ${Date.now()}`;
 
     // A REAL broadcast: the same event Utils\Notification dispatches, through
-    // the queue, through Reverb. Nothing is faked or injected into the page.
+    // straight to Reverb. Nothing is faked or injected into the page.
     const output = artisan([
       "realtime:ping",
       "--title=Order update",
