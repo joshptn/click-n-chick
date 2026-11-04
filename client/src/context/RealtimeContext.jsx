@@ -86,7 +86,21 @@ export function RealtimeProvider({ children }) {
 
     const connection = echo.connector?.pusher?.connection;
 
-    const onState = ({ current }) => setStatus(current);
+    // Reverb does not replay what a dropped socket missed (a redeploy, a
+    // restart, a network blip). pusher-js reconnects and resubscribes on its
+    // own; on every reconnect after the first, what is on screen is refetched
+    // so it catches up.
+    let connectedBefore = connection?.state === "connected";
+
+    const onState = ({ current }) => {
+      setStatus(current);
+
+      if (current !== "connected") return;
+
+      if (connectedBefore) queryClient.invalidateQueries();
+
+      connectedBefore = true;
+    };
     connection?.bind("state_change", onState);
     setStatus(connection?.state ?? "connecting");
 
