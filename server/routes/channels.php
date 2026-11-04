@@ -23,6 +23,11 @@ Broadcast::channel('admin.orders', function ($user) {
     return in_array($user->role, ['admin', 'super_admin'], true);
 });
 
+// The discount review queue. Same audience as the order firehose.
+Broadcast::channel('admin.discounts', function ($user) {
+    return in_array($user->role, ['admin', 'super_admin'], true);
+});
+
 Broadcast::channel('notifications.{userId}', function ($user, $userId) {
     return (int) $user->id === (int) $userId;
 });
