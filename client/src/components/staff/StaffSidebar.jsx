@@ -63,13 +63,13 @@ function StaffSidebar({ onNavigate }) {
   // navigation does not shift under the agent as each page lands.
   const entries = [
     { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
-    { label: "Pending Verification", icon: IconIdBadge2, to: "/admin/verification", count: discounts.data?.total ?? 0 },
     {
-      label: "Advance Order Request",
+      label: "Advance Orders",
       icon: IconCalendarTime,
       to: "/admin/advance-orders",
       count: advance.data?.summary?.awaiting_decision ?? 0,
     },
+    { label: "Discount Requests", icon: IconIdBadge2, to: "/admin/discount-requests", count: discounts.data?.total ?? 0 },
     { label: "Pending Order", icon: IconHourglassHigh },
     { label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" },
     { label: "Order Records", icon: IconArchive },

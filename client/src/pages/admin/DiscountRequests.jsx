@@ -76,13 +76,13 @@ function SkeletonList() {
 }
 
 /**
- * Pending Verification: Senior Citizen and PWD IDs waiting for a Store Agent.
+ * Dicsount Requests: Senior Citizen and PWD IDs waiting for a Store Agent.
  *
  * A decision settles the customer's eligibility, not one order - the discount
  * is then theirs at checkout. Pending applications are served oldest first.
  * New applications and other agents' decisions arrive over admin.discounts.
  */
-function Verification() {
+function DiscountRequests() {
   const wide = useMediaQuery("(min-width: 64em)", true);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
@@ -151,7 +151,7 @@ function Verification() {
 
   useEffect(() => {
     document.title =
-      pendingCount > 0 ? `(${pendingCount}) Pending verification · Click n Chick` : "Pending verification · Click n Chick";
+      pendingCount > 0 ? `(${pendingCount}) Discount Requests · Click n Chick` : "Discount Requests · Click n Chick";
   }, [pendingCount]);
 
   useEffect(() => () => {
@@ -200,7 +200,7 @@ function Verification() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Pending Verification</h1>
+                  <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Discount Request</h1>
                   <LivePill />
                 </div>
                 <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
@@ -309,4 +309,4 @@ function Verification() {
   );
 }
 
-export default Verification;
+export default DiscountRequests;
