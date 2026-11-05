@@ -298,7 +298,8 @@ class CartController extends Controller
             return max(1, $quantity);
         }
 
-        return max(1, min($quantity, $food->stock_quantity));
+        // What is left to sell, so units held for someone paying are not offered twice.
+        return max(1, min($quantity, $food->available_quantity));
     }
 
     /**

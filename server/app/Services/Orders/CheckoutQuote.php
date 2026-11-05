@@ -2,6 +2,7 @@
 
 namespace App\Services\Orders;
 
+use App\Exceptions\InsufficientStock;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Discount;
@@ -48,6 +49,27 @@ class CheckoutQuote
                 'message' => $unavailable->count() === 1
                     ? $unavailable->first()['food_name'].' just sold out. Remove it to continue.'
                     : $unavailable->count().' of your items just sold out. Remove them to continue.',
+            ];
+        }
+
+        // The same dish can sit on two lines with different add-ons, so the count
+        // is checked against their total. Placement checks again under a lock
+        // (StockReservation::hold); this is so the customer hears it first.
+        $short = $lines
+            ->filter(fn (array $line) => $line['is_orderable'] && $line['available_quantity'] !== null)
+            ->groupBy('food_id')
+            ->map(fn ($group) => [
+                'food_name' => $group->first()['food_name'],
+                'requested' => (int) $group->sum('quantity'),
+                'available' => (int) $group->first()['available_quantity'],
+            ])
+            ->filter(fn (array $food) => $food['requested'] > $food['available'])
+            ->values();
+
+        if ($short->isNotEmpty()) {
+            $blockers[] = [
+                'code' => 'ITEM_STOCK_SHORT',
+                'message' => InsufficientStock::describe($short->all()),
             ];
         }
 
@@ -135,7 +157,7 @@ class CheckoutQuote
             return collect();
         }
 
-        $query = $cart->items()->with(['food', 'selectedAddons']);
+        $query = $cart->items()->with(['food' => fn ($food) => $food->withHeldQuantity(), 'selectedAddons']);
 
         if ($ids !== null) {
             $clean = collect($ids)->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
@@ -170,6 +192,8 @@ class CheckoutQuote
                 'unit_price' => $unitPrice,
                 'subtotal' => round($unitPrice * $item->quantity, 2),
                 'is_orderable' => $food?->is_orderable ?? false,
+                // Null when the item is not counted.
+                'available_quantity' => $food?->available_quantity,
             ];
         });
     }

@@ -37,6 +37,7 @@ class FoodController extends Controller implements HasMiddleware
 
         $foods = Food::query()
             ->with(['category', 'addons'])
+            ->withHeldQuantity()
             ->when($category !== null && $category !== '' && $category !== 'all', function ($query) use ($category) {
                 is_numeric($category)
                     ? $query->where('category_id', (int) $category)

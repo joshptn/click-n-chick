@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InsufficientStock;
 use App\Http\Middleware\ResolveGuestOrder;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
@@ -61,6 +62,12 @@ class GuestOrderController extends Controller
         try {
             $order = $this->placement->place(null, $cart, $quote);
             $token = $order->mintGuestToken();
+        } catch (InsufficientStock $short) {
+            return response()->json([
+                'message' => $short->getMessage(),
+                'error_code' => 'ITEM_STOCK_SHORT',
+                'shortages' => $short->shortages,
+            ], 409);
         } catch (Throwable $e) {
             Log::error('Failed to place a guest order.', ['error' => $e->getMessage()]);
 
