@@ -36,7 +36,11 @@ function EmptyColumn({ column, searching }) {
   );
 }
 
-const Column = forwardRef(function Column({ column, loading, searching, cardProps }, ref) {
+const defaultCard = (order, cardProps) => (
+  <AgentOrderCard key={order.id} order={order} busy={cardProps.isBusy(order.id)} {...cardProps} />
+);
+
+const Column = forwardRef(function Column({ column, loading, searching, cardProps, renderCard = defaultCard }, ref) {
   return (
     <section ref={ref} aria-label={`${column.label} orders`} className="flex min-w-0 flex-col" data-column={column.key}>
       <ColumnHeader column={column} />
@@ -48,9 +52,7 @@ const Column = forwardRef(function Column({ column, loading, searching, cardProp
           <EmptyColumn column={column} searching={searching} />
         ) : (
           <AnimatePresence mode="popLayout" initial={false}>
-            {column.orders.map((order) => (
-              <AgentOrderCard key={order.id} order={order} busy={cardProps.isBusy(order.id)} {...cardProps} />
-            ))}
+            {column.orders.map((order) => renderCard(order, cardProps))}
           </AnimatePresence>
         )}
       </div>
@@ -60,9 +62,20 @@ const Column = forwardRef(function Column({ column, loading, searching, cardProp
 
 /**
  * Five columns side by side from `lg`; below that, one column at a time behind
- * a tab row, since five 280px columns cannot share a phone.
+ * a tab row, since five 280px columns cannot share a phone. `renderCard` lets a
+ * page with its own kind of order (the advance list) keep the same board.
  */
-function OrderBoard({ columns, activeColumn, onActiveColumnChange, loading, searching, columnRefs, cardProps }) {
+function OrderBoard({
+  columns,
+  activeColumn,
+  onActiveColumnChange,
+  loading,
+  searching,
+  columnRefs,
+  cardProps,
+  renderCard,
+  label = "Order stages",
+}) {
   // One layout mounted at a time: hiding the other with CSS would render every
   // card twice under the same layoutId.
   const wide = useMediaQuery("(min-width: 64em)", true);
@@ -83,6 +96,7 @@ function OrderBoard({ columns, activeColumn, onActiveColumnChange, loading, sear
                 loading={loading}
                 searching={searching}
                 cardProps={cardProps}
+                renderCard={renderCard}
               />
             ))}
           </div>
@@ -94,7 +108,7 @@ function OrderBoard({ columns, activeColumn, onActiveColumnChange, loading, sear
   return (
     <LayoutGroup>
       <div>
-        <div role="tablist" aria-label="Order stages" className="-mx-4 mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1 text-[12px]">
+        <div role="tablist" aria-label={label} className="-mx-4 mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1 text-[12px]">
           {columns.map((column) => {
             const selected = column.key === active.key;
             const tone = TONES[column.tone];
@@ -118,7 +132,7 @@ function OrderBoard({ columns, activeColumn, onActiveColumnChange, loading, sear
           })}
         </div>
 
-        <Column column={active} loading={loading} searching={searching} cardProps={cardProps} />
+        <Column column={active} loading={loading} searching={searching} cardProps={cardProps} renderCard={renderCard} />
       </div>
     </LayoutGroup>
   );

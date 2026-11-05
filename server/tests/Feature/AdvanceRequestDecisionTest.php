@@ -298,7 +298,51 @@ class AdvanceRequestDecisionTest extends TestCase
         $this->assertSame(OrderStatus::SCHEDULED, $order->fresh()->status);
     }
 
-    public function test_a_paid_scheduled_order_moves_into_preparing(): void
+    public function test_a_paid_scheduled_order_moves_into_preparing_on_its_collection_date(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+        $agent = $this->user(User::ROLE_ADMIN);
+        $collectAt = CarbonImmutable::now('Asia/Manila')->setTime(12, 0);
+
+        $order = $this->advanceOrder($customer, [
+            'status' => OrderStatus::SCHEDULED,
+            'payment_status' => 'paid',
+            'scheduled_for' => $collectAt,
+        ]);
+
+        $stored = $order->fresh()->getRawOriginal('scheduled_for');
+
+        $this->actingAs($agent)->postJson("/api/agent/orders/{$order->id}/advance")->assertOk();
+
+        $fresh = $order->fresh();
+        $this->assertSame(OrderStatus::PREPARING, $fresh->status);
+        // The date check must not move the stored collection time.
+        $this->assertSame($stored, $fresh->getRawOriginal('scheduled_for'));
+    }
+
+    public function test_a_request_past_its_collection_date_cannot_be_accepted(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+        $agent = $this->user(User::ROLE_ADMIN);
+
+        $order = $this->advanceOrder($customer, [
+            'scheduled_for' => CarbonImmutable::now('Asia/Manila')->subDays(2)->setTime(12, 0),
+        ]);
+
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'ADVANCE_DATE_PASSED');
+
+        $this->assertSame(OrderStatus::SUBMITTED, $order->fresh()->status);
+
+        // Declining it is still open, so the customer hears back.
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/reject", [
+            'reason' => 'That date has passed - please choose another.',
+        ])->assertOk();
+    }
+
+    /** UC-ADV-012: the kitchen starts it on the day, not when someone happens to click. */
+    public function test_a_scheduled_order_is_not_prepared_before_its_collection_date(): void
     {
         $customer = $this->user(User::ROLE_CUSTOMER);
         $agent = $this->user(User::ROLE_ADMIN);
@@ -306,11 +350,113 @@ class AdvanceRequestDecisionTest extends TestCase
         $order = $this->advanceOrder($customer, [
             'status' => OrderStatus::SCHEDULED,
             'payment_status' => 'paid',
+            'scheduled_for' => CarbonImmutable::now('Asia/Manila')->addDay()->setTime(10, 0),
         ]);
 
-        $this->actingAs($agent)->postJson("/api/agent/orders/{$order->id}/advance")->assertOk();
+        $this->actingAs($agent)->postJson("/api/agent/orders/{$order->id}/advance")
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'ADVANCE_NOT_DUE');
 
-        $this->assertSame(OrderStatus::PREPARING, $order->fresh()->status);
+        $this->assertSame(OrderStatus::SCHEDULED, $order->fresh()->status);
+    }
+
+    /** BRD 3.2: only the customer's payment moves an accepted request on. */
+    public function test_an_unpaid_accepted_request_cannot_be_stepped_on_by_hand(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+        $agent = $this->user(User::ROLE_ADMIN);
+
+        foreach ([OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT] as $status) {
+            $order = $this->advanceOrder($customer, ['status' => $status, 'accepted_at' => now()]);
+
+            $this->actingAs($agent)->postJson("/api/agent/orders/{$order->id}/advance")
+                ->assertStatus(422)
+                ->assertJsonPath('error_code', 'ADVANCE_AWAITING_PAYMENT');
+
+            $this->assertSame($status, $order->fresh()->status);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // What the page reads
+    // -----------------------------------------------------------------
+
+    public function test_orders_in_the_kitchen_stay_on_the_list_until_collected(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+
+        $preparing = $this->advanceOrder($customer, ['status' => OrderStatus::PREPARING, 'payment_status' => 'paid']);
+        $ready = $this->advanceOrder($customer, ['status' => OrderStatus::READY_FOR_PICKUP, 'payment_status' => 'paid']);
+
+        $response = $this->actingAs($this->user(User::ROLE_ADMIN))
+            ->getJson('/api/agent/advance-requests')
+            ->assertOk()
+            ->assertJsonPath('summary.in_kitchen', 2);
+
+        $this->assertEqualsCanonicalizing(
+            [$preparing->id, $ready->id],
+            array_column($response->json('in_kitchen'), 'id')
+        );
+    }
+
+    public function test_recently_closed_requests_are_listed_latest_first(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+
+        $rejected = $this->advanceOrder($customer, ['status' => OrderStatus::REJECTED, 'cancellation_reason' => 'Fully booked.']);
+        $rejected->forceFill(['closed_at' => now()->subHours(3)])->save();
+        $completed = $this->advanceOrder($customer, ['status' => OrderStatus::COMPLETED, 'payment_status' => 'paid']);
+        $old = $this->advanceOrder($customer, ['status' => OrderStatus::CANCELLED]);
+        $old->forceFill(['closed_at' => now()->subDays(8)])->save();
+        $this->immediateOrder($customer)->forceFill(['status' => OrderStatus::COMPLETED])->save();
+
+        $response = $this->actingAs($this->user(User::ROLE_ADMIN))
+            ->getJson('/api/agent/advance-requests')
+            ->assertOk()
+            ->assertJsonPath('summary.closed_recently', 2);
+
+        $this->assertSame([$completed->id, $rejected->id], array_column($response->json('closed'), 'id'));
+        $this->assertSame('Fully booked.', $response->json('closed.1.cancellation_reason'));
+    }
+
+    public function test_the_list_says_when_preparation_may_start(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+
+        $today = $this->advanceOrder($customer, [
+            'status' => OrderStatus::SCHEDULED,
+            'payment_status' => 'paid',
+            'scheduled_for' => CarbonImmutable::now('Asia/Manila')->setTime(12, 0),
+        ]);
+        $later = $this->advanceOrder($customer, ['status' => OrderStatus::SCHEDULED, 'payment_status' => 'paid']);
+
+        $scheduled = collect($this->actingAs($this->user(User::ROLE_ADMIN))
+            ->getJson('/api/agent/advance-requests')
+            ->json('scheduled'))->keyBy('id');
+
+        $this->assertTrue($scheduled[$today->id]['can_start_preparing']);
+        $this->assertFalse($scheduled[$later->id]['can_start_preparing']);
+        $this->assertSame([], $scheduled[$today->id]['items'][0]['addons']);
+    }
+
+    public function test_the_list_says_when_the_customer_was_last_reminded(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+        $agent = $this->user(User::ROLE_ADMIN);
+        $order = $this->advanceOrder($customer, ['status' => OrderStatus::AWAITING_PAYMENT, 'accepted_at' => now()]);
+
+        $before = $this->actingAs($agent)->getJson('/api/agent/advance-requests')->json('awaiting_payment.0');
+        $this->assertNull($before['last_reminded_at']);
+
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/remind")->assertOk();
+
+        $after = $this->actingAs($agent)->getJson('/api/agent/advance-requests')->json('awaiting_payment.0');
+        $this->assertNotNull($after['last_reminded_at']);
+        $this->assertTrue(
+            CarbonImmutable::parse($after['can_remind_at'])->equalTo(
+                CarbonImmutable::parse($after['last_reminded_at'])->addMinutes(60)
+            )
+        );
     }
 
     public function test_from_preparing_an_advance_order_runs_the_ordinary_pickup_chain(): void

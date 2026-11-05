@@ -16,7 +16,17 @@ const MAX_REASON = 255;
  * customer asked for, by phone, may waive it - so the waiver is offered for
  * in-progress orders, never for a rejection.
  */
-function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, loading }) {
+function CancelOrderModal({
+  order,
+  mode = "reject",
+  opened,
+  onClose,
+  onConfirm,
+  loading,
+  reasons = REASONS,
+  description,
+  allowWaiver,
+}) {
   const [reason, setReason] = useState("");
   const [customerAsked, setCustomerAsked] = useState(false);
 
@@ -31,7 +41,11 @@ function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, 
 
   const isReject = mode === "reject";
   const paid = order.payment_status === "paid";
-  const refunds = paid && !customerAsked;
+  // Whether "the customer asked" may waive the refund. A page passes this when
+  // its orders follow a different threshold (an advance order resting in
+  // scheduled is refundable whoever asks, BR-20).
+  const offersWaiver = (allowWaiver ?? !isReject) && paid;
+  const refunds = paid && !(offersWaiver && customerAsked);
   const amount = formatPeso(order.total_amount ?? order.subtotal);
   const label = order.queue_label ?? `#${order.id}`;
 
@@ -44,13 +58,14 @@ function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, 
       radius="md"
     >
       <p className="m-0 font-display text-[13px] leading-relaxed text-[#6f6b68]">
-        {isReject
-          ? "The customer is told the store could not take this order."
-          : "The kitchen stops on this order and the customer is told it was cancelled."}
+        {description ??
+          (isReject
+            ? "The customer is told the store could not take this order."
+            : "The kitchen stops on this order and the customer is told it was cancelled.")}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-1.5 text-[12px]">
-        {REASONS.map((preset) => (
+        {reasons.map((preset) => (
           <button
             key={preset}
             type="button"
@@ -78,7 +93,7 @@ function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, 
         radius="md"
       />
 
-      {!isReject && paid && (
+      {offersWaiver && (
         <Checkbox
           mt="md"
           color="orange"
@@ -108,7 +123,7 @@ function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, 
         <button
           type="button"
           disabled={loading}
-          onClick={() => onConfirm({ reason: reason.trim(), refund: !customerAsked })}
+          onClick={() => onConfirm({ reason: reason.trim(), refund: !(offersWaiver && customerAsked) })}
           className="inline-flex h-[38px] items-center justify-center rounded-[9px] bg-[#e5322d] px-4 font-display text-[13px] font-semibold text-white transition-colors hover:bg-[#cc2a25] disabled:cursor-not-allowed disabled:opacity-55"
         >
           {loading ? "Working…" : isReject ? "Reject order" : "Cancel order"}

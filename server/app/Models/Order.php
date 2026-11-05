@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Orders\OrderStatus;
+use App\Services\Stock\StockReservation;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -82,6 +83,16 @@ class Order extends Model
 
             if (OrderStatus::isTerminal((string) $order->status)) {
                 $order->closed_at ??= now();
+            }
+        });
+
+        // Every way an order is cancelled - the customer, a guest's link, the
+        // agent's board, the generic status endpoint - gives its stock back
+        // here, so no path can forget to. Whether the units return to the count
+        // depends on the status it was cancelled from (StockReservation).
+        static::updated(function (self $order) {
+            if ($order->wasChanged('status') && $order->status === OrderStatus::CANCELLED) {
+                app(StockReservation::class)->orderCancelled($order, $order->getOriginal('status'));
             }
         });
     }

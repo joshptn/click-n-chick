@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\DiscountAlreadyUsed;
+use App\Exceptions\InsufficientStock;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
 use App\Models\Order;
@@ -80,6 +81,12 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json([
                 'message' => 'You have already used your discount today. It resets tomorrow.',
                 'error_code' => 'DISCOUNT_ALREADY_USED',
+            ], 409);
+        } catch (InsufficientStock $short) {
+            return response()->json([
+                'message' => $short->getMessage(),
+                'error_code' => 'ITEM_STOCK_SHORT',
+                'shortages' => $short->shortages,
             ], 409);
         } catch (\Throwable $e) {
             Log::error('Failed to place an order.', ['user_id' => $user->id, 'error' => $e->getMessage()]);

@@ -37,6 +37,7 @@ class FoodController extends Controller implements HasMiddleware
 
         $foods = Food::query()
             ->with(['category', 'addons'])
+            ->withHeldQuantity()
             ->when($category !== null && $category !== '' && $category !== 'all', function ($query) use ($category) {
                 is_numeric($category)
                     ? $query->where('category_id', (int) $category)
@@ -226,46 +227,7 @@ class FoodController extends Controller implements HasMiddleware
         }
     }
 
-    /**
-     * Set an item's stock level. Store Agent only.
-     *
-     * BR-29 / FR-07.2. The gate is the route group's `role:admin`, which is an
-     * exact match and therefore excludes the Store Manager. Deliberately NOT
-     * guarded with authorize('isAdmin'), because that policy admits
-     * super_admin and would re-open the boundary this method exists to close.
-     */
-    public function updateStock(Request $request, Food $food)
-    {
-        $validated = $request->validate([
-            'stock_quantity' => ['required', 'integer', 'min:0'],
-        ]);
-
-        $food->update($validated);
-        $food->refresh();
-
-        MenuBroadcast::dispatch($food->load('category'), 'updated');
-
-        return response()->json($food->load('category'), 200);
-    }
-
-    /**
-     * Toggle whether an item can be ordered. Store Agent only.
-     *
-     * Same boundary as updateStock - see BR-29 note above.
-     */
-    public function updateAvailability(Request $request, Food $food)
-    {
-        $validated = $request->validate([
-            'is_available' => ['required', 'boolean'],
-        ]);
-
-        $food->update($validated);
-        $food->refresh();
-
-        MenuBroadcast::dispatch($food->load('category'), 'updated');
-
-        return response()->json($food->load('category'), 200);
-    }
+    // Stock and availability are the Store Agent's, in StockController (BR-29).
 
     public function drinks(Request $request)
     {

@@ -8,12 +8,16 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
 use App\Models\User;
+use App\Services\Stock\StockReservation;
 use App\Services\Store\StoreAvailability;
 use Illuminate\Support\Facades\DB;
 
 class OrderPlacement
 {
-    public function __construct(private DiscountUsage $discountUsage) {}
+    public function __construct(
+        private DiscountUsage $discountUsage,
+        private StockReservation $stock,
+    ) {}
 
     /**
      * @param  Cart  $cart  Non-null by the time this is reached: an empty selection
@@ -91,6 +95,14 @@ class OrderPlacement
                     ]);
                 }
             }
+
+            // Under the food rows' lock, so the last units go to one customer
+            // (FR-08.3); a shortage rolls the whole order back. Until payment
+            // exists (GATE-6) placing is the sale, so the hold is confirmed at
+            // once. Payment will confirm it on success instead and let an
+            // unpaid one lapse (FR-04.5).
+            $this->stock->hold($order, $quote['items']);
+            $this->stock->confirm($order);
 
             $cart->items()->whereIn('id', $selectedIds)->delete();
 

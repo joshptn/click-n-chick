@@ -19,10 +19,14 @@ class AdvanceRequestController extends Controller
 {
     use AuthorizesRequests;
 
-    private const WITH = ['items.food', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user'];
 
+    public const REMINDER_COOLDOWN_MINUTES = 60;
 
-    private const REMINDER_COOLDOWN_MINUTES = 60;
+    /** How far back the page's Closed column looks, and how many it lists. */
+    private const CLOSED_DAYS = 7;
+
+    private const CLOSED_SHOWN = 50;
 
     public function __construct(
         private StoreAvailability $store,
@@ -42,9 +46,29 @@ class AdvanceRequestController extends Controller
 
         $dueToday = $scheduled->filter(
             fn (Order $order) => $order->scheduled_for
+                ->toImmutable()
                 ->setTimezone($this->store->timezone())
                 ->isSameDay($today)
         );
+
+        // From preparing on, an advance order runs the ordinary pickup chain but
+        // still holds no queue number (BR-22c), so the day's board never lists
+        // it. It stays here until it is collected.
+        $inKitchen = $this->requests([OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP]);
+
+        $closedSince = CarbonImmutable::now()->subDays(self::CLOSED_DAYS);
+        $closedQuery = Order::query()
+            ->whereNotNull('scheduled_for')
+            ->whereIn('status', [OrderStatus::COMPLETED, OrderStatus::REJECTED, OrderStatus::CANCELLED])
+            ->where('closed_at', '>=', $closedSince);
+
+        $closedCount = (clone $closedQuery)->count();
+        $closed = $closedQuery
+            ->with(self::WITH)
+            ->orderByDesc('closed_at')
+            ->orderByDesc('id')
+            ->limit(self::CLOSED_SHOWN)
+            ->get();
 
         return response()->json([
             'date' => $today->toDateString(),
@@ -53,12 +77,17 @@ class AdvanceRequestController extends Controller
             'awaiting_payment' => AdvanceRequestResource::collection($awaitingPayment),
             'scheduled' => AdvanceRequestResource::collection($scheduled),
             'due_today' => AdvanceRequestResource::collection($dueToday->values()),
+            'in_kitchen' => AdvanceRequestResource::collection($inKitchen),
+            'closed' => AdvanceRequestResource::collection($closed),
 
             'summary' => [
                 'awaiting_decision' => $awaitingDecision->count(),
                 'awaiting_payment' => $awaitingPayment->count(),
                 'scheduled' => $scheduled->count(),
                 'due_today' => $dueToday->count(),
+                'in_kitchen' => $inKitchen->count(),
+                'closed_recently' => $closedCount,
+                'closed_days' => self::CLOSED_DAYS,
             ],
         ]);
     }
@@ -80,6 +109,19 @@ class AdvanceRequestController extends Controller
 
         if ($order->status !== OrderStatus::SUBMITTED) {
             return response()->json($this->alreadyAnswered($order), 422);
+        }
+
+        // A request left unanswered past its own collection date can no longer
+        // be honoured; accepting it would ask the customer to pay for a day that
+        // is gone. Declining tells them to pick another date.
+        $collect = $order->scheduled_for?->toImmutable()->setTimezone($this->store->timezone());
+
+        if ($collect !== null && $collect->startOfDay()->lessThan(CarbonImmutable::now($this->store->timezone())->startOfDay())) {
+            return response()->json([
+                'message' => 'The collection date for this request has passed. Decline it so the customer can choose another date.',
+                'error_code' => 'ADVANCE_DATE_PASSED',
+                'status' => $order->status,
+            ], 422);
         }
 
         DB::transaction(function () use ($order) {
@@ -190,7 +232,14 @@ class AdvanceRequestController extends Controller
             ->whereNotNull('scheduled_for')
             ->whereIn('status', $statuses)
             ->with(self::WITH)
+            // When the customer was last chased for payment, so the page can say
+            // so and hold the button through the cooldown remind() enforces.
+            ->withMax(
+                ['notifications as last_reminded_at' => fn ($query) => $query->where('notification_type', OrderNotice::TYPE_ADVANCE_PAYMENT)],
+                'created_at'
+            )
             ->orderBy('scheduled_for')
+            ->orderBy('id')
             ->get();
     }
 }

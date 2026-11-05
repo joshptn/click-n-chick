@@ -117,6 +117,28 @@ class OrderQueueController extends Controller
             ], 422);
         }
 
+        // BRD 3.2: an accepted request leaves awaiting_payment only when the
+        // customer pays. Stepping it to confirmed by hand would book an order
+        // nobody has paid for.
+        if ($order->isAdvance() && in_array((string) $order->status, [OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT], true)) {
+            return response()->json([
+                'message' => 'This request moves on when the customer pays for it.',
+                'error_code' => 'ADVANCE_AWAITING_PAYMENT',
+                'status' => $order->status,
+            ], 422);
+        }
+
+        // UC-ADV-012: a scheduled order is prepared on its collection date.
+        if ($to === OrderStatus::PREPARING && $order->isAdvance() && $this->collectsAfterToday($order)) {
+            $collect = $order->scheduled_for->toImmutable()->setTimezone($this->store->timezone());
+
+            return response()->json([
+                'message' => 'This order is for '.$collect->format('j M').'. It is prepared on its collection date.',
+                'error_code' => 'ADVANCE_NOT_DUE',
+                'status' => $order->status,
+            ], 422);
+        }
+
         $order->status = $to;
         $order->save();
 
@@ -179,6 +201,20 @@ class OrderQueueController extends Controller
             'refund_owed' => $refund,
             'order' => new OrderQueueResource($order->load(self::WITH)),
         ]);
+    }
+
+    private function collectsAfterToday(Order $order): bool
+    {
+        if ($order->scheduled_for === null) {
+            return false;
+        }
+
+        $timezone = $this->store->timezone();
+
+        // A copy: the cast is mutable, and moving its timezone in place would
+        // make the column dirty for the save that follows.
+        return $order->scheduled_for->toImmutable()->setTimezone($timezone)->startOfDay()
+            ->greaterThan(CarbonImmutable::now($timezone)->startOfDay());
     }
 
     private function date(Request $request): string

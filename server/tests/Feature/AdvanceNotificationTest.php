@@ -281,7 +281,8 @@ class AdvanceNotificationTest extends TestCase
         // Once the kitchen starts there is nothing advance about it any more,
         // and the customer needs the same words as anyone else.
         $customer = $this->user();
-        $order = $this->advanceOrderAt(OrderStatus::SCHEDULED, $customer, paid: true);
+        // Due today: preparation starts on the collection date (UC-ADV-012).
+        $order = $this->advanceOrderAt(OrderStatus::SCHEDULED, $customer, paid: true, dueIn: '0 minutes');
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
             ->postJson("/api/agent/orders/{$order->id}/advance")

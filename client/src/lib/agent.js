@@ -58,6 +58,143 @@ export function fetchAdvanceRequests({ signal } = {}) {
   return api.get("/api/agent/advance-requests", { signal });
 }
 
+export function acceptAdvanceRequest(id) {
+  return api.post(`/api/agent/advance-requests/${id}/accept`);
+}
+
+export function rejectAdvanceRequest(id, reason) {
+  return api.post(`/api/agent/advance-requests/${id}/reject`, { reason });
+}
+
+export function remindAdvanceRequest(id) {
+  return api.post(`/api/agent/advance-requests/${id}/remind`);
+}
+
+/**
+ * The advance list's columns, in the order a request moves through them. Not a
+ * queue (BR-22c): each column is ordered by collection date, and nothing here
+ * carries a queue number.
+ */
+export const ADVANCE_COLUMNS = [
+  { key: "requests", label: "Requests", tone: "orange", statuses: ["submitted"] },
+  { key: "payment", label: "Awaiting Payment", tone: "amber", statuses: ["accepted", "awaiting_payment"] },
+  { key: "scheduled", label: "Scheduled", tone: "blue", statuses: ["confirmed", "scheduled"] },
+  { key: "kitchen", label: "In Kitchen", tone: "green", statuses: ["preparing", "ready_for_pickup"] },
+  { key: "closed", label: "Closed", tone: "slate", statuses: ["completed", "rejected", "cancelled"] },
+];
+
+export function advanceColumnFor(status) {
+  return ADVANCE_COLUMNS.find((column) => column.statuses.includes(status))?.key ?? null;
+}
+
+/** What the page offers on a request, by where it is in its lifecycle. */
+export function advanceStage(order) {
+  switch (order?.status) {
+    case "submitted":
+      return "decide";
+    case "accepted":
+    case "awaiting_payment":
+      return "payment";
+    case "confirmed":
+    case "scheduled":
+      return "scheduled";
+    case "preparing":
+    case "ready_for_pickup":
+      return "kitchen";
+    default:
+      return "closed";
+  }
+}
+
+/** Every request on the page once. `due_today` repeats part of `scheduled`. */
+export function advanceOrders(data) {
+  if (!data) return [];
+
+  return [
+    ...(data.awaiting_decision ?? []),
+    ...(data.awaiting_payment ?? []),
+    ...(data.scheduled ?? []),
+    ...(data.in_kitchen ?? []),
+    ...(data.closed ?? []),
+  ];
+}
+
+/** Presets for a declined request; the reason is the customer's notification. */
+export const ADVANCE_REJECTION_REASONS = [
+  "We are fully booked for that date.",
+  "The kitchen cannot make this quantity on that date.",
+  "The store is closed on that date.",
+  "Some items are not available on that date.",
+];
+
+export const ADVANCE_CANCEL_REASONS = [
+  "The customer asked to cancel.",
+  "Payment did not arrive in time.",
+  "We could not reach the customer.",
+  "The kitchen cannot fulfil it on the day.",
+];
+
+/** "Tomorrow · 12:00 PM", "Fri, Nov 7 · 3:30 PM" - when the customer collects. */
+export function collectionLabel(order) {
+  if (!order?.scheduled_for) return "";
+
+  const at = new Date(order.scheduled_for);
+  const time = at.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
+  const days = order.days_until_collection;
+
+  if (days === 0) return `Today · ${time}`;
+  if (days === 1) return `Tomorrow · ${time}`;
+
+  const date = at.toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" });
+
+  return `${date} · ${time}`;
+}
+
+/** "in 3 days", "today", "2 days ago". */
+export function collectionCountdown(order) {
+  const days = order?.days_until_collection;
+
+  if (days == null) return "";
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days > 1) return `in ${days} days`;
+
+  return days === -1 ? "yesterday" : `${-days} days ago`;
+}
+
+/** "5 h left", "40 min left", "overdue" - BR-16f's 24-hour payment window. */
+export function paymentWindowLabel(order, now = Date.now()) {
+  if (!order?.payment_due_at) return null;
+  if (order.payment_overdue) return "Payment overdue";
+
+  const minutes = Math.max(0, Math.floor((new Date(order.payment_due_at).getTime() - now) / 60000));
+
+  if (minutes < 60) return `${minutes} min left to pay`;
+
+  return `${Math.floor(minutes / 60)} h left to pay`;
+}
+
+/** True while remind() would still answer REMINDER_TOO_SOON. */
+export function reminderCoolingDown(order, now = Date.now()) {
+  return Boolean(order?.can_remind_at) && new Date(order.can_remind_at).getTime() > now;
+}
+
+/** How a closed request ended, as the agent reads it. */
+export function closedOutcome(order) {
+  if (order?.status === "completed") return { tone: "green", label: "Picked up" };
+  if (order?.status === "rejected") return { tone: "red", label: "Declined" };
+
+  if (order?.cancelled_by_store) return { tone: "red", label: "Cancelled by the store" };
+
+  // The deadline job and the customer both leave cancelled_by empty; the
+  // deadline's reason is the one the job writes.
+  if (/not received within 24 hours/i.test(order?.cancellation_reason ?? "")) {
+    return { tone: "amber", label: "Expired unpaid" };
+  }
+
+  return { tone: "slate", label: "Cancelled by the customer" };
+}
+
 export function fetchPendingDiscountClaims({ signal } = {}) {
   return api.get("/api/admin/discount-claims", { signal, params: { per_page: 1 } });
 }
@@ -74,12 +211,20 @@ export function rejectDiscountClaim(id, reason) {
   return api.post(`/api/admin/discount-claims/${id}/reject`, { rejection_reason: reason });
 }
 
+const ADVANCE_NOTICE_TYPES = ["advance_request", "advance_due", "advance_order"];
+
 /**
  * Staff notifications open the order on the board rather than the customer
  * tracker, and a new discount application opens the review queue.
  */
 export function staffNotificationTarget(notification) {
   if (notification?.notification_type === "discount_review") return "/admin/verification";
+
+  // A new request, a due-today alert, a customer calling one off: advance orders
+  // hold no queue number, so they live on their own page, not the day's board.
+  if (ADVANCE_NOTICE_TYPES.includes(notification?.notification_type) && notification?.order_id) {
+    return `/admin/advance-orders?order=${notification.order_id}`;
+  }
 
   return notification?.order_id ? `/admin?order=${notification.order_id}` : null;
 }
@@ -227,6 +372,7 @@ export function matchesSearch(order, term) {
 
   const haystack = [
     order.queue_label,
+    order.reference,
     order.order_number,
     order.customer?.name,
     order.customer?.phone,

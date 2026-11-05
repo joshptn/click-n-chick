@@ -23,6 +23,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecaptchaConfigController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\StoreStatusController;
 use App\Http\Controllers\SystemSettingController;
 use App\Http\Controllers\TwoFactorController;
@@ -183,6 +184,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
     
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
+
+    // Read by both staff roles; changing stock is the Store Agent's (below).
+    Route::get('/agent/stock', [StockController::class, 'index']);
     Route::get('/agent/advance-requests/{order}', [AdvanceRequestController::class, 'show'])
         ->whereNumber('order');
     Route::post('/agent/advance-requests/{order}/accept', [AdvanceRequestController::class, 'accept'])
@@ -196,8 +200,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
 
 // Store Agent
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
-    Route::patch('/foods/{food}/stock', [FoodController::class, 'updateStock']);
-    Route::patch('/foods/{food}/availability', [FoodController::class, 'updateAvailability']);
+    Route::patch('/foods/{food}/stock', [StockController::class, 'update']);
+    Route::patch('/foods/{food}/availability', [StockController::class, 'availability']);
 });
 
 // Store Manager

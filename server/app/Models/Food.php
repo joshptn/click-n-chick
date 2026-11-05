@@ -68,7 +68,37 @@ class Food extends Model
             return false;
         }
 
-        return $this->stock_quantity === null || $this->stock_quantity > 0;
+        return $this->stock_quantity === null || $this->available_quantity > 0;
+    }
+
+    /**
+     * Units nobody has claimed: the count less what is held for customers
+     * still paying (StockHold::HOLDING). Sold units have already left the count.
+     * Null for an untracked item, which has no count to run out of.
+     *
+     * Reads `held_quantity` when the query loaded it (withHeldQuantity), and
+     * asks for it otherwise.
+     */
+    public function getAvailableQuantityAttribute(): ?int
+    {
+        if ($this->stock_quantity === null) {
+            return null;
+        }
+
+        return max(0, $this->stock_quantity - $this->held_quantity_value);
+    }
+
+    public function getHeldQuantityValueAttribute(): int
+    {
+        if (array_key_exists('held_quantity', $this->attributes)) {
+            return (int) $this->attributes['held_quantity'];
+        }
+
+        if (! $this->exists) {
+            return 0;
+        }
+
+        return (int) $this->stockHolds()->active()->sum('quantity');
     }
 
     /** Null stock means untracked, NOT zero - the distinction is load-bearing. */
@@ -78,13 +108,21 @@ class Food extends Model
             return self::STOCK_UNTRACKED;
         }
 
-        if ($this->stock_quantity <= 0) {
+        $left = $this->available_quantity;
+
+        if ($left <= 0) {
             return self::STOCK_OUT;
         }
 
-        return $this->stock_quantity <= self::LOW_STOCK_THRESHOLD
+        return $left <= self::LOW_STOCK_THRESHOLD
             ? self::STOCK_LOW
             : self::STOCK_IN;
+    }
+
+    /** Loads what live holds set aside, so a list reads it in one query. */
+    public function scopeWithHeldQuantity($query)
+    {
+        return $query->withSum(['stockHolds as held_quantity' => fn ($holds) => $holds->active()], 'quantity');
     }
 
     /** Items a customer may actually order. */
@@ -92,7 +130,13 @@ class Food extends Model
     {
         return $query->where('is_available', true)
             ->where(function ($q) {
-                $q->whereNull('stock_quantity')->orWhere('stock_quantity', '>', 0);
+                $q->whereNull('stock_quantity')
+                    ->orWhereRaw(
+                        'stock_quantity > (select coalesce(sum(stock_holds.quantity), 0) from stock_holds '
+                        .'where stock_holds.food_id = food.id and stock_holds.status = ? '
+                        .'and (stock_holds.expires_at is null or stock_holds.expires_at > ?))',
+                        [StockHold::HOLDING, now()]
+                    );
             });
     }
 
