@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { ALL_CATEGORY, fetchCategories } from "../../lib/menu";
@@ -15,7 +16,30 @@ function CategoryTabs({ value, onChange }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const categories = Array.isArray(data) ? data : (data?.data ?? []);
+  const categories = useMemo(() => (Array.isArray(data) ? data : (data?.data ?? [])), [data]);
+
+  // The selected tab is a name (the menu filters by it), so remember which
+  // category it is: renamed live, the selection follows the new name; deleted,
+  // it falls back to All rather than leaving an empty menu under a dead tab.
+  const selectedId = useRef(null);
+
+  useEffect(() => {
+    if (!data || value === ALL_CATEGORY) {
+      selectedId.current = null;
+      return;
+    }
+
+    const byName = categories.find((category) => category.name === value);
+
+    if (byName) {
+      selectedId.current = byName.id;
+      return;
+    }
+
+    const byId = categories.find((category) => category.id === selectedId.current);
+
+    onChange(byId ? byId.name : ALL_CATEGORY);
+  }, [data, categories, value, onChange]);
 
   if (isLoading) {
     return (

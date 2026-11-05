@@ -110,7 +110,14 @@ export function RealtimeProvider({ children }) {
     // effect, so a signed-out visitor got no stock updates at all.
     echo.channel("menu")
       .subscribed(() => markSubscribed("menu"))
-      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }));
+      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }))
+      // A category added, renamed or deleted by the Store Manager. A rename also
+      // changes the name every dish in it carries, so the dishes come too.
+      .listen(".category", (payload) => {
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+
+        if (payload?.event === "renamed") queryClient.invalidateQueries({ queryKey: ["foods"] });
+      });
 
     // Ordering paused or resumed, delivery switched, hours moved. The payload is
     // the same snapshot /api/store/status returns, so it replaces the cache as
