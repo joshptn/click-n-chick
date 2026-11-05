@@ -59,15 +59,17 @@ function StaffSidebar({ onNavigate }) {
     refetchInterval: 60 * 1000,
   });
 
-  const pages = [
+  // In sidebar order. Entries without a `to` are built next: shown now so the
+  // navigation does not shift under the agent as each page lands.
+  const entries = [
     { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
     { label: "Pending Verification", icon: IconIdBadge2, to: "/admin/verification", count: discounts.data?.total ?? 0 },
-  ];
-
-  // Built next, in sidebar order. Shown now so the navigation does not shift
-  // under the agent as each page lands, with the counts already live.
-  const upcoming = [
-    { label: "Advance Order Request", icon: IconCalendarTime, count: advance.data?.summary?.awaiting_decision ?? 0 },
+    {
+      label: "Advance Order Request",
+      icon: IconCalendarTime,
+      to: "/admin/advance-orders",
+      count: advance.data?.summary?.awaiting_decision ?? 0,
+    },
     { label: "Pending Order", icon: IconHourglassHigh },
     { label: "Product Availability", icon: IconToolsKitchen2 },
     { label: "Order Records", icon: IconArchive },
@@ -88,8 +90,20 @@ function StaffSidebar({ onNavigate }) {
       </div>
 
       <nav aria-label="Staff" className="flex flex-col gap-0.5 px-2.5">
-        {pages.map((entry) => {
+        {entries.map((entry) => {
           const Icon = entry.icon;
+
+          if (!entry.to) {
+            return (
+              <Tooltip key={entry.label} label="Coming next" position="right" withArrow openDelay={300}>
+                <span role="link" aria-disabled="true" className={`${rowClass} cursor-default text-[#a39f9b]`}>
+                  <Icon size={17} stroke={1.9} className="shrink-0" />
+                  <span className="flex-1 leading-snug">{entry.label}</span>
+                  <Badge count={entry.count} />
+                </span>
+              </Tooltip>
+            );
+          }
 
           return (
             <NavLink
@@ -113,20 +127,6 @@ function StaffSidebar({ onNavigate }) {
                 </>
               )}
             </NavLink>
-          );
-        })}
-
-        {upcoming.map((entry) => {
-          const Icon = entry.icon;
-
-          return (
-            <Tooltip key={entry.label} label="Coming next" position="right" withArrow openDelay={300}>
-              <span role="link" aria-disabled="true" className={`${rowClass} cursor-default text-[#a39f9b]`}>
-                <Icon size={17} stroke={1.9} className="shrink-0" />
-                <span className="flex-1 leading-snug">{entry.label}</span>
-                <Badge count={entry.count} />
-              </span>
-            </Tooltip>
           );
         })}
       </nav>

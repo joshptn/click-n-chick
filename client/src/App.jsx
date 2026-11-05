@@ -22,6 +22,7 @@ import Profile from './pages/account/Profile'
 import Security from './pages/account/Security'
 import AdminDashboard from './pages/admin/Dashboard'
 import Verification from './pages/admin/Verification'
+import AdvanceOrders from './pages/admin/AdvanceOrders'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
 import UserManagement from './pages/superadmin/UserManagement'
 
@@ -58,6 +59,7 @@ function App() {
           <Route element={<AdminRoutes/>}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/verification" element={<Verification />} />
+            <Route path="/admin/advance-orders" element={<AdvanceOrders />} />
           </Route>
         </Route>
         
