@@ -5,11 +5,18 @@ namespace App\Models;
 use App\Models\CartItem;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Food extends Model
 {
     /** @use HasFactory<\Database\Factories\FoodFactory> */
     use HasFactory;
+
+    /**
+     * A deleted dish leaves the catalogue, the menu and carts, but its row
+     * stays so past orders keep their lines (see OrderItem::food).
+     */
+    use SoftDeletes;
 
     protected $fillable = [
         'category_id',

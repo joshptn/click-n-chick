@@ -27,6 +27,8 @@ import ProductAvailability from './pages/admin/ProductAvailability'
 import OrderRecords from './pages/admin/OrderRecords'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
 import UserManagement from './pages/superadmin/UserManagement'
+import MenuCatalog from './pages/superadmin/MenuCatalog'
+import ProductForm from './pages/superadmin/ProductForm'
 
 function App() {
 
@@ -70,6 +72,9 @@ function App() {
         <Route element={<PrivateRoutes allowedRoles={[ROLES.SUPER_ADMIN]} />} >
           <Route path="/superadmin" element={<SuperAdminDashboard />} />
           <Route path="/superadmin/users" element={<UserManagement />} />
+          <Route path="/superadmin/menu" element={<MenuCatalog />} />
+          <Route path="/superadmin/menu/new" element={<ProductForm />} />
+          <Route path="/superadmin/menu/:id/edit" element={<ProductForm />} />
         </Route>
 
       </Routes>

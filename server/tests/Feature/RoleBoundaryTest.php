@@ -167,7 +167,8 @@ class RoleBoundaryTest extends TestCase
             ->deleteJson("/api/foods/{$food->id}")
             ->assertOk();
 
-        $this->assertDatabaseMissing('food', ['id' => $food->id]);
+        // Soft: past orders keep the row their lines point at.
+        $this->assertSoftDeleted('food', ['id' => $food->id]);
     }
 
     /**

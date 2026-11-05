@@ -4,11 +4,15 @@ import { Tooltip } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconArchive,
+  IconBuildingStore,
   IconCalendarTime,
+  IconChartLine,
   IconClipboardList,
   IconHourglassHigh,
   IconIdBadge2,
+  IconLayoutDashboard,
   IconToolsKitchen2,
+  IconUsers,
 } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
@@ -59,23 +63,42 @@ function StaffSidebar({ onNavigate }) {
     refetchInterval: 60 * 1000,
   });
 
-  // In sidebar order. Entries without a `to` are built next: shown now so the
-  // navigation does not shift under the agent as each page lands.
-  const entries = [
-    { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
-    {
-      label: "Advance Orders",
-      icon: IconCalendarTime,
-      to: "/admin/advance-orders",
-      count: advance.data?.summary?.awaiting_decision ?? 0,
-    },
-    { label: "Discount Requests", icon: IconIdBadge2, to: "/admin/discount-requests", count: discounts.data?.total ?? 0 },
-    { label: "Pending Order", icon: IconHourglassHigh },
-    { label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" },
-    { label: "Order Records", icon: IconArchive, to: "/admin/records" },
-  ];
+  const manager = user?.role === ROLES.SUPER_ADMIN;
+  const advanceEntry = {
+    label: "Advance Orders",
+    icon: IconCalendarTime,
+    to: "/admin/advance-orders",
+    count: advance.data?.summary?.awaiting_decision ?? 0,
+  };
+  const discountEntry = {
+    label: "Discount Requests",
+    icon: IconIdBadge2,
+    to: "/admin/discount-requests",
+    count: discounts.data?.total ?? 0,
+  };
 
-  const roleLabel = user?.role === ROLES.SUPER_ADMIN ? "Store Manager" : "Store Agent";
+  const entries = manager
+    ? [
+        { label: "Dashboard", icon: IconLayoutDashboard, to: "/superadmin", end: true },
+        { label: "Menu Catalog", icon: IconToolsKitchen2, to: "/superadmin/menu" },
+        { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
+        advanceEntry,
+        discountEntry,
+        { label: "Daily Sales Report", icon: IconChartLine },
+        { label: "User Management", icon: IconUsers },
+        { label: "Store Settings", icon: IconBuildingStore },
+        { label: "Order Records", icon: IconArchive, to: "/admin/records" },
+      ]
+    : [
+        { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
+        advanceEntry,
+        discountEntry,
+        { label: "Pending Order", icon: IconHourglassHigh },
+        { label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" },
+        { label: "Order Records", icon: IconArchive, to: "/admin/records" },
+      ];
+
+  const roleLabel = manager ? "Store Manager" : "Store Agent";
 
   return (
     <div className="flex h-full flex-col bg-white">

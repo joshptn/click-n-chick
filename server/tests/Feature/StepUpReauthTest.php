@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Events\MenuBroadcast;
+use App\Models\Category;
 use App\Models\Discount;
 use App\Models\Food;
 use App\Models\Setting;
@@ -67,6 +68,7 @@ class StepUpReauthTest extends TestCase
             'description' => 'Six pieces.',
             'is_available' => true,
             'thumbnail' => 'https://res.cloudinary.com/demo/image/upload/bucket.jpg',
+            'category_id' => Category::create(['name' => 'Chicken'])->id,
         ]);
     }
 
@@ -77,6 +79,7 @@ class StepUpReauthTest extends TestCase
             'food_name' => $food->food_name,
             'price' => $food->price,
             'description' => $food->description,
+            'category_id' => $food->category_id,
         ], $overrides);
     }
 

@@ -218,7 +218,7 @@ const ADVANCE_NOTICE_TYPES = ["advance_request", "advance_due", "advance_order"]
  * tracker, and a new discount application opens the review queue.
  */
 export function staffNotificationTarget(notification) {
-  if (notification?.notification_type === "discount_review") return "/admin/verification";
+  if (notification?.notification_type === "discount_review") return "/admin/discount-requests";
 
   // A new request, a due-today alert, a customer calling one off: advance orders
   // hold no queue number, so they live on their own page, not the day's board.
