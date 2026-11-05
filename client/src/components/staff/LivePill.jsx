@@ -1,8 +1,9 @@
-import { useRealtime } from "../../context/useRealtime";
+import { useLastOrderEvent, useRealtime } from "../../context/useRealtime";
 
 /** Whether the page is hearing broadcasts, so staff know a quiet page is a quiet store. */
 function LivePill({ showLastOrder = false }) {
-  const { isConfigured, isConnected, lastOrderEvent } = useRealtime();
+  const { isConfigured, isConnected } = useRealtime();
+  const lastOrderEvent = useLastOrderEvent();
 
   if (!isConfigured) return null;
 
