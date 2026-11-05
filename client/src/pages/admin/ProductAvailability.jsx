@@ -1,9 +1,10 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Skeleton, Switch, Tooltip } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconChevronDown, IconInfoCircle, IconLock, IconPhotoOff, IconRefresh, IconToolsKitchen2 } from "@tabler/icons-react";
+import { IconInfoCircle, IconLock, IconPhotoOff, IconRefresh, IconToolsKitchen2 } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StaffSearch from "../../components/staff/StaffSearch";
@@ -34,31 +35,8 @@ const SUMMARY = [
   { key: "low_stock", label: "Low Stock", tone: "amber" },
   { key: "out_of_stock", label: "Sold Out", tone: "orange" },
   { key: "untracked", label: "Made to Order", tone: "blue" },
-  { key: "switched_off", label: "Switched Off", tone: "slate" },
+  { key: "switched_off", label: "On Archived", tone: "slate" },
 ];
-
-function FilterSelect({ label, value, onChange, options, active, testId }) {
-  return (
-    <label className="relative inline-flex min-w-0 items-center text-[12px]">
-      <span className="sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        data-testid={testId}
-        className={`h-[34px] w-full appearance-none rounded-full border bg-white pl-3.5 pr-8 font-display font-medium outline-none transition-colors focus:border-brand-400 ${
-          active ? "border-brand-400 text-brand-700" : "border-[#ece7e0] text-[#5f5b58]"
-        }`}
-      >
-        {options.map((option) => (
-          <option key={option.key} value={option.key}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <IconChevronDown size={14} stroke={2.2} className="pointer-events-none absolute right-3 text-[#a39f9b]" />
-    </label>
-  );
-}
 
 function Thumb({ food }) {
   const [failed, setFailed] = useState(false);
@@ -125,14 +103,14 @@ function AvailabilityToggle({ food, canManage, onToggle }) {
         data-testid="availability-switch"
       />
       <span className={`font-display text-[10.5px] ${food.is_available ? "text-[#2f9e44]" : "text-[#8d8884]"}`}>
-        {food.is_available ? "On menu" : "Switched off"}
+        {food.is_available ? "On menu" : "On Archive"}
       </span>
     </label>
   );
 }
 
 const GRID =
-  "grid grid-cols-[52px_minmax(170px,2fr)_minmax(104px,1fr)_minmax(84px,0.8fr)_minmax(120px,1fr)_minmax(200px,1.4fr)_minmax(96px,0.8fr)] items-center gap-x-4";
+  "grid grid-cols-[52px_minmax(170px,2fr)_minmax(104px,1fr)_minmax(84px,0.8fr)_minmax(120px,1fr)_minmax(140px,0.7fr)_minmax(156px,1.5fr)] items-center gap-x-5";
 
 function TableView({ foods, loading, rowProps }) {
   return (
@@ -151,8 +129,8 @@ function TableView({ foods, loading, rowProps }) {
               <IconInfoCircle size={12} stroke={2} className="text-[#c4bdb4]" />
             </Tooltip>
           </span>
-          <span className="text-center">Stock</span>
           <span className="text-center">Availability</span>
+          <span className="text-center">Stock</span>
         </div>
 
         {loading
@@ -163,8 +141,8 @@ function TableView({ foods, loading, rowProps }) {
                 <Skeleton height={20} width={80} radius="xl" />
                 <Skeleton height={14} width={60} />
                 <Skeleton height={26} width={104} radius={8} />
-                <Skeleton height={28} width={140} radius="xl" className="justify-self-center" />
-                <Skeleton height={20} width={40} radius="xl" className="justify-self-center" />
+                <Skeleton height={28} width={40} radius="xl" className="justify-self-center" />
+                <Skeleton height={20} width={140} radius="xl" className="justify-self-center" />
               </div>
             ))
           : foods.map((food) => (
@@ -190,8 +168,8 @@ function TableView({ foods, loading, rowProps }) {
                 <div>
                   <SalesPill food={food} />
                 </div>
-                <StockControl food={food} {...rowProps} busy={rowProps.isBusy(food.id)} />
                 <AvailabilityToggle food={food} canManage={rowProps.canManage} onToggle={rowProps.onToggle} />
+                <StockControl food={food} {...rowProps} busy={rowProps.isBusy(food.id)} />
               </div>
             ))}
       </div>

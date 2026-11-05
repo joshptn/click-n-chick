@@ -133,7 +133,7 @@ export function useStock() {
       })),
     onSuccess: (response) => {
       queryClient.setQueryData(STOCK_KEY, (current) => withItem(current, response?.item));
-      toast.success(response?.message ?? "Availability updated.", response?.item?.is_available ? "Back on the menu" : "Switched off");
+      toast.success(response?.message ?? "Availability updated.", response?.item?.is_available ? "Back on the menu" : "Archived");
     },
     onError: (error, _vars, context) => {
       rollback(context);
