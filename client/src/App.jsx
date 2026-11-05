@@ -24,6 +24,7 @@ import AdminDashboard from './pages/admin/Dashboard'
 import DiscountRequests from './pages/admin/DiscountRequests'
 import AdvanceOrders from './pages/admin/AdvanceOrders'
 import ProductAvailability from './pages/admin/ProductAvailability'
+import OrderRecords from './pages/admin/OrderRecords'
 import SuperAdminDashboard from './pages/superadmin/Dashboard'
 import UserManagement from './pages/superadmin/UserManagement'
 
@@ -62,6 +63,7 @@ function App() {
             <Route path="/admin/discount-requests" element={<DiscountRequests />} />
             <Route path="/admin/advance-orders" element={<AdvanceOrders />} />
             <Route path="/admin/products" element={<ProductAvailability />} />
+            <Route path="/admin/records" element={<OrderRecords />} />
           </Route>
         </Route>
         

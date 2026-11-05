@@ -72,7 +72,7 @@ function StaffSidebar({ onNavigate }) {
     { label: "Discount Requests", icon: IconIdBadge2, to: "/admin/discount-requests", count: discounts.data?.total ?? 0 },
     { label: "Pending Order", icon: IconHourglassHigh },
     { label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" },
-    { label: "Order Records", icon: IconArchive },
+    { label: "Order Records", icon: IconArchive, to: "/admin/records" },
   ];
 
   const roleLabel = user?.role === ROLES.SUPER_ADMIN ? "Store Manager" : "Store Agent";
