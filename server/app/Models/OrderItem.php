@@ -34,9 +34,10 @@ class OrderItem extends Model
         return $this->belongsTo(Order::class);
     }
 
+    /** Includes deleted dishes: an order keeps the dish it was placed for. */
     public function food()
     {
-        return $this->belongsTo(Food::class);
+        return $this->belongsTo(Food::class)->withTrashed();
     }
 
     /** Add-ons selected for this line, with the price snapshot on the pivot. */
