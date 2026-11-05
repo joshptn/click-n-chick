@@ -71,7 +71,7 @@ function StaffSidebar({ onNavigate }) {
       count: advance.data?.summary?.awaiting_decision ?? 0,
     },
     { label: "Pending Order", icon: IconHourglassHigh },
-    { label: "Product Availability", icon: IconToolsKitchen2 },
+    { label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" },
     { label: "Order Records", icon: IconArchive },
   ];
 
