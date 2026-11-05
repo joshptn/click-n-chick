@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 import { disconnectEcho } from '../lib/echo';
 import { deviceHeader } from '../lib/deviceId';
@@ -79,7 +79,7 @@ export function AuthProvider({children}) {
         return () => { cancelled = true; };
     }, [token, url]);
 
-    const adoptSession = (data) => {
+    const adoptSession = useCallback((data) => {
         setToken(data.token);
         setUser(data.user);
 
@@ -93,9 +93,9 @@ export function AuthProvider({children}) {
         }
 
         return data;
-    };
+    }, []);
 
-    const loginUser = async (e) => {
+    const loginUser = useCallback(async (e) => {
         e.preventDefault();
         const url = import.meta.env.VITE_API_URL;
 
@@ -131,9 +131,9 @@ export function AuthProvider({children}) {
         }
 
         throw new Error(data.message || 'Login failed. Check credentials.');
-    };
-    
-    const logoutUser = async ({ revokeOnServer = true } = {}) => {
+    }, [adoptSession]);
+
+    const logoutUser = useCallback(async ({ revokeOnServer = true } = {}) => {
         // Revoke the token server-side rather than only forgetting it locally.
         // Without this the session stays valid forever and shows up on the
         // devices screen as a live session for a device that has signed out.
@@ -163,17 +163,17 @@ export function AuthProvider({children}) {
         setUser(null);
         setToken(null);
         clearStoredSession();
-    }
+    }, [token, url]);
 
-    var context = {
-        loginUser:loginUser,
-        adoptSession:adoptSession,
-        logOut:logoutUser,
-        user:user,
-        token:token,
-        setUser:setUser,
-        isBootstrapping:isBootstrapping
-    }
+    const context = useMemo(() => ({
+        loginUser,
+        adoptSession,
+        logOut: logoutUser,
+        user,
+        token,
+        setUser,
+        isBootstrapping,
+    }), [loginUser, adoptSession, logoutUser, user, token, isBootstrapping]);
     return (
         <AuthContext.Provider value={context}>
             {children}
