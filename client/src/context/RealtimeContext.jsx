@@ -189,7 +189,9 @@ export function RealtimeProvider({ children }) {
         setLastOrderEvent(payload);
         queryClient.invalidateQueries({ queryKey: ["orders"] });
 
-        if (payload?.event === "create") {
+        // A new advance request is announced by its own staff notification
+        // ("New advance request"); this toast is for orders joining the line.
+        if (payload?.event === "create" && payload?.order?.status !== "submitted") {
           toast.info(`Order #${payload?.order?.id} just came in.`, "New order");
         }
       });
