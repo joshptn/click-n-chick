@@ -48,12 +48,14 @@ export async function apiFetch(
   { method = "GET", body, params, signal, auth = true, headers: extraHeaders } = {}
 ) {
   const token = auth ? authToken() : null;
+  // A FormData body (a file upload) sets its own multipart boundary.
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData;
 
   const response = await fetch(buildUrl(path, params), {
     method,
     headers: {
       Accept: "application/json",
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(body && !multipart ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       // Lets the server keep this install's device row current, and tell the
       // device list which entry is "this device".
@@ -66,7 +68,7 @@ export async function apiFetch(
       // belongs to a single order and comes out of the link, not from storage.
       ...(extraHeaders ?? {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: multipart ? body : body ? JSON.stringify(body) : undefined,
     credentials: "include",
     signal,
   });
