@@ -16,6 +16,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderModificationController;
 use App\Http\Controllers\OrderQueueController;
+use App\Http\Controllers\OrderRecordController;
 use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PasswordChangeController;
@@ -184,6 +185,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
     
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
+
+    // Order Records (UC-OPS-007): closed orders, read-only, for both staff roles.
+    Route::get('/agent/records', [OrderRecordController::class, 'index']);
+    Route::get('/agent/records/{order}', [OrderRecordController::class, 'show'])->whereNumber('order');
 
     // Read by both staff roles; changing stock is the Store Agent's (below).
     Route::get('/agent/stock', [StockController::class, 'index']);
