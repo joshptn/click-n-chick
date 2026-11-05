@@ -1,10 +1,14 @@
 import { useContext, useEffect, useState } from "react";
 
 import RealtimeContext from "./RealtimeContext";
+import { LastOrderEventContext, LiveNotificationsContext } from "./realtimeSlices";
 import { getEcho, isRealtimeConfigured } from "../lib/echo";
 
 /**
- * Connection state plus anything that arrived on the always-on channels.
+ * The socket's connection state and which channels are live.
+ *
+ * Live notifications and the last order broadcast have their own hooks below,
+ * so a component that reads one of them is not re-rendered by the others.
  *
  * Kept out of RealtimeContext.jsx so that file exports only a component -
  * mixing hooks in breaks fast refresh for every consumer of the provider.
@@ -17,6 +21,16 @@ export function useRealtime() {
   }
 
   return context;
+}
+
+/** Live notifications only; not re-rendered by connection or order events. */
+export function useLiveNotifications() {
+  return useContext(LiveNotificationsContext);
+}
+
+/** The last staff order broadcast only. */
+export function useLastOrderEvent() {
+  return useContext(LastOrderEventContext);
 }
 
 /**

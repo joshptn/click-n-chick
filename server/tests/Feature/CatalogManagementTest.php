@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\CategoryBroadcast;
 use App\Jobs\NotifyEveryAccount;
 use App\Models\Cart;
 use App\Models\CartItem;
@@ -14,6 +15,7 @@ use App\Services\Media\CloudinaryService;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -319,6 +321,39 @@ class CatalogManagementTest extends TestCase
         $this->deleteJson("/api/foods/{$archived->id}")->assertOk();
         $this->deleteJson("/api/category/{$full->id}")->assertOk();
         $this->assertDatabaseMissing('categories', ['id' => $full->id]);
+    }
+
+    public function test_every_category_change_reaches_open_menus(): void
+    {
+        Event::fake([CategoryBroadcast::class]);
+
+        $manager = $this->manager();
+        $sent = fn (string $event, string $name) => Event::assertDispatched(
+            CategoryBroadcast::class,
+            fn (CategoryBroadcast $broadcast) => $broadcast->eventName === $event && $broadcast->category['name'] === $name
+        );
+
+        $id = $this->actingAs($manager, 'sanctum')->postJson('/api/category', ['name' => 'Rice Meals'])->json('id');
+        $sent('created', 'Rice Meals');
+
+        $this->putJson("/api/category/{$id}", ['name' => 'Rice Bowls'])->assertOk();
+        $sent('renamed', 'Rice Bowls');
+
+        // Saving the same name changes nothing on a menu, so nothing is sent.
+        $this->putJson("/api/category/{$id}", ['name' => 'Rice Bowls'])->assertOk();
+        Event::assertDispatchedTimes(CategoryBroadcast::class, 2);
+
+        // A refused delete leaves the tabs as they were.
+        $this->food(['category_id' => $id]);
+        $this->deleteJson("/api/category/{$id}")->assertStatus(409);
+        Event::assertDispatchedTimes(CategoryBroadcast::class, 2);
+
+        $empty = $this->category('Desserts');
+        $this->deleteJson("/api/category/{$empty->id}")->assertOk();
+        Event::assertDispatched(
+            CategoryBroadcast::class,
+            fn (CategoryBroadcast $broadcast) => $broadcast->eventName === 'deleted' && $broadcast->category === ['id' => $empty->id, 'name' => 'Desserts']
+        );
     }
 
     public function test_the_store_agent_cannot_manage_categories(): void

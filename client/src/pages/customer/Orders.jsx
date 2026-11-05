@@ -6,7 +6,7 @@ import { IconReceipt, IconToolsKitchen2 } from "@tabler/icons-react";
 import AppHeader from "../../components/app/AppHeader";
 import OrderCard from "../../components/orders/OrderCard";
 import { ORDER_FILTERS, ORDERS_KEY, fetchOrders } from "../../lib/orders";
-import { useRealtime } from "../../context/useRealtime";
+import { useLastOrderEvent } from "../../context/useRealtime";
 
 
 const EMPTY = {
@@ -36,7 +36,7 @@ function OrdersSkeleton() {
 
 function Orders() {
   const queryClient = useQueryClient();
-  const { lastOrderEvent } = useRealtime();
+  const lastOrderEvent = useLastOrderEvent();
 
   const [filter, setFilter] = useState("active");
 

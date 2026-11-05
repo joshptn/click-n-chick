@@ -12,7 +12,7 @@ import FoodDetailModal from "../../components/menu/FoodDetailModal";
 import PosterBanner from "../../components/menu/PosterBanner";
 import toast from "../../components/app/Toast";
 import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
-import { useCart } from "../../context/useCart";
+import { useCartActions } from "../../context/useCart";
 import { useStoreStatus } from "../../lib/store";
 
 /** Long enough that typing does not fire a request per keystroke. */
@@ -26,7 +26,7 @@ function Home() {
   const [cartOpen, setCartOpen] = useState(false);
 
   const navigate = useNavigate();
-  const { addItem, isAdding } = useCart();
+  const { addItem, isAdding } = useCartActions();
   const { status: storeStatus } = useStoreStatus();
 
   useEffect(() => {

@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { CART_MODE } from "../../lib/cartModes";
 import { formatPeso } from "../../lib/menu";
-import { useCart } from "../../context/useCart";
+import { useCartState } from "../../context/useCart";
 
 const MotionLi = motion.li;
 
@@ -38,7 +38,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
     selectedSubtotal,
     hasUnavailableSelected,
     allSelected,
-  } = useCart(mode);
+  } = useCartState(mode);
 
   const isEmpty = !isLoading && cart.length === 0;
 

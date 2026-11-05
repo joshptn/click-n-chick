@@ -15,7 +15,7 @@ import FoodDetailModal from "../../components/menu/FoodDetailModal";
 import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
 import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
-import { useCart } from "../../context/useCart";
+import { useCartActions } from "../../context/useCart";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -29,7 +29,7 @@ function AdvanceOrder() {
   const [cartOpen, setCartOpen] = useState(false);
 
   const navigate = useNavigate();
-  const { addItem, isAdding } = useCart(CART_MODE.ADVANCE);
+  const { addItem, isAdding } = useCartActions(CART_MODE.ADVANCE);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);

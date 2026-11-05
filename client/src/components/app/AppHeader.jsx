@@ -9,7 +9,7 @@ import LogoIcon from "../../assets/logo-icon.png";
 import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
-import { useCart } from "../../context/useCart";
+import { useCartState } from "../../context/useCart";
 
 function AppHeader({
   search,
@@ -21,7 +21,7 @@ function AppHeader({
   const { pathname } = useLocation();
   const { user, token } = useContext(AuthContext);
   const signedIn = Boolean(token);
-  const { item_count: itemCount } = useCart(cartMode);
+  const { item_count: itemCount } = useCartState(cartMode);
   const { isOpen, status: storeStatus } = useStoreStatus();
 
   const showSearch = typeof onSearchChange === "function";

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\CategoryBroadcast;
 use App\Events\DiscountClaimBroadcast;
 use App\Events\LiveBroadcast;
 use App\Events\MenuBroadcast;
@@ -9,6 +10,7 @@ use App\Events\NotificationBroadcast;
 use App\Events\OrderBroadcast;
 use App\Events\SessionRevoked;
 use App\Events\StoreBroadcast;
+use App\Models\Category;
 use App\Models\Food;
 use App\Models\Notification;
 use App\Models\Order;
@@ -149,6 +151,24 @@ class RealtimeConfigTest extends TestCase
         $this->assertArrayHasKey('stock_status', $payload['food']);
     }
 
+    public function test_category_events_share_the_public_menu_channel(): void
+    {
+        $category = Category::create(['name' => 'Rice Meals']);
+
+        $event = new CategoryBroadcast($category, 'renamed');
+        $channel = $event->broadcastOn()[0];
+
+        // The tabs are on the menu a guest browses, like the dishes are.
+        $this->assertInstanceOf(Channel::class, $channel);
+        $this->assertNotInstanceOf(PrivateChannel::class, $channel);
+        $this->assertSame('menu', $channel->name);
+        $this->assertSame('category', $event->broadcastAs());
+        $this->assertSame(
+            ['event' => 'renamed', 'category' => ['id' => $category->id, 'name' => 'Rice Meals']],
+            $event->broadcastWith()
+        );
+    }
+
     public function test_every_broadcast_event_is_published_live(): void
     {
         foreach ([
@@ -158,6 +178,7 @@ class RealtimeConfigTest extends TestCase
             StoreBroadcast::class,
             SessionRevoked::class,
             DiscountClaimBroadcast::class,
+            CategoryBroadcast::class,
         ] as $event) {
             $this->assertTrue(is_subclass_of($event, ShouldBroadcast::class), $event.' will never reach Reverb.');
 

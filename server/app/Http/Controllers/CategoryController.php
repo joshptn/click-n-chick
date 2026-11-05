@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\CategoryBroadcast;
 use App\Models\Category;
 use App\Models\Food;
 use Illuminate\Http\Request;
@@ -41,6 +42,8 @@ class CategoryController extends Controller implements HasMiddleware
 
         $category = Category::create(['name' => $name]);
 
+        CategoryBroadcast::dispatch($category, 'created');
+
         return response()->json($category, 201);
     }
 
@@ -53,6 +56,11 @@ class CategoryController extends Controller implements HasMiddleware
     public function update(Request $request, Category $category)
     {
         $category->update(['name' => $this->validName($request, $category)]);
+
+        // Dishes carry their category's name, so open menus refetch both.
+        if ($category->wasChanged('name')) {
+            CategoryBroadcast::dispatch($category, 'renamed');
+        }
 
         return response()->json($category);
     }
@@ -78,6 +86,8 @@ class CategoryController extends Controller implements HasMiddleware
         }
 
         $category->delete();
+
+        CategoryBroadcast::dispatch($category, 'deleted');
 
         return response()->json(['message' => $category->name.' was deleted.']);
     }

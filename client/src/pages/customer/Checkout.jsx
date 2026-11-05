@@ -20,7 +20,7 @@ import {
   toLocalMobile,
 } from "../../lib/checkout";
 import { formatPeso } from "../../lib/menu";
-import { useCart } from "../../context/useCart";
+import { useCartState } from "../../context/useCart";
 import { useStoreStatus } from "../../lib/store";
 
 
@@ -47,7 +47,7 @@ function Checkout() {
   const signedIn = Boolean(token);
   const steps = signedIn ? STEPS : GUEST_STEPS;
   const stepNumber = (id) => steps.findIndex((entry) => entry.id === id) + 1;
-  const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCart();
+  const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCartState();
   const { status: storeStatus } = useStoreStatus();
 
   const routeSelection = location.state?.selectedIds ?? null;

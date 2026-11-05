@@ -2,7 +2,7 @@ import { useCallback, useContext, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import AuthContext from "./AuthContext";
-import { useRealtime } from "./useRealtime";
+import { useLiveNotifications } from "./useRealtime";
 import {
   NOTIFICATIONS_KEY,
   fetchNotifications,
@@ -10,7 +10,7 @@ import {
 } from "../lib/notifications";
 
 export function useNotifications() {
-  const { notifications: live, markAllRead: clearLive } = useRealtime();
+  const { notifications: live, markAllRead: clearLive } = useLiveNotifications();
   const { token } = useContext(AuthContext);
   const queryClient = useQueryClient();
 

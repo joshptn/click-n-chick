@@ -7,6 +7,7 @@ import { CART_MODE } from "../lib/cartModes";
 import { api, apiFetch } from "../lib/api";
 import { forgetGuestToken, guestToken, rememberGuestToken } from "../lib/guest";
 import toast from "../components/app/Toast";
+import CartActionsContext from "./CartActionsContext";
 
 const CartContext = createContext(null);
 
@@ -139,7 +140,27 @@ function useCartStore(mode, enabled, scope) {
     [lines]
   );
 
-  return useMemo(
+  // useMutation returns a new object on every render. Depending on that object
+  // rebuilt the cart's value on every render, re-rendering every reader; the
+  // memos below depend on its stable mutateAsync and on the flags they show.
+  const add = addItem.mutateAsync;
+  const changeQuantity = setQuantity.mutateAsync;
+  const remove = removeItem.mutateAsync;
+  const clear = clearCart.mutateAsync;
+  const removeMany = removeSelected.mutateAsync;
+  const isAdding = addItem.isPending;
+  const pendingLineId =
+    (setQuantity.isPending ? setQuantity.variables?.cartItemId : null) ??
+    (removeItem.isPending ? removeItem.variables?.cartItemId : null) ??
+    null;
+  const isMutating =
+    setQuantity.isPending || removeItem.isPending || removeSelected.isPending || clearCart.isPending;
+
+  // Split so a page that only adds dishes does not re-render when the cart's
+  // contents change.
+  const actions = useMemo(() => ({ addItem: (input) => add(input), isAdding }), [add, isAdding]);
+
+  const state = useMemo(
     () => ({
       ...cart,
       mode,
@@ -147,28 +168,19 @@ function useCartStore(mode, enabled, scope) {
       isLoading: enabled && isLoading,
       isError,
 
-      addItem: (input) => addItem.mutateAsync(input),
-      setQuantity: (input) => setQuantity.mutateAsync(input),
-      removeItem: (input) => removeItem.mutateAsync(input),
-      clearCart: () => clearCart.mutateAsync(),
+      setQuantity: (input) => changeQuantity(input),
+      removeItem: (input) => remove(input),
+      clearCart: () => clear(),
 
       ...selection,
       isSelected: (id) => !deselectedIds.has(id),
       toggleSelected,
       selectAll,
       deselectAll,
-      removeSelected: () => removeSelected.mutateAsync(selection.selectedIds),
+      removeSelected: () => removeMany(selection.selectedIds),
 
-      isAdding: addItem.isPending,
-      pendingLineId:
-        (setQuantity.isPending ? setQuantity.variables?.cartItemId : null) ??
-        (removeItem.isPending ? removeItem.variables?.cartItemId : null) ??
-        null,
-      isMutating:
-        setQuantity.isPending ||
-        removeItem.isPending ||
-        removeSelected.isPending ||
-        clearCart.isPending,
+      pendingLineId,
+      isMutating,
     }),
     [
       cart,
@@ -176,18 +188,21 @@ function useCartStore(mode, enabled, scope) {
       enabled,
       isLoading,
       isError,
-      addItem,
-      setQuantity,
-      removeItem,
-      removeSelected,
-      clearCart,
+      changeQuantity,
+      remove,
+      clear,
+      removeMany,
       selection,
       deselectedIds,
       toggleSelected,
       selectAll,
       deselectAll,
+      pendingLineId,
+      isMutating,
     ]
   );
+
+  return { state, actions };
 }
 
 export function CartProvider({ children }) {
@@ -247,11 +262,20 @@ export function CartProvider({ children }) {
   const advance = useCartStore(CART_MODE.ADVANCE, signedIn && onAdvancePages, SCOPE.ACCOUNT);
 
   const value = useMemo(
-    () => ({ [CART_MODE.IMMEDIATE]: immediate, [CART_MODE.ADVANCE]: advance }),
-    [immediate, advance]
+    () => ({ [CART_MODE.IMMEDIATE]: immediate.state, [CART_MODE.ADVANCE]: advance.state }),
+    [immediate.state, advance.state]
   );
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  const actions = useMemo(
+    () => ({ [CART_MODE.IMMEDIATE]: immediate.actions, [CART_MODE.ADVANCE]: advance.actions }),
+    [immediate.actions, advance.actions]
+  );
+
+  return (
+    <CartActionsContext.Provider value={actions}>
+      <CartContext.Provider value={value}>{children}</CartContext.Provider>
+    </CartActionsContext.Provider>
+  );
 }
 
 export default CartContext;

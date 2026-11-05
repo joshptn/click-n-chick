@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useQueryClient } from "@tanstack/react-query";
 
 import AuthContext from "./AuthContext";
+import { LastOrderEventContext, LiveNotificationsContext } from "./realtimeSlices";
 import toast from "../components/app/Toast";
 import { ROLES } from "../lib/roles";
 import { disconnectEcho, getEcho, isRealtimeConfigured } from "../lib/echo";
@@ -110,7 +111,14 @@ export function RealtimeProvider({ children }) {
     // effect, so a signed-out visitor got no stock updates at all.
     echo.channel("menu")
       .subscribed(() => markSubscribed("menu"))
-      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }));
+      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }))
+      // A category added, renamed or deleted by the Store Manager. A rename also
+      // changes the name every dish in it carries, so the dishes come too.
+      .listen(".category", (payload) => {
+        queryClient.invalidateQueries({ queryKey: ["categories"] });
+
+        if (payload?.event === "renamed") queryClient.invalidateQueries({ queryKey: ["foods"] });
+      });
 
     // Ordering paused or resumed, delivery switched, hours moved. The payload is
     // the same snapshot /api/store/status returns, so it replaces the cache as
@@ -232,24 +240,33 @@ export function RealtimeProvider({ children }) {
 
   const markAllRead = useCallback(() => setNotifications([]), []);
 
-  const value = useMemo(
+  // Three slices, so a component reading one is not re-rendered by the others:
+  // the connection, the live notifications, and the last order broadcast.
+  const connection = useMemo(
     () => ({
       status,
       isConnected: status === "connected",
       isConfigured: isRealtimeConfigured(),
-      notifications,
-      unreadCount: notifications.length,
-      lastOrderEvent,
-      markAllRead,
       subscribed,
       isSubscribed: (name) => subscribed.includes(name),
       // The user's own channel is live, so no notification can be missed.
       isReady: user?.id ? subscribed.includes(`notifications.${user.id}`) : false,
     }),
-    [status, notifications, lastOrderEvent, markAllRead, subscribed, user?.id]
+    [status, subscribed, user?.id]
   );
 
-  return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;
+  const live = useMemo(
+    () => ({ notifications, unreadCount: notifications.length, markAllRead }),
+    [notifications, markAllRead]
+  );
+
+  return (
+    <RealtimeContext.Provider value={connection}>
+      <LiveNotificationsContext.Provider value={live}>
+        <LastOrderEventContext.Provider value={lastOrderEvent}>{children}</LastOrderEventContext.Provider>
+      </LiveNotificationsContext.Provider>
+    </RealtimeContext.Provider>
+  );
 }
 
 export default RealtimeContext;

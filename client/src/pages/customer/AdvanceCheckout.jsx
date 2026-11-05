@@ -16,7 +16,7 @@ import { ROLES } from "../../lib/roles";
 import { fetchAdvanceQuote, formatCollectionDate, submitAdvanceOrder, toScheduleIso } from "../../lib/advance";
 import { formatPeso } from "../../lib/menu";
 import { primeRecaptcha } from "../../lib/recaptcha";
-import { useCart } from "../../context/useCart";
+import { useCartState } from "../../context/useCart";
 
 const STEPS = [
   { id: "schedule", label: "Schedule", shortLabel: "When" },
@@ -30,7 +30,7 @@ function AdvanceCheckout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useContext(AuthContext);
-  const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCart(CART_MODE.ADVANCE);
+  const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCartState(CART_MODE.ADVANCE);
 
   const routeSelection = location.state?.selectedIds ?? null;
   const initialSelection = useRef(routeSelection);

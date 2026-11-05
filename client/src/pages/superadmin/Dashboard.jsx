@@ -1,7 +1,7 @@
 import { Card, Stack, Text, Title } from "@mantine/core";
 
 import StaffLayout from "../../components/staff/StaffLayout";
-import { useRealtime } from "../../context/useRealtime";
+import { useLastOrderEvent } from "../../context/useRealtime";
 
 /**
  * The Store Manager's landing page - still a placeholder.
@@ -10,7 +10,7 @@ import { useRealtime } from "../../context/useRealtime";
  * shared staff pages) is reachable from where sign-in lands them.
  */
 function SuperAdminDashboard() {
-  const { lastOrderEvent } = useRealtime();
+  const lastOrderEvent = useLastOrderEvent();
 
   return (
     <StaffLayout>
