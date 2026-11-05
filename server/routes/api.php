@@ -215,6 +215,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::put('/foods/{food}', [FoodController::class, 'update']);
     Route::patch('/foods/{food}', [FoodController::class, 'update']);
     Route::delete('/foods/{food}', [FoodController::class, 'destroy']);
+    Route::patch('/foods/{food}/archive', [FoodController::class, 'archive']);
 
     Route::post('/category', [CategoryController::class, 'store']);
     Route::put('/category/{category}', [CategoryController::class, 'update']);
