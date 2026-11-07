@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Container, Flex, Grid, Group, Image, Text } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { IconBrandFacebookFilled, IconClock, IconMail, IconMapPinFilled, IconPhoneFilled } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 
 import LogoIcon from '../../assets/logo-icon.png';
@@ -8,17 +8,19 @@ import LogoIcon from '../../assets/logo-icon.png';
 const MotionDiv = motion.div;
 
 const CONTACT_ROWS = [
-  { icon: 'carbon:location-filled', lines: ['Sampaloc, Apalit', 'Pampanga, Philippines'] },
-  { icon: 'carbon:phone-filled', lines: ['+63 123 456 789'] },
-  { icon: 'carbon:email', lines: ['info@houseofchicken.com'] },
+  { key: 'address', icon: IconMapPinFilled, lines: ['Sampaloc, Apalit', 'Pampanga, Philippines'] },
+  { key: 'phone', icon: IconPhoneFilled, lines: ['+63 123 456 789'] },
+  { key: 'email', icon: IconMail, lines: ['info@houseofchicken.com'] },
 ];
 
 const LEGAL_LINKS = ['Privacy Policy', 'Terms of Service', 'Cookie Policy'];
 
 function IconBadge({ icon }) {
+  const Glyph = icon;
+
   return (
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white" aria-hidden="true">
-      <Icon icon={icon} width={17} height={17} />
+      <Glyph size={17} stroke={2} />
     </span>
   );
 }
@@ -77,7 +79,7 @@ export default function SiteFooter() {
 
               <Flex direction="column" gap="lg">
                 {CONTACT_ROWS.map((row) => (
-                  <Group key={row.icon} gap="md" align="center" wrap="nowrap">
+                  <Group key={row.key} gap="md" align="center" wrap="nowrap">
                     <IconBadge icon={row.icon} />
 
                     <div>
@@ -104,7 +106,7 @@ export default function SiteFooter() {
                     rel="noreferrer noopener"
                     className="inline-flex items-center gap-4 text-white no-underline transition-colors duration-200 hover:text-accent"
                   >
-                    <IconBadge icon="fa-brands:facebook-f" />
+                    <IconBadge icon={IconBrandFacebookFilled} />
 
                     <Text fw={500} className="font-display text-[14px]">
                       House of Chicken
@@ -118,7 +120,7 @@ export default function SiteFooter() {
                   </Text>
 
                   <Group gap="md" align="center" wrap="nowrap">
-                    <IconBadge icon="carbon:time" />
+                    <IconBadge icon={IconClock} />
 
                     <div>
                       <Text fw={500} className="font-display text-[14px] text-white">
