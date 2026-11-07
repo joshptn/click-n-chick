@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@iconify/react": "^6.0.2",
     "@mantine/core": "^8.2.8",
     "@mantine/hooks": "^8.2.8",
     "@mantine/notifications": "^8.3.5",
