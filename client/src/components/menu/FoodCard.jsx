@@ -1,11 +1,20 @@
-import { IconPhotoOff, IconPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 
+import DishImage from "./DishImage";
 import { formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
 const MotionArticle = motion.article;
 
-function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0, isAdvance = false }) {
+// The menu grid: two columns on phones, three from 640px, and about 330px a
+// card once the cart panel docks beside it at 1280px.
+const CARD_IMAGE = {
+  widths: [160, 320, 480, 640, 960],
+  sizes: "(min-width: 1280px) 330px, (min-width: 640px) 33vw, 50vw",
+  fallback: 480,
+};
+
+function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0, isAdvance = false, priority = false }) {
   const orderable = isAdvance || food.is_orderable;
   const label = isAdvance ? null : stockLabel(food);
 
@@ -24,20 +33,13 @@ function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0, isA
         aria-label={`View ${food.food_name}`}
         className="relative block aspect-[4/3] w-full cursor-pointer overflow-hidden border-0 bg-[#f4f1ec] p-0"
       >
-        {food.thumbnail ? (
-          <img
-            src={food.thumbnail}
-            alt={food.food_name}
-            loading="lazy"
-            className={`h-full w-full object-cover transition-all duration-500 ${
-              orderable ? "group-hover:scale-105" : "grayscale"
-            }`}
-          />
-        ) : (
-          <span className="grid h-full w-full place-items-center text-[#c9c2b8]">
-            <IconPhotoOff size={26} stroke={1.6} aria-hidden="true" />
-          </span>
-        )}
+        <DishImage
+          url={food.thumbnail}
+          alt={food.food_name}
+          {...CARD_IMAGE}
+          priority={priority}
+          className={orderable ? "group-hover:scale-105" : "grayscale"}
+        />
 
         {food.is_best_seller && (
           <span className="absolute left-0 top-3 rounded-r-[6px] bg-brand-500 py-1 pl-3 pr-2.5 font-display text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-white">

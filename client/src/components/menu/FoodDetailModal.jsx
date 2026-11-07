@@ -5,26 +5,31 @@ import {
   IconArrowLeft,
   IconClock,
   IconMinus,
-  IconPhotoOff,
   IconPlus,
   IconShoppingBagPlus,
   IconTrash,
 } from "@tabler/icons-react";
 
+import DishImage from "./DishImage";
 import { fetchFood, formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
 function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdvance = false }) {
   const [quantity, setQuantity] = useState(1);
   const [selectedAddons, setSelectedAddons] = useState([]);
 
+  // The menu listing already carries everything shown here, add-ons included,
+  // and it is the copy realtime keeps current. Only a dish handed over without
+  // its add-ons is asked for on its own.
+  const needsDetail = Boolean(food?.id) && !Array.isArray(food?.addon_groups);
+
   const { data } = useQuery({
     queryKey: ["food", food?.id],
     queryFn: () => fetchFood(food.id),
-    enabled: Boolean(food?.id) && opened,
+    enabled: needsDetail && opened,
     staleTime: 60 * 1000,
   });
 
-  const detail = data?.data ?? food;
+  const detail = (needsDetail ? data?.data : null) ?? food;
 
   useEffect(() => {
     setQuantity(1);
@@ -74,17 +79,17 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
       <div className="grid max-h-[88dvh] grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
 
         <div className="relative hidden min-h-[260px] bg-[#f4f1ec] md:block">
-          {detail.thumbnail ? (
-            <img
-              src={detail.thumbnail}
-              alt={detail.food_name}
-              className={`h-full w-full object-cover ${orderable ? "" : "grayscale"}`}
-            />
-          ) : (
-            <span className="grid h-full w-full place-items-center text-[#c9c2b8]">
-              <IconPhotoOff size={30} stroke={1.6} aria-hidden="true" />
-            </span>
-          )}
+          {/* About 450px wide beside the details; hidden below md, where lazy
+              loading keeps the hidden photo from downloading at all. */}
+          <DishImage
+            url={detail.thumbnail}
+            alt={detail.food_name}
+            widths={[480, 640, 960, 1280]}
+            sizes="450px"
+            fallback={640}
+            className={orderable ? "" : "grayscale"}
+            iconSize={30}
+          />
 
           {detail.is_best_seller && (
             <span className="absolute left-5 top-5 rounded-full bg-brand-500 px-3.5 py-1.5 font-display text-[10px] font-extrabold uppercase tracking-[0.08em] text-white">

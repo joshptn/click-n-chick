@@ -45,6 +45,10 @@ function AdvanceOrder() {
 
   const foods = useMemo(() => data?.data ?? [], [data]);
 
+  // The open dish follows the listing, so a live change reaches the modal
+  // without it asking the server again.
+  const openFood = selectedFood ? (foods.find((food) => food.id === selectedFood.id) ?? selectedFood) : null;
+
   const isBrowsing = debouncedSearch === "";
 
   const handleQuickAdd = async (food) => {
@@ -153,6 +157,7 @@ function AdvanceOrder() {
                       key={food.id}
                       food={food}
                       index={index}
+                      priority={index < 3}
                       isAdding={isAdding}
                       isAdvance
                       onSelect={setSelectedFood}
@@ -175,7 +180,7 @@ function AdvanceOrder() {
       </main>
 
       <FoodDetailModal
-        food={selectedFood}
+        food={openFood}
         opened={Boolean(selectedFood)}
         onClose={() => setSelectedFood(null)}
         onAdd={handleAddFromModal}

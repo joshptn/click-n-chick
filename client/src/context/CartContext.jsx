@@ -23,6 +23,18 @@ const EMPTY = {
 /** Scope is in the key as well as the path, so one never serves the other's cache. */
 const SCOPE = { ACCOUNT: "account", GUEST: "guest" };
 
+/** Pages that never show the immediate cart: the staff portal and the sign-in screens. */
+const NO_CART_PATHS = [
+  "/admin",
+  "/superadmin",
+  "/login",
+  "/register",
+  "/verify-",
+  "/two-factor",
+  "/forgot-password",
+  "/reset-password",
+];
+
 function useCartStore(mode, enabled, scope) {
   const queryClient = useQueryClient();
 
@@ -250,10 +262,17 @@ export function CartProvider({ children }) {
       });
   }, [signedIn, queryClient]);
 
-  // Always on: a guest has a cart too, it just lives against a token.
+  // A guest has a cart too, it just lives against a token - but only once they
+  // have added something: before that there is nothing to ask for, and the
+  // first add's answer fills the cart in. Staff pages and the sign-in screens
+  // show no cart at all (a Store Agent signing in would otherwise ask for one
+  // on the way to the staff portal).
+  const showsNoCart = NO_CART_PATHS.some((prefix) => pathname.startsWith(prefix));
+  const hasCart = signedIn || Boolean(guestToken());
+
   const immediate = useCartStore(
     CART_MODE.IMMEDIATE,
-    true,
+    hasCart && !showsNoCart,
     signedIn ? SCOPE.ACCOUNT : SCOPE.GUEST
   );
 

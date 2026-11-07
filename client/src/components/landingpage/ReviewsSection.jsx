@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ActionIcon, Avatar, Box, Card, Container, Flex, Grid, Group, Image, Text } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { IconArrowLeft, IconArrowRight, IconQuoteFilled, IconStarFilled } from '@tabler/icons-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const MotionDiv = motion.div;
@@ -52,7 +52,7 @@ export default function ReviewsSection() {
               </h2>
 
               <div className="mt-5 text-accent" aria-hidden="true">
-                <Icon icon="fa-solid:quote-left" width={40} height={40} className="opacity-25" />
+                <IconQuoteFilled size={40} className="opacity-25" />
               </div>
 
               <div className="relative mt-5 min-h-[132px]">
@@ -91,7 +91,7 @@ export default function ReviewsSection() {
                     aria-label="Previous review"
                     className="text-ink-500 transition-colors duration-200 hover:bg-brand-50 hover:text-brand-700"
                   >
-                    <Icon icon="lucide:arrow-left" width={20} height={20} />
+                    <IconArrowLeft size={20} stroke={2} />
                   </ActionIcon>
 
                   <ActionIcon
@@ -103,7 +103,7 @@ export default function ReviewsSection() {
                     aria-label="Next review"
                     className="text-ink-500 transition-colors duration-200 hover:bg-brand-50 hover:text-brand-700"
                   >
-                    <Icon icon="lucide:arrow-right" width={20} height={20} />
+                    <IconArrowRight size={20} stroke={2} />
                   </ActionIcon>
                 </Group>
               </Flex>
@@ -147,7 +147,7 @@ export default function ReviewsSection() {
 
                   <Group gap={4} mb={10} aria-label="Rated 5 out of 5">
                     {[1, 2, 3, 4, 5].map((star) => (
-                      <Icon key={star} icon="fa6-solid:star" width={14} height={14} className="text-accent" />
+                      <IconStarFilled key={star} size={14} className="text-accent" />
                     ))}
                   </Group>
 

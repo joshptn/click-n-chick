@@ -4,7 +4,7 @@ import { IconAlertTriangle, IconClock, IconMapPin, IconNote } from "@tabler/icon
 
 import AddressSearch from "../checkout/AddressSearch";
 import Button from "../ui/Button";
-import DeliveryMap from "../checkout/DeliveryMap";
+import DeliveryMap from "../checkout/LazyDeliveryMap";
 import { isoToPickupTime, pickupTimeToIso, reverseGeocode } from "../../lib/checkout";
 
 function EditOrderModal({ order, opened, onClose, onSave, isSaving, error }) {

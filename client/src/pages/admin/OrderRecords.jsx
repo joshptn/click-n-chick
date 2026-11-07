@@ -11,7 +11,7 @@ import StaffLayout from "../../components/staff/StaffLayout";
 import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
-import { useOrderRecord, useOrderRecords } from "../../hooks/useOrderRecords";
+import { useOrderRecord, useOrderRecords, useRecordPrefetch } from "../../hooks/useOrderRecords";
 import { formatPeso } from "../../lib/menu";
 import {
   DATE_RANGES,
@@ -71,7 +71,7 @@ function KindTag({ record }) {
 const GRID =
   "grid grid-cols-[minmax(92px,0.9fr)_minmax(120px,1.3fr)_minmax(120px,1.6fr)_minmax(64px,0.6fr)_minmax(80px,0.8fr)_minmax(88px,0.7fr)] items-center gap-x-3";
 
-function TableView({ records, loading, selectedId, onSelect }) {
+function TableView({ records, loading, selectedId, onSelect, intent }) {
   return (
     <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-[#f0e9df]">
       <div className="min-w-[640px]">
@@ -105,6 +105,9 @@ function TableView({ records, loading, selectedId, onSelect }) {
                   key={record.id}
                   type="button"
                   onClick={() => onSelect(record)}
+                  onPointerEnter={() => intent.intend(record.id)}
+                  onPointerLeave={intent.cancel}
+                  onFocus={() => intent.intend(record.id)}
                   aria-pressed={selected}
                   data-testid="record-row"
                   data-record={record.id}
@@ -150,7 +153,7 @@ function TableView({ records, loading, selectedId, onSelect }) {
   );
 }
 
-function CardView({ records, loading, selectedId, onSelect }) {
+function CardView({ records, loading, selectedId, onSelect, intent }) {
   if (loading) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -168,6 +171,9 @@ function CardView({ records, loading, selectedId, onSelect }) {
           key={record.id}
           type="button"
           onClick={() => onSelect(record)}
+          onPointerEnter={() => intent.intend(record.id)}
+          onPointerLeave={intent.cancel}
+          onFocus={() => intent.intend(record.id)}
           aria-pressed={String(record.id) === selectedId}
           data-testid="record-row"
           data-record={record.id}
@@ -238,6 +244,8 @@ function OrderRecords() {
   const params = recordQueryParams(filters);
   const list = useOrderRecords(params);
   const detail = useOrderRecord(selectedId);
+  // Details for a row the pointer or focus rests on, so picking it is instant.
+  const intent = useRecordPrefetch();
 
   // Paging is a step the Back button should undo; filtering and selecting
   // replace the entry so Back leaves the page rather than replaying each tap.
@@ -480,9 +488,9 @@ function OrderRecords() {
             ) : (
               <div className={`transition-opacity ${list.isPlaceholder ? "opacity-60" : ""}`} aria-busy={list.isFetching}>
                 {wide ? (
-                  <TableView records={list.records} loading={list.isLoading} selectedId={selectedId} onSelect={select} />
+                  <TableView records={list.records} loading={list.isLoading} selectedId={selectedId} onSelect={select} intent={intent} />
                 ) : (
-                  <CardView records={list.records} loading={list.isLoading} selectedId={selectedId} onSelect={select} />
+                  <CardView records={list.records} loading={list.isLoading} selectedId={selectedId} onSelect={select} intent={intent} />
                 )}
               </div>
             )}

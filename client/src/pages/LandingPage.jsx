@@ -7,12 +7,16 @@ import MenuSection from '../components/landingpage/MenuSection';
 import CtaBanner from '../components/landingpage/CtaBanner';
 import ReviewsSection from '../components/landingpage/ReviewsSection';
 import SiteFooter from '../components/landingpage/SiteFooter';
+import { pages, preloadWhenIdle } from '../lib/pages';
 
 const SECTION_IDS = ['home', 'menu', 'reviews', 'contact'];
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState('home');
+
+  // Order Now leads to the menu, so its code is fetched once this page settles.
+  useEffect(() => preloadWhenIdle([pages.Home]), []);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);

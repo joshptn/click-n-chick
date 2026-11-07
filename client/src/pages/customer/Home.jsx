@@ -18,6 +18,9 @@ import { useStoreStatus } from "../../lib/store";
 /** Long enough that typing does not fire a request per keystroke. */
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** Cards whose photos load first: the top row, the part of the menu seen first. */
+const FIRST_ROW = 3;
+
 function Home() {
   const [category, setCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState("");
@@ -44,6 +47,10 @@ function Home() {
   });
 
   const foods = useMemo(() => data?.data ?? [], [data]);
+
+  // The open dish follows the listing, so a live stock or price change reaches
+  // the modal without it asking the server again.
+  const openFood = selectedFood ? (foods.find((food) => food.id === selectedFood.id) ?? selectedFood) : null;
 
   // A search is a search across the whole menu, so the "Popular Dishes" split
   // only makes sense while browsing.
@@ -165,6 +172,7 @@ function Home() {
                       key={food.id}
                       food={food}
                       index={index}
+                      priority={index < FIRST_ROW}
                       isAdding={isAdding}
                       onSelect={setSelectedFood}
                       onQuickAdd={handleQuickAdd}
@@ -186,6 +194,7 @@ function Home() {
                       key={food.id}
                       food={food}
                       index={index}
+                      priority={popular.length === 0 && index < FIRST_ROW}
                       isAdding={isAdding}
                       onSelect={setSelectedFood}
                       onQuickAdd={handleQuickAdd}
@@ -205,7 +214,7 @@ function Home() {
       </main>
 
       <FoodDetailModal
-        food={selectedFood}
+        food={openFood}
         opened={Boolean(selectedFood)}
         onClose={() => setSelectedFood(null)}
         onAdd={handleAddFromModal}

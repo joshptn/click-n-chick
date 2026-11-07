@@ -3,6 +3,7 @@ import { Modal } from "@mantine/core";
 import { IconAlertTriangle, IconPhotoOff } from "@tabler/icons-react";
 
 import Button from "../ui/Button";
+import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 
 /**
@@ -48,7 +49,7 @@ function DeleteProductModal({ food, opened, onClose, onConfirm, loading }) {
           <div className="flex items-center gap-3 rounded-[12px] bg-[#faf6f0] p-3">
             <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[10px] bg-[#f1ece5]">
               {food.thumbnail && !failedImage ? (
-                <img src={food.thumbnail} alt="" onError={() => setFailedImage(true)} className="h-full w-full object-cover" />
+                <img {...thumbnailImage(food.thumbnail, 48)} alt="" onError={() => setFailedImage(true)} className="h-full w-full object-cover" />
               ) : (
                 <IconPhotoOff size={18} stroke={1.6} className="text-[#cfc7bd]" />
               )}

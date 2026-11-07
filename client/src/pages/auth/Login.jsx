@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { IconAlertCircle, IconLock, IconUser } from "@tabler/icons-react";
 
@@ -10,6 +10,7 @@ import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import toast from "../../components/app/Toast";
 import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
+import { pages, preloadWhenIdle } from "../../lib/pages";
 
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
@@ -23,6 +24,9 @@ function Login() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Most sign-ins land on the menu; fetch its code while the form is filled in.
+  useEffect(() => preloadWhenIdle([pages.Home]), []);
 
   const handleLogin = async (e) => {
     e.preventDefault();

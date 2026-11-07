@@ -14,7 +14,8 @@ const MotionDiv = motion.div;
 
 import AddressSearch from "./AddressSearch";
 import Button from "../ui/Button";
-import DeliveryMap from "./DeliveryMap";
+import DeliveryMap from "./LazyDeliveryMap";
+import { preloadDeliveryMap } from "../../lib/deliveryMap";
 import Field from "../ui/Field";
 import Input from "../ui/Input";
 import { FULFILMENT, blockerFor, reverseGeocode } from "../../lib/checkout";
@@ -47,6 +48,10 @@ export function FulfilmentToggle({ value, onChange, deliveryDisabled }) {
             aria-checked={isActive}
             disabled={isDisabled}
             title={isDisabled ? "Delivery is paused right now" : undefined}
+            // Reaching for Delivery starts the map's download, so it is
+            // usually there by the time the choice is made.
+            onPointerEnter={id === FULFILMENT.DELIVERY ? preloadDeliveryMap : undefined}
+            onFocus={id === FULFILMENT.DELIVERY ? preloadDeliveryMap : undefined}
             onClick={() => onChange(id)}
             className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-display text-[12.5px] font-bold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 ${
               isActive ? "bg-brand-500 text-white shadow-[0_2px_8px_-2px_rgba(255,139,43,0.6)]" : "bg-transparent text-[#6f6b68] hover:text-ink"
