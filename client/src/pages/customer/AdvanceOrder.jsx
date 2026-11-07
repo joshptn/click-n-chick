@@ -153,6 +153,7 @@ function AdvanceOrder() {
                       key={food.id}
                       food={food}
                       index={index}
+                      priority={index < 3}
                       isAdding={isAdding}
                       isAdvance
                       onSelect={setSelectedFood}

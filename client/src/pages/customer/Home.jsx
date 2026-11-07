@@ -18,6 +18,9 @@ import { useStoreStatus } from "../../lib/store";
 /** Long enough that typing does not fire a request per keystroke. */
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** Cards whose photos load first: the top row, the part of the menu seen first. */
+const FIRST_ROW = 3;
+
 function Home() {
   const [category, setCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState("");
@@ -165,6 +168,7 @@ function Home() {
                       key={food.id}
                       food={food}
                       index={index}
+                      priority={index < FIRST_ROW}
                       isAdding={isAdding}
                       onSelect={setSelectedFood}
                       onQuickAdd={handleQuickAdd}
@@ -186,6 +190,7 @@ function Home() {
                       key={food.id}
                       food={food}
                       index={index}
+                      priority={popular.length === 0 && index < FIRST_ROW}
                       isAdding={isAdding}
                       onSelect={setSelectedFood}
                       onQuickAdd={handleQuickAdd}
