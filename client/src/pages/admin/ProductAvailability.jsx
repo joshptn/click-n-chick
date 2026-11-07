@@ -12,6 +12,7 @@ import StatusSummary from "../../components/staff/StatusSummary";
 import StockControl from "../../components/staff/StockControl";
 import Button from "../../components/ui/Button";
 import { useStock } from "../../hooks/useStock";
+import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 import { ROLES } from "../../lib/roles";
 import { SALES_STATUS_NOTE, SALES_STATUS_PREVIEW, matchesSalesStatus, salesStatusOf } from "../../lib/salesStatusPreview";
@@ -49,7 +50,7 @@ function Thumb({ food }) {
     >
       {food.thumbnail && !failed ? (
         <img
-          src={food.thumbnail}
+          {...thumbnailImage(food.thumbnail, 52)}
           alt=""
           loading="lazy"
           onError={() => setFailed(true)}

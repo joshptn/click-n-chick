@@ -18,6 +18,7 @@ import {
   imageProblem,
   saveFood,
 } from "../../lib/catalog";
+import { thumbnailImage } from "../../lib/images";
 import { fetchCategories, formatPeso } from "../../lib/menu";
 import { SALES_STATUS_NOTE } from "../../lib/salesStatusPreview";
 
@@ -106,7 +107,7 @@ function ImagePicker({ current, file, onPick, onClear, error }) {
       >
         {shown ? (
           <>
-            <img src={shown} alt="" className="h-[96px] w-[96px] rounded-[10px] object-cover ring-1 ring-[#f0e9df]" />
+            <img {...thumbnailImage(shown, 96)} alt="" className="h-[96px] w-[96px] rounded-[10px] object-cover ring-1 ring-[#f0e9df]" />
             <span className="text-left">
               <span className="block font-display text-[13px] font-semibold text-ink">
                 {file ? file.name : "Current photo"}

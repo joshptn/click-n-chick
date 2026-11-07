@@ -11,6 +11,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 
 import { CART_MODE } from "../../lib/cartModes";
+import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 import { useCartState } from "../../context/useCart";
 
@@ -148,7 +149,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                   <span className="h-11 w-11 shrink-0 overflow-hidden rounded-[9px] bg-[#f4f1ec]">
                     {line.thumbnail ? (
                       <img
-                        src={line.thumbnail}
+                        {...thumbnailImage(line.thumbnail, 44)}
                         alt=""
                         className={`h-full w-full object-cover ${line.is_orderable ? "" : "grayscale"}`}
                       />

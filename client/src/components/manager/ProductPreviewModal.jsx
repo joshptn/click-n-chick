@@ -3,6 +3,7 @@ import { Modal } from "@mantine/core";
 import { IconPhotoOff, IconX } from "@tabler/icons-react";
 
 import { isArchived } from "../../lib/catalog";
+import { responsiveImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 import { categoryTone } from "../../lib/stock";
 
@@ -27,7 +28,7 @@ function ProductPreviewModal({ food, opened, onClose }) {
         <div data-testid="product-preview" data-food={food.id}>
           <div className="relative grid aspect-[16/9] place-items-center overflow-hidden bg-[#f4f1ec]">
             {food.thumbnail && !failed ? (
-              <img src={food.thumbnail} alt="" onError={() => setFailed(true)} className="h-full w-full object-cover" />
+              <img {...responsiveImage(food.thumbnail, { widths: [480, 640, 960], sizes: "360px", fallback: 480 })} alt="" onError={() => setFailed(true)} className="h-full w-full object-cover" />
             ) : (
               <IconPhotoOff size={28} stroke={1.5} className="text-[#cfc7bd]" />
             )}

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { IconChevronLeft, IconChevronRight, IconPhoto } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { responsiveImage } from "../../lib/images";
 import { fetchPosters } from "../../lib/menu";
 
 const MotionDiv = motion.div;
@@ -74,10 +75,17 @@ function PosterBanner() {
           transition={{ duration: 0.45, ease: "easeOut" }}
           className="h-[150px] w-full sm:h-[186px]"
         >
+          {/* The banner leads the page: the first poster loads at once and
+              ahead of the dish photos, at the banner's width (the full column,
+              about 1020px beside the docked cart). */}
           <img
-            src={poster.image}
+            {...responsiveImage(poster.image, {
+              widths: [640, 960, 1280, 1920],
+              sizes: "(min-width: 1280px) 1020px, 100vw",
+              fallback: 1280,
+            })}
             alt={poster.poster_name}
-            loading="lazy"
+            fetchPriority={index === 0 ? "high" : undefined}
             className="h-full w-full object-cover"
           />
         </MotionDiv>

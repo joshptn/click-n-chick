@@ -86,6 +86,8 @@ export default function HeroSection({ onExplore }) {
             >
               <Image
                 src={chickenHero}
+                // The page's largest picture: fetched ahead of everything below it.
+                fetchPriority="high"
                 alt="Mascot chicken riding a scooter with a bucket of fried chicken"
                 w="100%"
                 h="auto"

@@ -26,6 +26,7 @@ import StaffSearch from "../../components/staff/StaffSearch";
 import Button from "../../components/ui/Button";
 import { useCatalog } from "../../hooks/useCatalog";
 import { STATUS_FILTERS, isArchived, matchesStatus } from "../../lib/catalog";
+import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 import { SALES_STATUS_NOTE, SALES_STATUS_PREVIEW, matchesSalesStatus, salesStatusOf } from "../../lib/salesStatusPreview";
 import { PRICE_FILTERS, SORTS, categoryTone, matchesPrice, matchesText } from "../../lib/stock";
@@ -47,7 +48,7 @@ function Thumb({ food, onOpen }) {
       }`}
     >
       {food.thumbnail && !failed ? (
-        <img src={food.thumbnail} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" draggable={false} />
+        <img {...thumbnailImage(food.thumbnail, 52)} alt="" loading="lazy" onError={() => setFailed(true)} className="h-full w-full object-cover" draggable={false} />
       ) : (
         <IconPhotoOff size={18} stroke={1.6} className="text-[#cfc7bd]" />
       )}

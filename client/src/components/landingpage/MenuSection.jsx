@@ -1,16 +1,22 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Box, Button, Container, Flex, Grid, Group, Image, Text } from '@mantine/core';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
 
+import { cloudinaryUrl } from '../../lib/images';
 import { fetchFoods, formatPeso } from '../../lib/menu';
 
 const MotionDiv = motion.div;
 
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 3000;
+
+// Cards are up to about 400px wide (one, two or three to a row). One fixed size
+// rather than a srcset, so the rotation's preloads are the very files the
+// cards then show.
+const CARD_WIDTH = 640;
 
 function MenuCard({ item, onSelect }) {
   return (
@@ -26,7 +32,7 @@ function MenuCard({ item, onSelect }) {
         )}
 
         <Image
-          src={item.thumbnail}
+          src={cloudinaryUrl(item.thumbnail, CARD_WIDTH)}
           alt={item.food_name}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
@@ -71,13 +77,40 @@ export default function MenuSection() {
 
   const items = useMemo(() => data?.data ?? [], [data]);
 
+  // The rotation's other photos are fetched ahead of their turn, but only once
+  // the section is on screen: a visitor who never scrolls this far never pays
+  // for them.
+  const sectionRef = useRef(null);
+  const [onScreen, setOnScreen] = useState(false);
+
   useEffect(() => {
+    const section = sectionRef.current;
+
+    if (!section || onScreen) return undefined;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setOnScreen(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setOnScreen(true);
+    });
+
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, [onScreen]);
+
+  useEffect(() => {
+    if (!onScreen) return;
+
     items.forEach((item) => {
       if (!item.thumbnail) return;
       const preload = new window.Image();
-      preload.src = item.thumbnail;
+      preload.src = cloudinaryUrl(item.thumbnail, CARD_WIDTH);
     });
-  }, [items]);
+  }, [items, onScreen]);
 
   // A shorter catalogue than the rail is wide must not repeat a card.
   const visibleCount = Math.min(VISIBLE_COUNT, items.length);
@@ -100,7 +133,7 @@ export default function MenuSection() {
   );
 
   return (
-    <Box id="menu" data-scroll-section component="section" className="bg-cocoa-700 py-24 text-white md:py-32">
+    <Box ref={sectionRef} id="menu" data-scroll-section component="section" className="bg-cocoa-700 py-24 text-white md:py-32">
       <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
 
         <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap="xl" mb={50}>
