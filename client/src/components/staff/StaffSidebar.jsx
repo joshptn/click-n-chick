@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { Tooltip } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
@@ -28,6 +28,14 @@ import {
   fetchPendingDiscountClaims,
   staffNotificationTarget,
 } from "../../lib/agent";
+import { pages, preloadWhenIdle } from "../../lib/pages";
+
+// The pages each role's sidebar links to. Staff move between them all day, so
+// their code is fetched once the first staff page has settled.
+const SIDEBAR_PAGES = {
+  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.OrderRecords],
+  agent: [pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.ProductAvailability, pages.OrderRecords],
+};
 
 function Badge({ count, inverted = false }) {
   if (!count) return null;
@@ -64,6 +72,9 @@ function StaffSidebar({ onNavigate }) {
   });
 
   const manager = user?.role === ROLES.SUPER_ADMIN;
+
+  useEffect(() => preloadWhenIdle(SIDEBAR_PAGES[manager ? "manager" : "agent"]), [manager]);
+
   const advanceEntry = {
     label: "Advance Orders",
     icon: IconCalendarTime,

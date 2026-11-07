@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   IconAlertTriangle,
   IconCalendarPlus,
@@ -14,6 +14,7 @@ import { CART_MODE } from "../../lib/cartModes";
 import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 import { useCartState } from "../../context/useCart";
+import { pages, preloadWhenIdle } from "../../lib/pages";
 
 const MotionLi = motion.li;
 
@@ -42,6 +43,13 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
   } = useCartState(mode);
 
   const isEmpty = !isLoading && cart.length === 0;
+
+  // A cart with something in it is on its way to checkout: fetch that page's
+  // code while idle, and right away when the button is reached for.
+  const nextPage = isAdvance ? pages.AdvanceCheckout : pages.Checkout;
+  const hasItems = itemCount > 0;
+
+  useEffect(() => (hasItems ? preloadWhenIdle([nextPage]) : undefined), [hasItems, nextPage]);
 
   const repeatedFoods = useMemo(() => {
     const counts = new Map();
@@ -242,6 +250,8 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
 
         <button
           type="button"
+          onPointerEnter={nextPage.preload}
+          onFocus={nextPage.preload}
           onClick={() => onCheckout?.(selectedIds)}
           disabled={selectedCount === 0 || hasUnavailableSelected || isMutating}
           className="mt-4 inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-brand-500 font-display text-[15px] font-bold text-white transition-all duration-150 hover:bg-brand-600 active:translate-y-px disabled:cursor-not-allowed disabled:bg-brand-200"
