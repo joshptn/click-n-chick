@@ -48,6 +48,10 @@ function Home() {
 
   const foods = useMemo(() => data?.data ?? [], [data]);
 
+  // The open dish follows the listing, so a live stock or price change reaches
+  // the modal without it asking the server again.
+  const openFood = selectedFood ? (foods.find((food) => food.id === selectedFood.id) ?? selectedFood) : null;
+
   // A search is a search across the whole menu, so the "Popular Dishes" split
   // only makes sense while browsing.
   const isBrowsing = debouncedSearch === "";
@@ -210,7 +214,7 @@ function Home() {
       </main>
 
       <FoodDetailModal
-        food={selectedFood}
+        food={openFood}
         opened={Boolean(selectedFood)}
         onClose={() => setSelectedFood(null)}
         onAdd={handleAddFromModal}

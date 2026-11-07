@@ -17,14 +17,19 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
   const [quantity, setQuantity] = useState(1);
   const [selectedAddons, setSelectedAddons] = useState([]);
 
+  // The menu listing already carries everything shown here, add-ons included,
+  // and it is the copy realtime keeps current. Only a dish handed over without
+  // its add-ons is asked for on its own.
+  const needsDetail = Boolean(food?.id) && !Array.isArray(food?.addon_groups);
+
   const { data } = useQuery({
     queryKey: ["food", food?.id],
     queryFn: () => fetchFood(food.id),
-    enabled: Boolean(food?.id) && opened,
+    enabled: needsDetail && opened,
     staleTime: 60 * 1000,
   });
 
-  const detail = data?.data ?? food;
+  const detail = (needsDetail ? data?.data : null) ?? food;
 
   useEffect(() => {
     setQuantity(1);
