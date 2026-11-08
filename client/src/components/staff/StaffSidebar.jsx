@@ -33,7 +33,7 @@ import { pages, preloadWhenIdle } from "../../lib/pages";
 // The pages each role's sidebar links to. Staff move between them all day, so
 // their code is fetched once the first staff page has settled.
 const SIDEBAR_PAGES = {
-  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.OrderRecords],
+  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.DailySalesReport, pages.OrderRecords],
   agent: [pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.ProductAvailability, pages.OrderRecords],
 };
 
@@ -95,10 +95,10 @@ function StaffSidebar({ onNavigate }) {
         { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
         advanceEntry,
         discountEntry,
-        { label: "Daily Sales Report", icon: IconChartLine },
-        { label: "User Management", icon: IconUsers },
+        { label: "Daily Sales Report", icon: IconChartLine, to: "/superadmin/reports/daily" },
         { label: "Store Settings", icon: IconBuildingStore },
         { label: "Order Records", icon: IconArchive, to: "/admin/records" },
+        { label: "User Management", icon: IconUsers },
       ]
     : [
         { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
