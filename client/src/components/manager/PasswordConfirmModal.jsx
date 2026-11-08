@@ -10,7 +10,7 @@ import Input from "../ui/Input";
  * once, then trusts this session for a few minutes. The caller resends the
  * same change with the password; a wrong one comes back here inline.
  */
-function PasswordConfirmModal({ opened, onClose, onConfirm, loading, error, title, description }) {
+function PasswordConfirmModal({ opened, onClose, onConfirm, loading, error, title, description, zIndex }) {
   const [password, setPassword] = useState("");
 
   useEffect(() => {
@@ -23,6 +23,7 @@ function PasswordConfirmModal({ opened, onClose, onConfirm, loading, error, titl
       onClose={loading ? () => {} : onClose}
       centered
       radius={16}
+      zIndex={zIndex}
       title={
         <span className="flex items-center gap-2 font-display text-[16px] font-bold text-cocoa-900">
           <IconLock size={18} stroke={2} className="text-brand-600" />
