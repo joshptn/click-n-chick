@@ -166,23 +166,18 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
 });
 
-// Superadmin and Admin
+// Both staff roles. The operational pages are read here by the Store Manager too;
+// everything that changes an order or a discount claim is in the Store Agent group.
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,super_admin'])->group(function () {
     Route::get('/admin/discount-claims', [DiscountController::class, 'index']);
-    Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
-    Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
 
     Route::patch('/admin/store/toggles', [SystemSettingController::class, 'updateStoreToggles'])
         ->middleware('throttle:user-update');
 
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
-    Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
-    Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
 
     Route::get('/agent/queue', [OrderQueueController::class, 'index']);
     Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
-    Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
-    Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
     
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
 
@@ -194,6 +189,19 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/agent/stock', [StockController::class, 'index']);
     Route::get('/agent/advance-requests/{order}', [AdvanceRequestController::class, 'show'])
         ->whereNumber('order');
+});
+
+// Store Agent
+Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
+    Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
+    Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
+
+    Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
+    Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
+
+    Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
+    Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
+
     Route::post('/agent/advance-requests/{order}/accept', [AdvanceRequestController::class, 'accept'])
         ->whereNumber('order');
     Route::post('/agent/advance-requests/{order}/reject', [AdvanceRequestController::class, 'reject'])
@@ -201,10 +209,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::post('/agent/advance-requests/{order}/remind', [AdvanceRequestController::class, 'remind'])
         ->whereNumber('order')
         ->middleware('throttle:user-update');
-});
 
-// Store Agent
-Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
     Route::patch('/foods/{food}/stock', [StockController::class, 'update']);
     Route::patch('/foods/{food}/availability', [StockController::class, 'availability']);
 });

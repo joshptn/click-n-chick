@@ -29,9 +29,14 @@ class OrderPolicy
         return $this->owns($user, $order) || $this->isStaff($user);
     }
 
+    public function operate(User $user): bool
+    {
+        return $user->hasRole(User::ROLE_ADMIN);
+    }
+
     public function update(User $user, Order $order): bool
     {
-        return $this->isStaff($user);
+        return $this->operate($user);
     }
 
     public function amend(User $user, Order $order): bool
@@ -40,7 +45,7 @@ class OrderPolicy
             return false;
         }
 
-        return $this->owns($user, $order) || $this->isStaff($user);
+        return $this->owns($user, $order) || $this->operate($user);
     }
 
     public function cancel(User $user, Order $order): bool
@@ -50,7 +55,7 @@ class OrderPolicy
             return app(CancellationPolicy::class)->canCancel($order);
         }
 
-        return $this->isStaff($user);
+        return $this->operate($user);
     }
 
     public function confirmReceipt(User $user, Order $order): bool
