@@ -60,6 +60,7 @@ class OrderRecordResource extends JsonResource
             'total' => (float) ($this->total_amount ?? $this->total_price ?? 0),
             'discount_amount' => (float) $this->discount_amount,
             'payment_status' => $this->payment_status,
+            'payment_verified' => (bool) ($this->payment_verified ?? false),
             'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
             'cancelled_by_store' => $this->cancelledByStore(),
             'cancellation_reason' => $this->cancellation_reason,

@@ -17,6 +17,12 @@ class Order extends Model
 
     public const ADVANCE_PAYMENT_HOURS = 24;
 
+    /** When an order closed; rows from before closed_at was stamped closed at their last update. */
+    public const CLOSED_AT_SQL = 'COALESCE(orders.closed_at, orders.updated_at)';
+
+    /** What an order came to; rows from before total_amount carry total_price only. */
+    public const TOTAL_SQL = 'COALESCE(orders.total_amount, orders.total_price, 0)';
+
     use HasFactory;
 
     protected $fillable = [
