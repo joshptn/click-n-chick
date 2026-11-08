@@ -7,13 +7,14 @@ import CancelOrderModal from "../../components/staff/CancelOrderModal";
 import LivePill from "../../components/staff/LivePill";
 import OrderBoard from "../../components/staff/OrderBoard";
 import OrderDetailDrawer from "../../components/staff/OrderDetailDrawer";
+import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useAgentBoard } from "../../hooks/useAgentBoard";
 import { BOARD_COLUMNS, columnFor, matchesSearch } from "../../lib/agent";
-import { ROLES } from "../../lib/roles";
+import { canOperate } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
 
 const PAGE_TITLE = "Orders · Click n Chick";
@@ -64,7 +65,7 @@ function StoreNotice({ store }) {
  *
  * Moves go through /api/agent/orders/{id}/advance, which walks the order's own
  * lifecycle, so the board never decides a target status. Another agent's moves
- * arrive over admin.orders.
+ * arrive over admin.orders. The Store Manager gets the same board, read-only.
  */
 function AdminDashboard() {
   const { user } = useContext(AuthContext);
@@ -79,7 +80,7 @@ function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedId = searchParams.get("order");
-  const canConfirmDelivery = user?.role === ROLES.ADMIN;
+  const canAct = canOperate(user);
   const searching = search.trim() !== "";
 
   const columns = useMemo(() => {
@@ -139,7 +140,7 @@ function AdminDashboard() {
 
   const cardProps = {
     isBusy: board.isBusy,
-    canConfirmDelivery,
+    canAct,
     onAdvance: board.advance,
     onReject: (order) => setCancelling({ order, mode: "reject" }),
     onOpen: openOrder,
@@ -179,6 +180,8 @@ function AdminDashboard() {
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
+          {!canAct && <ReadOnlyNotice>Orders are moved by the Store Agent. You are viewing this board read-only.</ReadOnlyNotice>}
+
           <StoreNotice store={storeStatus ?? board.queue?.store} />
 
           {board.isError ? (
@@ -209,7 +212,7 @@ function AdminDashboard() {
         opened={Boolean(selectedId) && !board.isLoading}
         onClose={closeOrder}
         busy={selected ? board.isBusy(selected.id) : false}
-        canConfirmDelivery={canConfirmDelivery}
+        canAct={canAct}
         onAdvance={board.advance}
         onReject={(order) => setCancelling({ order, mode: "reject" })}
         onCancel={(order) => setCancelling({ order, mode: "cancel" })}

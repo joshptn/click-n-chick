@@ -40,14 +40,13 @@ function stop(handler) {
  * stop the click there. Every forward action is `advance` - the server walks
  * the order's own chain - so the card only decides what the button says.
  */
-function AgentOrderCard({ order, busy, canConfirmDelivery, onAdvance, onReject, onOpen }) {
+function AgentOrderCard({ order, busy, canAct, onAdvance, onReject, onOpen }) {
   const reduceMotion = useReducedMotion();
 
   const isNew = order.status === "placed";
   const isFinished = order.status === "completed" || order.status === "delivered";
   const handover = handoverLabel(order);
   const forward = advanceLabel(order);
-  const blockedDelivery = order.next_status === "delivered" && !canConfirmDelivery;
   const longWait =
     ["placed", "confirmed", "preparing"].includes(order.status) && (order.waiting_minutes ?? 0) >= LONG_WAIT_MINUTES;
 
@@ -136,13 +135,13 @@ function AgentOrderCard({ order, busy, canConfirmDelivery, onAdvance, onReject, 
 
       {/* Sized here: Mantine's global `button { font-size: inherit }` is unlayered
           and beats a text utility on the button itself. */}
-      <div className="mt-2.5 text-[12px]">
+      <div className="mt-2.5 text-[12px] empty:hidden">
         {isFinished ? (
           <p className="m-0 flex items-center justify-center gap-1.5 py-1 font-display text-[11.5px] font-semibold text-[#2f9e44]">
             <IconCircleCheckFilled size={14} />
             {order.status === "delivered" ? "Delivered" : "Order Completed"}
           </p>
-        ) : isNew ? (
+        ) : !canAct ? null : isNew ? (
           <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
@@ -161,10 +160,6 @@ function AgentOrderCard({ order, busy, canConfirmDelivery, onAdvance, onReject, 
               Reject
             </button>
           </div>
-        ) : blockedDelivery ? (
-          <p className="m-0 rounded-[8px] bg-[#faf6f0] px-3 py-1.5 text-center font-display text-[10.5px] text-[#8d8884]">
-            The Store Agent confirms delivery.
-          </p>
         ) : forward ? (
           <button
             type="button"

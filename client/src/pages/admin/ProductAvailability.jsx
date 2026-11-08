@@ -1,11 +1,12 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { Skeleton, Switch, Tooltip } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { IconInfoCircle, IconLock, IconPhotoOff, IconRefresh, IconToolsKitchen2 } from "@tabler/icons-react";
+import { IconInfoCircle, IconPhotoOff, IconRefresh, IconToolsKitchen2 } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
+import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
@@ -310,10 +311,7 @@ function ProductAvailability() {
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
           {!canManage && stock.meta && (
-            <p className="m-0 flex items-start gap-2 rounded-[10px] bg-white px-3.5 py-2.5 font-display text-[12px] text-[#6f6b68] ring-1 ring-inset ring-[#f0e9df]">
-              <IconLock size={15} stroke={2} className="mt-[1px] shrink-0" />
-              <span>Stock and availability are changed by the Store Agent (BR-29). You are viewing them read-only.</span>
-            </p>
+            <ReadOnlyNotice>Stock and availability are changed by the Store Agent (BR-29). You are viewing them read-only.</ReadOnlyNotice>
           )}
 
           <div className="flex flex-col gap-2.5">

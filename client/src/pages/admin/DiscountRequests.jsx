@@ -1,19 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { IconIdBadge2, IconRefresh } from "@tabler/icons-react";
 
+import AuthContext from "../../context/AuthContext";
 import ClaimCard from "../../components/staff/ClaimCard";
 import ClaimReviewPanel from "../../components/staff/ClaimReviewPanel";
 import LivePill from "../../components/staff/LivePill";
+import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import RejectClaimModal from "../../components/staff/RejectClaimModal";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StaffSearch from "../../components/staff/StaffSearch";
 import Button from "../../components/ui/Button";
 import { useDiscountQueue } from "../../hooks/useDiscountQueue";
 import { CLAIM_TABS, matchesClaim } from "../../lib/agent";
+import { canOperate } from "../../lib/roles";
 
 const MotionSpan = motion.span;
 
@@ -81,8 +84,11 @@ function SkeletonList() {
  * A decision settles the customer's eligibility, not one order - the discount
  * is then theirs at checkout. Pending applications are served oldest first.
  * New applications and other agents' decisions arrive over admin.discounts.
+ * The Store Manager gets the same queue, read-only.
  */
 function DiscountRequests() {
+  const { user } = useContext(AuthContext);
+  const canAct = canOperate(user);
   const wide = useMediaQuery("(min-width: 64em)", true);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
@@ -108,7 +114,7 @@ function DiscountRequests() {
   const selected = listed ?? (selectedId ? queue.decided[selectedId] ?? null : null);
 
   const nextClaim =
-    status === "pending" ? queue.claims.find((claim) => claim.id !== selected?.id && !queue.decided[claim.id]) : null;
+    canAct && status === "pending" ? queue.claims.find((claim) => claim.id !== selected?.id && !queue.decided[claim.id]) : null;
 
   const select = (claim, { auto = false } = {}) => {
     setTapped(Boolean(claim) && !auto);
@@ -183,6 +189,7 @@ function DiscountRequests() {
       percentage={queue.percentage}
       busy={busy}
       approving={queue.isApproving}
+      canAct={canAct}
       onApprove={approve}
       onReject={setRejecting}
       nextClaim={nextClaim}
@@ -223,6 +230,8 @@ function DiscountRequests() {
           </header>
 
           <div className="flex flex-1 flex-col gap-2.5 px-4 py-4 sm:px-6 lg:px-7">
+            {!canAct && <ReadOnlyNotice>IDs are reviewed by the Store Agent. You are viewing applications read-only.</ReadOnlyNotice>}
+
             {queue.isError ? (
               <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
                 <p className="m-0 font-display text-[15px] font-semibold text-ink">The applications could not be loaded.</p>
