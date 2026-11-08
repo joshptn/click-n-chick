@@ -42,3 +42,4 @@ function account(emailKey) {
 
 export const CUSTOMER = account("SEED_CUSTOMER_EMAIL");
 export const STAFF = account("SEED_ADMIN_EMAIL");
+export const MANAGER = account("SEED_SUPER_ADMIN_EMAIL");
