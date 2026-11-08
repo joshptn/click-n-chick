@@ -17,6 +17,9 @@ class Order extends Model
 
     public const ADVANCE_PAYMENT_HOURS = 24;
 
+    /** Stands in for the customer on the orders of a deleted account. */
+    public const ANONYMIZED_CUSTOMER = 'Deleted customer';
+
     /** When an order closed; rows from before closed_at was stamped closed at their last update. */
     public const CLOSED_AT_SQL = 'COALESCE(orders.closed_at, orders.updated_at)';
 

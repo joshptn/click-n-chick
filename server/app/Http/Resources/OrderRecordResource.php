@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Order;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -47,7 +48,7 @@ class OrderRecordResource extends JsonResource
 
             'customer' => [
                 'name' => $this->customerName(),
-                'is_guest' => $this->user_id === null,
+                'is_guest' => $this->user_id === null && $this->guest_name !== Order::ANONYMIZED_CUSTOMER,
             ],
 
             'item_count' => (int) ($this->item_count ?? $items->sum('quantity')),

@@ -2,6 +2,7 @@
 
 namespace App\Services\Auth;
 
+use Illuminate\Http\Exceptions\HttpResponseException;
 use App\Events\NotificationBroadcast;
 use App\Mail\NewDeviceAlertMail;
 use App\Models\AuthEvent;
@@ -97,6 +98,11 @@ class DeviceRegistrar
 
     public function issueToken(User $user, Request $request, string $tokenName): NewAccessToken
     {
+        // Every sign-in path ends here, so a suspended account has no way round it.
+        if ($user->isSuspended()) {
+            throw new HttpResponseException(response()->json(self::suspendedPayload(), 403));
+        }
+
         $device = $this->register($user, $request);
 
         $token = $user->createToken($tokenName, ['*'], now()->addMinutes($this->sessionMinutesFor($user)));
@@ -104,6 +110,16 @@ class DeviceRegistrar
         $token->accessToken->forceFill(['known_device_id' => $device->getKey()])->save();
 
         return $token;
+    }
+
+    /** @return array{status: string, error_code: string, message: string} */
+    public static function suspendedPayload(): array
+    {
+        return [
+            'status' => User::STATUS_SUSPENDED,
+            'error_code' => 'ACCOUNT_SUSPENDED',
+            'message' => 'This account has been suspended. Please contact the store.',
+        ];
     }
 
     public function sessionMinutesFor(User $user): int

@@ -92,6 +92,11 @@ class OtpController extends Controller
             return $invalid;
         }
 
+        // Must come first: this block would otherwise lift the suspension.
+        if ($user->isSuspended()) {
+            return $invalid;
+        }
+
         $transport->markVerified($user);
         // account_status is a coarse marker updated alongside the timestamp; it
         // is never what the gate reads. See User::hasVerifiedChannel().
@@ -149,6 +154,7 @@ class OtpController extends Controller
         // Gate on the specific channel, not account_status, and only resend for
         // the channel this account actually registered on.
         if ($user !== null
+            && ! $user->isSuspended()
             && $user->verification_channel === $transport->channel()->value
             && ! $user->hasVerifiedChannel($transport->channel())) {
             $this->otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $transport->channel());

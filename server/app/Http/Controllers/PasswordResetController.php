@@ -46,7 +46,7 @@ class PasswordResetController extends Controller
 
         $user = $transport->findUser($identifier);
 
-        if ($user === null || ! $user->hasVerifiedChannel($transport->channel())) {
+        if ($user === null || $user->isSuspended() || ! $user->hasVerifiedChannel($transport->channel())) {
             return $generic;
         }
 
@@ -104,7 +104,7 @@ class PasswordResetController extends Controller
 
         $user = $transport->findUser($identifier);
 
-        if ($user === null || ! $user->hasVerifiedChannel($transport->channel())) {
+        if ($user === null || $user->isSuspended() || ! $user->hasVerifiedChannel($transport->channel())) {
             return $invalid;
         }
 

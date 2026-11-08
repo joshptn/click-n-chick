@@ -29,6 +29,7 @@ use App\Http\Controllers\StockController;
 use App\Http\Controllers\StoreStatusController;
 use App\Http\Controllers\SystemSettingController;
 use App\Http\Controllers\TwoFactorController;
+use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VerificationChannelController;
 use App\Services\Recaptcha\RecaptchaAction;
 use Illuminate\Support\Facades\Route;
@@ -234,8 +235,25 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::post('/admin/posters/{poster}', [PosterController::class, 'update']);
     Route::delete('/admin/posters/{poster}', [PosterController::class, 'destroy']);
 
-    Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])
+    Route::get('/admin/users', [UserManagementController::class, 'index']);
+    Route::get('/admin/users/{user}', [UserManagementController::class, 'show'])->whereNumber('user');
+    Route::post('/admin/users', [UserManagementController::class, 'store'])
+        ->middleware(['throttle:user-update', 'confirm-password:create an account']);
+    Route::patch('/admin/users/{user}/profile', [UserManagementController::class, 'updateProfile'])
+        ->whereNumber('user')
+        ->middleware('throttle:user-update');
+    Route::patch('/admin/users/{user}', [UserManagementController::class, 'updateRole'])
+        ->whereNumber('user')
         ->middleware(['throttle:user-update', 'confirm-password:change a user role']);
+    Route::post('/admin/users/{user}/suspend', [UserManagementController::class, 'suspend'])
+        ->whereNumber('user')
+        ->middleware(['throttle:user-update', 'confirm-password:suspend an account']);
+    Route::post('/admin/users/{user}/reactivate', [UserManagementController::class, 'reactivate'])
+        ->whereNumber('user')
+        ->middleware(['throttle:user-update', 'confirm-password:reactivate an account']);
+    Route::delete('/admin/users/{user}', [UserManagementController::class, 'destroy'])
+        ->whereNumber('user')
+        ->middleware(['throttle:user-update', 'confirm-password:delete an account']);
 
     Route::get('/admin/settings/discount', [SystemSettingController::class, 'showDiscount']);
     Route::put('/admin/settings/discount', [SystemSettingController::class, 'updateDiscount'])
