@@ -2,13 +2,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * The seeded accounts the e2e suite signs in as.
- *
- * Read from the same SEED_* values DatabaseSeeder uses - server/.env, or the
- * environment, which wins - so no address or password is written into the
- * public repository.
- */
 const SERVER_ENV = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../server/.env");
 
 function seedValues() {
@@ -21,7 +14,7 @@ function seedValues() {
       if (match) values[match[1]] = match[2].trim().replace(/^"(.*)"$/, "$1");
     }
   } catch {
-    // No server/.env: the environment must supply them.
+    //
   }
 
   return { ...values, ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith("SEED_"))) };

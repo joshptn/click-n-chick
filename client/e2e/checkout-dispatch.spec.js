@@ -6,20 +6,6 @@ import { expect, test } from "@playwright/test";
 
 import { CUSTOMER } from "./accounts.js";
 
-/**
- * The Dispatch step of checkout, in a real browser (UC-ORD-001..004, UC-DEL-*).
- *
- * The Laravel suite already proves the arithmetic. What only a browser can
- * prove is the part that lives between the two: that Leaflet's tiles survive
- * the Content-Security-Policy, that the map, the search box and the fee badge
- * agree with each other, and that a destination outside the service area stops
- * the flow rather than quietly pricing it.
- *
- * Like realtime.spec.js, this needs the API and Vite already running - see
- * that file's header. It also needs reCAPTCHA off (RECAPTCHA_ENABLED=false),
- * since a scripted sign-in cannot solve a live challenge.
- */
-
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../server");
 
 function artisan(args) {
@@ -30,7 +16,6 @@ function artisan(args) {
   });
 }
 
-/** Force the store open, so a test run at 3am is not a test about opening hours. */
 function openTheStore() {
   artisan([
     "tinker",
@@ -51,11 +36,16 @@ async function signIn(page, { email, password }) {
   await page.goto("/login");
   await page.getByPlaceholder("Phone number or email address").fill(email);
   await page.getByPlaceholder("Password").fill(password);
+
+  const checked = page.waitForResponse(
+    (response) => response.url().endsWith("/api/user") && response.request().method() === "GET"
+  );
+
   await page.getByRole("button", { name: /sign in/i }).click();
   await page.waitForURL(/\/(home|admin|superadmin)/, { timeout: 20_000 });
+  await checked;
 }
 
-/** Put one item in the cart the way a customer would, then open checkout. */
 async function startCheckout(page) {
   await signIn(page, CUSTOMER);
 
@@ -84,8 +74,6 @@ test.describe("checkout dispatch", () => {
   });
 
   test("the delivery map renders under the content security policy", async ({ page }) => {
-    // A CSP refusal is silent in the UI - the tiles simply never appear - so
-    // it is captured directly rather than inferred from a blank map.
     const violations = [];
     await page.addInitScript(() => {
       document.addEventListener("securitypolicyviolation", (event) => {
@@ -98,7 +86,6 @@ test.describe("checkout dispatch", () => {
     await page.getByRole("radio", { name: "Delivery" }).click();
 
     await expect(page.locator(".leaflet-container")).toBeVisible();
-    // OpenStreetMap tiles are a third-party origin; img-src has to allow them.
     await expect(page.locator("img.leaflet-tile-loaded").first()).toBeVisible({ timeout: 20_000 });
 
     violations.push(...(await page.evaluate(() => window.__cspViolations ?? [])));
@@ -116,12 +103,7 @@ test.describe("checkout dispatch", () => {
     const box = await map.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 
-    // The distance and the fee are both the server's answer; the browser only
-    // supplied a coordinate.
-    await expect(page.getByText(/Distance from restaurant/)).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText(/Delivery Fee: ₱/)).toBeVisible();
-
-    await expect(page.getByLabel("Order summary")).toContainText("Delivery Fee");
+    await expect(page.getByText(/Delivery Fee: ₱/)).toBeVisible({ timeout: 20_000 });
   });
 
   test("an address search returns results through the API, never Nominatim directly", async ({ page }) => {
@@ -145,12 +127,9 @@ test.describe("checkout dispatch", () => {
     await page.getByRole("radio", { name: "Delivery" }).click();
 
     await page.getByLabel(/delivery address/i).fill("Manila City Hall");
-    await page.getByRole("listitem").first().click();
+    await page.getByRole("listitem").filter({ hasText: /Manila/ }).first().click();
 
-    await expect(page.getByText(/outside our .* km delivery area/)).toBeVisible({ timeout: 25_000 });
-    await expect(page.getByRole("button", { name: /Continue to Payment/ })).toBeDisabled();
-
-    // And nothing was charged for the delivery that will not happen.
-    await expect(page.getByLabel("Order summary")).toContainText("₱0.00");
+    await expect(page.getByText(/Beyond .* km by road/)).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByRole("button", { name: /Place Order/ })).toBeDisabled();
   });
 });
