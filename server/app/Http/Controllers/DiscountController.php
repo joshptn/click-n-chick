@@ -234,6 +234,7 @@ class DiscountController extends Controller
         // its count still update for them over admin.discounts.
         $reviewers = User::query()
             ->where('role', User::ROLE_ADMIN)
+            ->where('account_status', User::STATUS_ACTIVE)
             ->get(['id']);
 
         $name = trim("{$claimant->first_name} {$claimant->last_name}") ?: 'A customer';
