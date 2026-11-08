@@ -24,6 +24,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecaptchaConfigController;
+use App\Http\Controllers\SalesReportController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StoreStatusController;
 use App\Http\Controllers\SystemSettingController;
@@ -226,6 +227,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::put('/category/{category}', [CategoryController::class, 'update']);
     Route::patch('/category/{category}', [CategoryController::class, 'update']);
     Route::delete('/category/{category}', [CategoryController::class, 'destroy']);
+    Route::get('/admin/reports/daily-sales', [SalesReportController::class, 'daily']);
 
     Route::get('/admin/posters', [PosterController::class, 'all']);
     Route::post('/admin/posters', [PosterController::class, 'store']);

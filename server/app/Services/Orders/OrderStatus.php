@@ -90,6 +90,12 @@ final class OrderStatus
         return [self::COMPLETED, self::DELIVERED, self::CANCELLED, self::REJECTED];
     }
 
+    /** @return array<int, string> The two ways an order ends with the food handed over. */
+    public static function fulfilled(): array
+    {
+        return [self::COMPLETED, self::DELIVERED];
+    }
+
     public static function inLine(): array
     {
         return [self::PLACED, self::CONFIRMED, self::PREPARING];
