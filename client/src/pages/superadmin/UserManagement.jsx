@@ -10,9 +10,9 @@ import ConfirmActionModal from "../../components/manager/ConfirmActionModal";
 import PasswordConfirmModal from "../../components/manager/PasswordConfirmModal";
 import UserDetailDrawer, { RolePill, StatusPill } from "../../components/manager/UserDetailDrawer";
 import UserFormModal from "../../components/manager/UserFormModal";
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useStepUp } from "../../hooks/useStepUp";
@@ -424,6 +424,16 @@ function UserManagement() {
               <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">User Management</h1>
               <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">Accounts, roles and access for the store.</p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              data-testid="add-user"
+              className="inline-flex h-[38px] w-full items-center justify-center gap-1.5 rounded-full bg-brand-500 px-4 font-display font-semibold text-white shadow-[0_6px_16px_-4px_rgba(255,139,43,0.5)] transition-colors hover:bg-brand-600 md:w-auto md:shrink-0"
+            >
+              <IconCirclePlus size={16} stroke={2} />
+              <span className="text-[13px]">Add User</span>
+            </button>
           </div>
 
           <div className="mt-4">
@@ -432,62 +442,26 @@ function UserManagement() {
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
-          <div className="flex flex-col gap-3 rounded-[16px] bg-white p-3.5 ring-1 ring-[#f0e9df] xl:flex-row xl:items-center" data-testid="user-filters">
-            <div className="w-full xl:w-[260px] xl:shrink-0">
-              <StaffSearch
-                value={searchText}
-                onChange={setSearchText}
-                placeholder="Search by name or email…"
-                title="Search by name, email, ID or full phone number"
-                label="Search users"
-              />
-            </div>
-
-            <div className="-mx-3.5 overflow-x-auto px-3.5 xl:mx-0 xl:px-0">
-              <div className="inline-flex rounded-[12px] bg-[#f8f5f0] p-1 ring-1 ring-inset ring-[#f0e9df]">
-                {ROLE_TABS.map((tab) => {
-                  const active = filters.role === tab.key;
-
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => write({ role: tab.key })}
-                      data-testid={`role-tab-${tab.key}`}
-                      className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 py-1.5 font-display font-semibold transition-colors ${
-                        active ? "bg-brand-500 text-white shadow-[0_4px_12px_-4px_rgba(255,139,43,0.6)]" : "bg-transparent text-[#5f5b58] hover:text-ink"
-                      }`}
-                    >
-                      <span className="text-[12.5px]">{tab.label}</span>
-                      {list.summary && (
-                        <span
-                          className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-bold ${
-                            active ? "bg-white/30 text-white" : "bg-[#e9e4dc] text-[#5f5b58]"
-                          }`}
-                        >
-                          {list.summary[tab.field]}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
-              <FilterSelect label="Status" value={filters.status} onChange={(status) => write({ status })} options={STATUS_FILTERS} active={filters.status !== "all"} testId="filter-status" />
-              {filtered && (
-                <button type="button" onClick={clear} className="bg-transparent font-semibold text-brand-600 hover:text-brand-800">
-                  <span className="text-[11.5px]">Clear filters</span>
-                </button>
-              )}
-              <Button size="sm" className="ml-auto xl:ml-0" onClick={() => setCreating(true)} data-testid="add-user">
-                <IconCirclePlus size={16} stroke={2} />
-                Add User
-              </Button>
-            </div>
-          </div>
+          <FilterBar
+            testId="user-filters"
+            search={{
+              value: searchText,
+              onChange: setSearchText,
+              placeholder: "Search by name or email…",
+              title: "Search by name, email, ID or full phone number",
+              label: "Search users",
+            }}
+            tabs={{
+              items: ROLE_TABS.map((tab) => ({ key: tab.key, label: tab.label, count: list.summary?.[tab.field] })),
+              value: filters.role,
+              onChange: (role) => write({ role }),
+              label: "Filter by role",
+              testIdPrefix: "role-tab",
+            }}
+          >
+            <FilterSelect label="Status" value={filters.status} onChange={(status) => write({ status })} options={STATUS_FILTERS} active={filters.status !== "all"} testId="filter-status" />
+            <FilterMeta onClear={filtered ? clear : undefined} />
+          </FilterBar>
 
           {list.isError && !meta ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]" data-testid="users-error">
