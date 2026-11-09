@@ -17,7 +17,7 @@ function StaffSearch({ value, onChange, placeholder, title, label = placeholder,
         placeholder={placeholder}
         title={title}
         aria-label={label}
-        className="h-[36px] w-full rounded-full border border-[#ece7e0] bg-[#faf7f3] pl-9 pr-8 font-display text-[12.5px] text-ink outline-none transition-colors placeholder:text-[#a39f9b] focus:border-brand-300 focus:bg-white [&::-webkit-search-cancel-button]:appearance-none"
+        className="h-[34px] w-full rounded-full border border-[#ece7e0] bg-[#faf7f3] pl-9 pr-8 font-display text-[12.5px] text-ink outline-none transition-colors placeholder:text-[#a39f9b] focus:border-brand-300 focus:bg-white [&::-webkit-search-cancel-button]:appearance-none"
       />
       {value && (
         <button
