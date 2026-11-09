@@ -231,6 +231,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::patch('/category/{category}', [CategoryController::class, 'update']);
     Route::delete('/category/{category}', [CategoryController::class, 'destroy']);
     Route::get('/admin/reports/daily-sales', [SalesReportController::class, 'daily']);
+    Route::get('/admin/reports/analytics', [SalesReportController::class, 'analytics']);
+    Route::get('/admin/reports/operations', [SalesReportController::class, 'operations']);
 
     Route::get('/admin/posters', [PosterController::class, 'all']);
     Route::post('/admin/posters', [PosterController::class, 'store']);

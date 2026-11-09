@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Services\Reports\DailySalesReport;
+use App\Services\Reports\OperationsSnapshot;
+use App\Services\Reports\SalesAnalytics;
 use App\Services\Store\StoreAvailability;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -16,6 +18,8 @@ class SalesReportController extends Controller
 
     public function __construct(
         private DailySalesReport $report,
+        private SalesAnalytics $analytics,
+        private OperationsSnapshot $operations,
         private StoreAvailability $store,
     ) {}
 
@@ -35,5 +39,21 @@ class SalesReportController extends Controller
         ]);
 
         return response()->json($this->report->for($validated['date'] ?? $today, $validated));
+    }
+
+    /** GET /api/admin/reports/analytics */
+    public function analytics()
+    {
+        $this->authorize('isSuperAdmin', Order::class);
+
+        return response()->json($this->analytics->now());
+    }
+
+    /** GET /api/admin/reports/operations */
+    public function operations()
+    {
+        $this->authorize('isSuperAdmin', Order::class);
+
+        return response()->json($this->operations->now());
     }
 }
