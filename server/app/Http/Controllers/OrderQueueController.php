@@ -8,6 +8,7 @@ use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -66,6 +67,81 @@ class OrderQueueController extends Controller
                     : null,
             ],
         ]);
+    }
+
+    /**
+     * Pending Orders: what the next shift inherits.
+     *
+     * Confirmed orders the kitchen has not started, sorted by when each is
+     * needed, and what it is working on. Advance orders due today are here too,
+     * which the day's board never lists (BR-22c), and so is anything left open
+     * from an earlier day. An order is due "now" once its time is within the
+     * kitchen's lead time.
+     */
+    public function pending()
+    {
+        $this->authorize('viewAny', Order::class);
+
+        $now = $this->store->now();
+        $today = $now->toDateString();
+        $lead = (int) config('store.pickup.lead_minutes', 20);
+        $soon = $now->addMinutes($lead);
+        $dayStart = $now->startOfDay()->utc()->format('Y-m-d H:i:s');
+        $dayEnd = $now->startOfDay()->addDay()->utc()->format('Y-m-d H:i:s');
+
+        $booked = [OrderStatus::CONFIRMED, OrderStatus::SCHEDULED];
+        $inKitchen = [OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP];
+
+        $orders = Order::query()
+            ->with(self::WITH)
+            ->where(fn (Builder $query) => $query
+                ->where(fn (Builder $regular) => $regular->whereNull('scheduled_for')->where('queue_date', $today)->whereIn('status', [OrderStatus::CONFIRMED, OrderStatus::PREPARING]))
+                ->orWhere(fn (Builder $regular) => $regular->whereNull('scheduled_for')->where('queue_date', '<', $today)->whereNotIn('status', OrderStatus::terminal()))
+                ->orWhere(fn (Builder $advance) => $advance->where('scheduled_for', '>=', $dayStart)->where('scheduled_for', '<', $dayEnd)->whereIn('status', [...$booked, OrderStatus::PREPARING]))
+                ->orWhere(fn (Builder $advance) => $advance->where('scheduled_for', '<', $dayStart)->whereIn('status', [...$booked, ...$inKitchen])))
+            ->get();
+
+        $groups = $orders
+            ->sortBy(fn (Order $order) => ($this->neededAt($order) ?? $order->queued_at ?? $order->created_at)?->getTimestamp())
+            ->groupBy(fn (Order $order) => match (true) {
+                $this->isFromEarlierDay($order, $today, $dayStart) => 'earlier',
+                $order->status === OrderStatus::PREPARING => 'preparing',
+                $this->neededAt($order)?->greaterThan($soon) === true => 'later',
+                default => 'now',
+            });
+
+        $rows = fn (string $group) => $groups->get($group, collect())
+            ->map(fn (Order $order) => (new OrderQueueResource($order))->resolve() + [
+                'reference' => $order->reference(),
+                'is_advance' => $order->isAdvance(),
+                'needed_at' => $this->neededAt($order)?->toIso8601String(),
+            ])
+            ->values();
+
+        return response()->json([
+            'date' => $today,
+            'lead_minutes' => $lead,
+            'summary' => [
+                'now' => $groups->get('now', collect())->count(),
+                'later' => $groups->get('later', collect())->count(),
+                'earlier' => $groups->get('earlier', collect())->count(),
+                'preparing' => $groups->get('preparing', collect())->count(),
+            ],
+            'groups' => ['now' => $rows('now'), 'later' => $rows('later'), 'preparing' => $rows('preparing'), 'earlier' => $rows('earlier')],
+        ]);
+    }
+
+    /** When the customer expects it. A delivery has no set time. */
+    private function neededAt(Order $order): ?CarbonImmutable
+    {
+        return ($order->isAdvance() ? $order->scheduled_for : $order->pickup_at)?->toImmutable();
+    }
+
+    private function isFromEarlierDay(Order $order, string $today, string $dayStart): bool
+    {
+        return $order->isAdvance()
+            ? $order->scheduled_for->format('Y-m-d H:i:s') < $dayStart
+            : CarbonImmutable::parse($order->queue_date)->toDateString() < $today;
     }
 
     public function next(Request $request)
