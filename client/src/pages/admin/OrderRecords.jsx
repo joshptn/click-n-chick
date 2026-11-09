@@ -159,7 +159,6 @@ function OrderRecords() {
 
   const today = storeDate();
   const meta = list.meta;
-  const outcomeLabel = OUTCOMES.find((option) => option.key === filters.outcome)?.label;
 
   return (
     <StaffLayout>
