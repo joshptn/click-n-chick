@@ -2,23 +2,21 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Drawer } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { IconIdBadge2, IconRefresh } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import ClaimCard from "../../components/staff/ClaimCard";
 import ClaimReviewPanel from "../../components/staff/ClaimReviewPanel";
+import FilterBar from "../../components/staff/FilterBar";
 import LivePill from "../../components/staff/LivePill";
 import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import RejectClaimModal from "../../components/staff/RejectClaimModal";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import Button from "../../components/ui/Button";
 import { useDiscountQueue } from "../../hooks/useDiscountQueue";
 import { CLAIM_TABS, matchesClaim } from "../../lib/agent";
 import { canOperate } from "../../lib/roles";
-
-const MotionSpan = motion.span;
 
 const EMPTY = {
   pending: {
@@ -28,45 +26,6 @@ const EMPTY = {
   approved: { title: "No approved applications yet.", detail: "Approved Senior Citizen and PWD IDs are listed here." },
   rejected: { title: "No rejected applications.", detail: "Rejected IDs are listed here with the reason given." },
 };
-
-function Tabs({ status, counts, onChange }) {
-  return (
-    <LayoutGroup id="claim-tabs">
-      <div role="tablist" aria-label="Application status" className="inline-flex rounded-full bg-[#f4f1ec] p-1">
-        {CLAIM_TABS.map((tab) => {
-          const active = tab.key === status;
-          const count = counts?.[tab.key];
-
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onChange(tab.key)}
-              data-testid={`claim-tab-${tab.key}`}
-              className={`relative rounded-full bg-transparent px-3.5 py-1.5 font-display font-semibold transition-colors ${
-                active ? "text-white" : "text-[#6f6b68] hover:text-ink"
-              }`}
-            >
-              {active && (
-                <MotionSpan
-                  layoutId="claim-tab-pill"
-                  className="absolute inset-0 rounded-full bg-brand-500 shadow-[0_4px_12px_-4px_rgba(255,139,43,0.6)]"
-                  transition={{ type: "spring", stiffness: 500, damping: 38 }}
-                />
-              )}
-              <span className="relative text-[12px]">
-                {tab.label}
-                {count != null && tab.key === "pending" && count > 0 && ` (${count})`}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </LayoutGroup>
-  );
-}
 
 function SkeletonList() {
   return (
@@ -214,23 +173,28 @@ function DiscountRequests() {
                   Review Senior Citizen and PWD discount IDs submitted by customers
                 </p>
               </div>
-
-              <StaffSearch
-                value={search}
-                onChange={setSearch}
-                placeholder="Search applications…"
-                title="Search by application number, name, email or phone"
-                label="Search applications"
-              />
-            </div>
-
-            <div className="mt-3.5">
-              <Tabs status={status} counts={queue.counts} onChange={changeTab} />
             </div>
           </header>
 
           <div className="flex flex-1 flex-col gap-2.5 px-4 py-4 sm:px-6 lg:px-7">
             {!canAct && <ReadOnlyNotice>IDs are reviewed by the Store Agent. You are viewing applications read-only.</ReadOnlyNotice>}
+
+            <FilterBar
+              search={{
+                value: search,
+                onChange: setSearch,
+                placeholder: "Search applications…",
+                title: "Search by application number, name, email or phone",
+                label: "Search applications",
+              }}
+              tabs={{
+                items: CLAIM_TABS.map((tab) => ({ ...tab, count: queue.counts?.[tab.key] })),
+                value: status,
+                onChange: changeTab,
+                label: "Application status",
+                testIdPrefix: "claim-tab",
+              }}
+            />
 
             {queue.isError ? (
               <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
