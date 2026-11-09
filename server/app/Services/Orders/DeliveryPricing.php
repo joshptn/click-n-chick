@@ -27,6 +27,12 @@ class DeliveryPricing
         return max(0.0, Setting::number(Setting::DELIVERY_EXTRA_FEE_PER_KM, self::DEFAULT_EXTRA_FEE_PER_KM));
     }
 
+    /** The service area, by road: the Store Manager's figure, else the configured one. */
+    public function maxDrivingKm(): float
+    {
+        return max(0.0, Setting::number(Setting::DELIVERY_MAX_KM, (float) config('store.max_driving_km', 45.0)));
+    }
+
     public function feeFor(float $km): float
     {
         $baseKm = $this->baseKm();

@@ -48,7 +48,11 @@ class SystemSettingController extends Controller
 
         Setting::put(Setting::DISCOUNT_PERCENTAGE, $next, (int) $request->user()->getKey());
 
-        $this->announceRateChange($previous, $next);
+        $this->notifyEveryone(
+            'Discount rate updated',
+            'The Senior Citizen and PWD discount is now '.$this->format($next)
+                .'%, changed from '.$this->format($previous).'%.'
+        );
 
         return response()->json([
             'success' => true,
@@ -67,13 +71,38 @@ class SystemSettingController extends Controller
             'base_km' => ['required', 'numeric', 'min:0', 'max:100'],
             'base_fee' => ['required', 'numeric', 'min:0', 'max:10000'],
             'extra_fee_per_km' => ['required', 'numeric', 'min:0', 'max:10000'],
+            'max_driving_km' => ['required', 'numeric', 'min:1', 'max:100', 'gte:base_km'],
+        ], [
+            'max_driving_km.gte' => 'The delivery limit cannot be shorter than the distance the base fee covers.',
         ]);
 
+        $pricing = app(DeliveryPricing::class);
         $actor = (int) $request->user()->getKey();
+        $next = array_map(fn ($value) => round((float) $value, 2), $validated);
 
-        Setting::put(Setting::DELIVERY_BASE_KM, round((float) $validated['base_km'], 2), $actor);
-        Setting::put(Setting::DELIVERY_BASE_FEE, round((float) $validated['base_fee'], 2), $actor);
-        Setting::put(Setting::DELIVERY_EXTRA_FEE_PER_KM, round((float) $validated['extra_fee_per_km'], 2), $actor);
+        if ($next == [
+            'base_km' => $pricing->baseKm(),
+            'base_fee' => $pricing->baseFee(),
+            'extra_fee_per_km' => $pricing->extraFeePerKm(),
+            'max_driving_km' => $pricing->maxDrivingKm(),
+        ]) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Delivery pricing is already set to these values.',
+            ] + $this->deliveryPayload());
+        }
+
+        Setting::put(Setting::DELIVERY_BASE_KM, $next['base_km'], $actor);
+        Setting::put(Setting::DELIVERY_BASE_FEE, $next['base_fee'], $actor);
+        Setting::put(Setting::DELIVERY_EXTRA_FEE_PER_KM, $next['extra_fee_per_km'], $actor);
+        Setting::put(Setting::DELIVERY_MAX_KM, $next['max_driving_km'], $actor);
+
+        $this->notifyEveryone(
+            'Delivery fees updated',
+            'Delivery is now ₱'.$this->format($next['base_fee']).' for the first '.$this->format($next['base_km'])
+                .' km, then ₱'.$this->format($next['extra_fee_per_km']).' for each further km, up to '
+                .$this->format($next['max_driving_km']).' km by road.'
+        );
 
         return response()->json([
             'success' => true,
@@ -200,16 +229,13 @@ class SystemSettingController extends Controller
         }
     }
 
-    private function announceRateChange(float $previous, float $next): void
+    /** The change is already saved, so a failed notice is logged, not returned. */
+    private function notifyEveryone(string $title, string $body): void
     {
-        $title = 'Discount rate updated';
-        $body = 'The Senior Citizen and PWD discount is now '.$this->format($next)
-            .'%, changed from '.$this->format($previous).'%.';
-
         try {
             NotifyEveryAccount::dispatch($title, $body);
         } catch (Throwable $e) {
-            Log::warning('Could not announce the discount rate change.', ['error' => $e->getMessage()]);
+            Log::warning('Could not announce a settings change.', ['title' => $title, 'error' => $e->getMessage()]);
         }
     }
 
@@ -259,10 +285,12 @@ class SystemSettingController extends Controller
             'base_km' => $pricing->baseKm(),
             'base_fee' => $pricing->baseFee(),
             'extra_fee_per_km' => $pricing->extraFeePerKm(),
+            'max_driving_km' => $pricing->maxDrivingKm(),
             'defaults' => [
                 'base_km' => DeliveryPricing::DEFAULT_BASE_KM,
                 'base_fee' => DeliveryPricing::DEFAULT_BASE_FEE,
                 'extra_fee_per_km' => DeliveryPricing::DEFAULT_EXTRA_FEE_PER_KM,
+                'max_driving_km' => (float) config('store.max_driving_km', 45.0),
             ],
         ] + $this->provenance(Setting::DELIVERY_BASE_FEE);
     }
@@ -288,7 +316,7 @@ class SystemSettingController extends Controller
                 'opens_at' => (string) config('store.hours.opens_at'),
                 'closes_at' => (string) config('store.hours.closes_at'),
             ],
-            'max_driving_km' => (float) config('store.max_driving_km'),
+            'last_order_buffer_minutes' => (int) config('store.pickup.last_order_buffer_minutes', 15),
         ] + $this->provenance(Setting::STORE_OPENS_AT);
     }
 

@@ -10,6 +10,7 @@ use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 /**
  * One store day's sales (UC-REP-002), computed from the order and payment rows.
@@ -101,6 +102,36 @@ class DailySalesReport
 
             'has_activity' => $sales['orders'] + $notSold['cancelled']['orders'] + $notSold['rejected']['orders'] + $openOrders['orders'] > 0,
         ];
+    }
+
+    /**
+     * One light row per fulfilled order, for putting sales on a timeline in the
+     * store's own hours. Grouped by the caller rather than in SQL, which has no
+     * timezone conversion that works on both PostgreSQL and SQLite.
+     *
+     * @return Collection<int, object{closed: string, amount: mixed}>
+     */
+    public function fulfilledRows(CarbonImmutable $start, CarbonImmutable $end): Collection
+    {
+        return $this->closedBetween($start, $end)
+            ->toBase()
+            ->selectRaw(Order::CLOSED_AT_SQL.' AS closed')
+            ->selectRaw(Order::TOTAL_SQL.' AS amount')
+            ->get();
+    }
+
+    /** The best sellers by quantity between two moments, ranked as on the daily report. */
+    public function topProducts(CarbonImmutable $start, CarbonImmutable $end, int $limit): array
+    {
+        return $this->topItems($this->closedBetween($start, $end), $limit);
+    }
+
+    private function closedBetween(CarbonImmutable $start, CarbonImmutable $end): Builder
+    {
+        return $this->closedOn([
+            $start->utc()->format('Y-m-d H:i:s'),
+            $end->utc()->format('Y-m-d H:i:s'),
+        ], [])->whereIn('status', OrderStatus::fulfilled());
     }
 
     /** The same day and filters Order Records applies, so the two always agree. */
@@ -280,7 +311,7 @@ class DailySalesReport
         ];
     }
 
-    private function topItems(Builder $fulfilled): array
+    private function topItems(Builder $fulfilled, int $limit = self::TOP_ITEMS): array
     {
         $rows = OrderItem::query()
             ->whereIn('order_id', (clone $fulfilled)->select('orders.id'))
@@ -291,14 +322,15 @@ class DailySalesReport
             ->groupBy('food_id')
             ->orderByDesc('quantity')
             ->orderByDesc('sales')
-            ->limit(self::TOP_ITEMS)
+            ->limit($limit)
             ->get();
 
-        $names = Food::withTrashed()->whereIn('id', $rows->pluck('food_id'))->pluck('food_name', 'id');
+        $foods = Food::withTrashed()->with('category:id,name')->whereIn('id', $rows->pluck('food_id'))->get(['id', 'food_name', 'category_id'])->keyBy('id');
 
         return $rows->map(fn ($row) => [
             'food_id' => (int) $row->food_id,
-            'food_name' => $names[$row->food_id] ?? 'Removed item',
+            'food_name' => $foods[$row->food_id]->food_name ?? 'Removed item',
+            'category' => $foods[$row->food_id]->category->name ?? null,
             'quantity' => (int) $row->quantity,
             'sales' => $this->money2($row->sales),
         ])->all();

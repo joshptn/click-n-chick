@@ -16,7 +16,7 @@ class DeliveryQuote
 
     public function maxDrivingKm(): float
     {
-        return (float) config('store.max_driving_km', 45.0);
+        return $this->pricing->maxDrivingKm();
     }
 
     public function origin(): array

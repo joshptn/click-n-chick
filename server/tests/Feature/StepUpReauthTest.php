@@ -170,6 +170,7 @@ class StepUpReauthTest extends TestCase
                 'base_km' => 1,
                 'base_fee' => 500,
                 'extra_fee_per_km' => 99,
+                'max_driving_km' => 45,
             ])
             ->assertStatus(422)
             ->assertJsonPath('error_code', PasswordConfirmation::CODE_REQUIRED);
@@ -184,6 +185,7 @@ class StepUpReauthTest extends TestCase
                 'base_km' => 5,
                 'base_fee' => 70,
                 'extra_fee_per_km' => 12,
+                'max_driving_km' => 45,
                 'password' => self::PASSWORD,
             ])
             ->assertOk();
