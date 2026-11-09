@@ -9,7 +9,7 @@ export function fetchDailySales(params, { signal } = {}) {
 }
 
 export const REPORT_TYPES = [
-  { key: "all", label: "Pickup & delivery" },
+  { key: "all", label: "ALL" },
   { key: "pickup", label: "Pickup" },
   { key: "delivery", label: "Delivery" },
 ];

@@ -16,6 +16,7 @@ import {
   IconTruckDelivery,
 } from "@tabler/icons-react";
 
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
 import RecordDetailPanel from "../../components/staff/RecordDetailPanel";
@@ -410,19 +411,23 @@ function DailySalesReport() {
               )}
             </div>
           </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            <FilterSelect label="Order type" value={filters.type} onChange={(type) => write({ type })} options={REPORT_TYPES} active={filters.type !== "all"} testId="filter-type" />
-            <FilterSelect label="Regular or advance" value={filters.kind} onChange={(kind) => write({ kind })} options={REPORT_KINDS} active={filters.kind !== "all"} testId="filter-kind" />
-            {filtered && (
-              <button type="button" onClick={() => write({ type: "all", kind: "all" })} className="bg-transparent font-semibold text-brand-600 hover:text-brand-800">
-                <span className="text-[11.5px]">Clear filters</span>
-              </button>
-            )}
-          </div>
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
+          <FilterBar
+            testId="report-filters"
+            tabs={{
+              items: REPORT_TYPES,
+              value: filters.type,
+              onChange: (type) => write({ type }),
+              label: "Filter by order type",
+              testIdPrefix: "type-tab",
+            }}
+          >
+            <FilterSelect label="Regular or advance" value={filters.kind} onChange={(kind) => write({ kind })} options={REPORT_KINDS} active={filters.kind !== "all"} testId="filter-kind" />
+            <FilterMeta onClear={filtered ? () => write({ type: "all", kind: "all" }) : undefined} />
+          </FilterBar>
+
           {isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]" data-testid="report-error">
               <p className="m-0 font-display text-[15px] font-semibold text-ink">The report could not be loaded.</p>
