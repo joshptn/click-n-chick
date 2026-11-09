@@ -72,33 +72,110 @@ export function analyticsRefresher(queryClient) {
 }
 
 export const CHART_VIEWS = [
-  { key: "weekly", label: "Weekly", title: "Weekly Sales", window: "Last 7 days" },
-  { key: "daily", label: "Daily", title: "Daily Sales", window: "Last 30 days" },
-  { key: "hourly", label: "Hourly", title: "Hourly Sales", window: "Today" },
+  { key: "weekly", label: "Weekly" },
+  { key: "daily", label: "Daily" },
+  { key: "hourly", label: "Hourly" },
 ];
 
 const dayFormat = (options) => new Intl.DateTimeFormat("en-PH", { timeZone: STORE_TIMEZONE, ...options });
 const WEEKDAY = dayFormat({ weekday: "short" });
-const SHORT_DAY = dayFormat({ month: "short", day: "numeric" });
 const LONG_DAY = dayFormat({ weekday: "short", month: "short", day: "numeric" });
+const FULL_WEEKDAY = dayFormat({ weekday: "long" });
+const FULL_DATE = dayFormat({ month: "short", day: "numeric", year: "numeric" });
+const STORE_HOUR = new Intl.DateTimeFormat("en-GB", { timeZone: STORE_TIMEZONE, hour: "2-digit", hourCycle: "h23" });
 
 const noonOf = (date) => new Date(`${date}T12:00:00+08:00`);
+const weekday = (date) => WEEKDAY.format(noonOf(date));
+const longDay = (date) => LONG_DAY.format(noonOf(date));
 
 function formatHour(hour) {
   const twelve = hour % 12 === 0 ? 12 : hour % 12;
 
-  return `${twelve} ${hour < 12 ? "AM" : "PM"}`;
+  return `${twelve}${hour < 12 ? "AM" : "PM"}`;
 }
 
-/** One chart position per bucket, labelled for its view. */
-export function chartPoints(sales, view) {
-  return sales[view].map((bucket) => {
-    if (view === "hourly") return { ...bucket, id: String(bucket.key), axis: formatHour(bucket.key), title: formatHour(bucket.key) };
+const clockTime = (hour, minute) => `${hour % 12 === 0 ? 12 : hour % 12}:${String(minute).padStart(2, "0")}`;
 
-    const date = noonOf(bucket.key);
+/** The hour the Hourly tab opens on: now, if the store is trading, else the day's last sale. */
+function defaultHour(day) {
+  const current = day.key === storeDate() ? day.hours.find((hour) => hour.key === Number(STORE_HOUR.format(new Date()))) : undefined;
 
-    return { ...bucket, id: bucket.key, axis: view === "weekly" ? WEEKDAY.format(date) : SHORT_DAY.format(date), title: LONG_DAY.format(date) };
-  });
+  return current ?? day.hours.findLast((hour) => hour.orders > 0) ?? day.hours[0];
+}
+
+/**
+ * What the chart shows for a selection: the week by day, one day by hour, or
+ * one hour by quarter hour. Each point says where clicking it leads, and the
+ * day and hour views say which selections sit either side of them. A day that
+ * has rolled out of the week falls back to today.
+ */
+export function chartState(sales, { view, date, hour }) {
+  const day = sales.days.find((entry) => entry.key === date) ?? sales.days.at(-1);
+
+  if (view === "weekly") {
+    return {
+      view,
+      date: day.key,
+      hour,
+      title: "Weekly Sales",
+      subtitle: "Last 7 days",
+      drillHint: "Click to see by hour",
+      previous: null,
+      following: null,
+      points: sales.days.map((entry) => ({
+        ...entry,
+        id: entry.key,
+        axis: weekday(entry.key),
+        title: longDay(entry.key),
+        next: { view: "daily", date: entry.key, hour: null },
+      })),
+    };
+  }
+
+  if (view === "daily") {
+    const index = sales.days.indexOf(day);
+    const dayAt = (at) => (sales.days[at] ? { view, date: sales.days[at].key, hour: null } : null);
+
+    return {
+      view,
+      date: day.key,
+      hour,
+      title: FULL_WEEKDAY.format(noonOf(day.key)),
+      subtitle: FULL_DATE.format(noonOf(day.key)),
+      drillHint: "Click to see every 15 minutes",
+      previous: dayAt(index - 1),
+      following: dayAt(index + 1),
+      points: day.hours.map((entry) => ({
+        ...entry,
+        id: String(entry.key),
+        axis: formatHour(entry.key),
+        title: `${weekday(day.key)}, ${formatHour(entry.key)}`,
+        next: { view: "hourly", date: day.key, hour: entry.key },
+      })),
+    };
+  }
+
+  const selected = day.hours.find((entry) => entry.key === hour) ?? defaultHour(day);
+  const index = day.hours.indexOf(selected);
+  const hourAt = (at) => (day.hours[at] ? { view, date: day.key, hour: day.hours[at].key } : null);
+
+  return {
+    view,
+    date: day.key,
+    hour: selected.key,
+    title: `${weekday(day.key)}, ${formatHour(selected.key)}`,
+    subtitle: FULL_DATE.format(noonOf(day.key)),
+    drillHint: null,
+    previous: hourAt(index - 1),
+    following: hourAt(index + 1),
+    points: selected.quarters.map((entry) => ({
+      ...entry,
+      id: String(entry.key),
+      axis: clockTime(selected.key, entry.key),
+      title: `${clockTime(selected.key, entry.key)} to ${entry.key === 45 ? clockTime((selected.key + 1) % 24, 0) : clockTime(selected.key, entry.key + 15)}`,
+      next: null,
+    })),
+  };
 }
 
 /** Where a sales log row opens: its day of the Daily Sales Report. */
