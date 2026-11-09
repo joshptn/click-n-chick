@@ -99,15 +99,43 @@ test.describe("Analytics Dashboard", () => {
     expect(writes).toEqual([]);
   });
 
-  test("the chart tabs switch between the three periods", async ({ page }) => {
+  test("the chart drills from the week to a day to an hour, and steps between them", async ({ page }) => {
     await signIn(page, MANAGER);
-    await expect(page.getByTestId("sales-title")).toHaveText("Weekly Sales");
+
+    const title = page.getByTestId("sales-title");
+
+    await expect(title).toHaveText("Weekly Sales");
+    await expect(page.getByTestId("chart-previous")).toHaveCount(0);
+
+    const chart = page.getByTestId("sales-chart");
+    const box = await chart.boundingBox();
+
+    await chart.click({ position: { x: box.width - 12, y: 100 } });
+    await expect(title).toHaveText(/^[A-Z][a-z]+day$/);
+    await expect(page.getByTestId("chart-next")).toBeDisabled();
+
+    const today = await title.textContent();
+
+    await page.getByTestId("chart-previous").click();
+    await expect(title).not.toHaveText(today);
+    await expect(page.getByTestId("chart-next")).toBeEnabled();
+
+    await page.getByTestId("chart-next").click();
+    await expect(title).toHaveText(today);
+
+    await page.getByTestId("sales-chart").click({ position: { x: box.width / 2, y: 100 } });
+    await expect(title).toHaveText(/^[A-Z][a-z]{2}, \d+[AP]M$/);
+
+    const hour = await title.textContent();
+
+    await page.getByTestId("chart-previous").click();
+    await expect(title).not.toHaveText(hour);
 
     await page.getByTestId("chart-view-daily").click();
-    await expect(page.getByTestId("sales-title")).toHaveText("Daily Sales");
+    await expect(title).toHaveText(today);
 
-    await page.getByTestId("chart-view-hourly").click();
-    await expect(page.getByTestId("sales-title")).toHaveText("Hourly Sales");
+    await page.getByTestId("chart-view-weekly").click();
+    await expect(title).toHaveText("Weekly Sales");
   });
 
   test("the Store Agent cannot open it", async ({ page }) => {
