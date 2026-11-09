@@ -71,6 +71,7 @@ export const pages = {
   AdvanceOrders: lazyPage(() => import("../pages/admin/AdvanceOrders")),
   ProductAvailability: lazyPage(() => import("../pages/admin/ProductAvailability")),
   OrderRecords: lazyPage(() => import("../pages/admin/OrderRecords")),
+  PendingOrders: lazyPage(() => import("../pages/admin/PendingOrders")),
 
   // Store Manager.
   SuperAdminDashboard: lazyPage(() => import("../pages/superadmin/Dashboard")),

@@ -33,8 +33,8 @@ import { pages, preloadWhenIdle } from "../../lib/pages";
 // The pages each role's sidebar links to. Staff move between them all day, so
 // their code is fetched once the first staff page has settled.
 const SIDEBAR_PAGES = {
-  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.DailySalesReport, pages.OrderRecords, pages.UserManagement],
-  agent: [pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.ProductAvailability, pages.OrderRecords],
+  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.PendingOrders, pages.DailySalesReport, pages.OrderRecords, pages.UserManagement],
+  agent: [pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.PendingOrders, pages.ProductAvailability, pages.OrderRecords],
 };
 
 function Badge({ count, inverted = false }) {
@@ -129,6 +129,7 @@ function StaffSidebar({ onNavigate }) {
 
   const allOrders = { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true };
   const orderRecords = { label: "Order Records", icon: IconArchive, to: "/admin/records" };
+  const pendingOrders = { label: "Pending Orders", icon: IconHourglassHigh, to: "/admin/pending-orders" };
 
   const groups = manager
     ? [
@@ -139,7 +140,7 @@ function StaffSidebar({ onNavigate }) {
             { label: "Daily Sales Report", icon: IconChartLine, to: "/superadmin/reports/daily" },
           ],
         },
-        { label: "Operations", entries: [allOrders, advanceEntry, discountEntry, orderRecords] },
+        { label: "Operations", entries: [allOrders, advanceEntry, discountEntry, pendingOrders, orderRecords] },
         {
           label: "Administration",
           entries: [
@@ -150,7 +151,7 @@ function StaffSidebar({ onNavigate }) {
         },
       ]
     : [
-        { label: "Operations", entries: [allOrders, advanceEntry, discountEntry, { label: "Pending Order", icon: IconHourglassHigh }, orderRecords] },
+        { label: "Operations", entries: [allOrders, advanceEntry, discountEntry, pendingOrders, orderRecords] },
         { label: "Menu", entries: [{ label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" }] },
       ];
 
