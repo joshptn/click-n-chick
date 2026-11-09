@@ -26,6 +26,7 @@ const {
   Profile,
   Security,
   AdminDashboard,
+  PendingOrders,
   DiscountRequests,
   AdvanceOrders,
   ProductAvailability,
@@ -71,6 +72,7 @@ const routes = (
         <Route path="/admin/advance-orders" element={<AdvanceOrders />} />
         <Route path="/admin/products" element={<ProductAvailability />} />
         <Route path="/admin/records" element={<OrderRecords />} />
+        <Route path="/admin/pending-orders" element={<PendingOrders />} />
       </Route>
     </Route>
 

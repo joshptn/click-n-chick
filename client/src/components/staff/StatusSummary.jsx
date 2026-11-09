@@ -1,9 +1,9 @@
 import { TONES } from "./tones";
 
 /** The day at a glance; each card jumps to its column. */
-function StatusSummary({ columns, onSelect, loading = false }) {
+function StatusSummary({ columns, onSelect, loading = false, gridClass = "sm:grid-cols-3 lg:grid-cols-5" }) {
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+    <div className={`grid grid-cols-2 gap-2.5 ${gridClass}`}>
       {columns.map((column) => {
         const tone = TONES[column.tone];
 
