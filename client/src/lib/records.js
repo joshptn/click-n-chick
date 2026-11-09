@@ -46,7 +46,7 @@ export const DATE_RANGES = [
 ];
 
 export const OUTCOMES = [
-  { key: "all", label: "Any outcome" },
+  { key: "all", label: "ALL" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
   { key: "rejected", label: "Declined" },

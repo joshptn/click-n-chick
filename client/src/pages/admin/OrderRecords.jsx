@@ -4,12 +4,12 @@ import { Drawer, Pagination } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { IconArchive, IconRefresh } from "@tabler/icons-react";
 
+import FilterBar from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
 import RecordDetailPanel from "../../components/staff/RecordDetailPanel";
 import { DateInput, RecordCards, RecordTable } from "../../components/staff/RecordList";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useOrderRecord, useOrderRecords, useRecordPrefetch } from "../../hooks/useOrderRecords";
@@ -176,14 +176,6 @@ function OrderRecords() {
                   Completed, cancelled and declined orders. Records are read-only.
                 </p>
               </div>
-
-              <StaffSearch
-                value={searchText}
-                onChange={setSearchText}
-                placeholder="Search orders…"
-                title="Search by ticket or order number, customer name, email, phone or dish"
-                label="Search orders"
-              />
             </div>
 
             <div className="mt-4">
@@ -199,83 +191,76 @@ function OrderRecords() {
           </header>
 
           <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <FilterSelect
-                label="Date closed"
-                value={filters.range}
-                onChange={(range) =>
-                  write(range === "custom" ? { range, from: filters.from || today, to: filters.to || today } : { range, from: "", to: "" })
-                }
-                options={DATE_RANGES}
-                active={filters.range !== "all"}
-                testId="filter-range"
-              />
-              {filters.range === "custom" && (
-                <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">
-                  <DateInput label="From" value={filters.from} max={filters.to || today} onChange={set("from")} />
-                  <span className="font-display text-[11px] text-[#a39f9b]">to</span>
-                  <DateInput label="To" value={filters.to} min={filters.from} max={today} onChange={set("to")} />
-                </div>
-              )}
-              <FilterSelect
-                label="Outcome"
-                value={filters.outcome}
-                onChange={set("outcome")}
-                options={OUTCOMES}
-                active={filters.outcome !== "all"}
-                testId="filter-outcome"
-              />
-              <FilterSelect
-                label="Order type"
-                value={filters.type}
-                onChange={set("type")}
-                options={ORDER_TYPES}
-                active={filters.type !== "all"}
-                testId="filter-type"
-              />
-              <FilterSelect
-                label="Regular or advance"
-                value={filters.kind}
-                onChange={set("kind")}
-                options={ORDER_KINDS}
-                active={filters.kind !== "all"}
-                testId="filter-kind"
-              />
-              <FilterSelect
-                label="Payment"
-                value={filters.payment}
-                onChange={set("payment")}
-                options={PAYMENT_FILTERS}
-                active={filters.payment !== "all"}
-                testId="filter-payment"
-              />
-              <FilterSelect
-                label="Sort"
-                value={filters.sort}
-                onChange={set("sort")}
-                options={RECORD_SORTS}
-                active={false}
-                testId="filter-sort"
-              />
-
-              <div className="col-span-2 flex items-center gap-3 font-display text-[11.5px] text-[#8d8884] sm:ml-auto">
-                {meta && (
-                  <span data-testid="result-count">
-                    {meta.total} {filters.outcome !== "all" ? outcomeLabel.toLowerCase() : "closed"}{" "}
-                    {meta.total === 1 ? "order" : "orders"}
-                  </span>
-                )}
-                {filtered && (
-                  <button
-                    type="button"
-                    onClick={clear}
-                    className="bg-transparent font-semibold text-brand-600 hover:text-brand-800"
-                  >
-                    <span className="text-[11.5px]">Clear filters</span>
-                  </button>
-                )}
-              </div>
-            </div>
+            <FilterBar
+              testId="record-filters"
+              search={{
+                value: searchText,
+                onChange: setSearchText,
+                placeholder: "Search orders…",
+                title: "Search by ticket or order number, customer name, email, phone or dish",
+                label: "Search orders",
+              }}
+              tabs={{
+                items: OUTCOMES.map((option) => ({ ...option, count: summary?.[option.key === "all" ? "total" : option.key] })),
+                value: filters.outcome,
+                onChange: set("outcome"),
+                label: "Filter by outcome",
+                testIdPrefix: "outcome-tab",
+              }}
+              below={
+                <>
+                  <FilterSelect
+                    label="Date closed"
+                    value={filters.range}
+                    onChange={(range) =>
+                      write(range === "custom" ? { range, from: filters.from || today, to: filters.to || today } : { range, from: "", to: "" })
+                    }
+                    options={DATE_RANGES}
+                    active={filters.range !== "all"}
+                    testId="filter-range"
+                  />
+                  {filters.range === "custom" && (
+                    <div className="col-span-2 flex items-center gap-1.5 sm:col-span-1">
+                      <DateInput label="From" value={filters.from} max={filters.to || today} onChange={set("from")} />
+                      <span className="font-display text-[11px] text-[#a39f9b]">to</span>
+                      <DateInput label="To" value={filters.to} min={filters.from} max={today} onChange={set("to")} />
+                    </div>
+                  )}
+                  <FilterSelect
+                    label="Order type"
+                    value={filters.type}
+                    onChange={set("type")}
+                    options={ORDER_TYPES}
+                    active={filters.type !== "all"}
+                    testId="filter-type"
+                  />
+                  <FilterSelect
+                    label="Regular or advance"
+                    value={filters.kind}
+                    onChange={set("kind")}
+                    options={ORDER_KINDS}
+                    active={filters.kind !== "all"}
+                    testId="filter-kind"
+                  />
+                  <FilterSelect
+                    label="Payment"
+                    value={filters.payment}
+                    onChange={set("payment")}
+                    options={PAYMENT_FILTERS}
+                    active={filters.payment !== "all"}
+                    testId="filter-payment"
+                  />
+                  <FilterSelect
+                    label="Sort"
+                    value={filters.sort}
+                    onChange={set("sort")}
+                    options={RECORD_SORTS}
+                    active={false}
+                    testId="filter-sort"
+                  />  
+                </>
+              }
+            />
 
             {list.isError && !list.meta ? (
               <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
