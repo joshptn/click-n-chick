@@ -304,7 +304,7 @@ function ProductForm() {
     <StaffLayout>
       <main className="flex flex-1 flex-col">
         <header className="border-b border-[#f0e9df] bg-white px-4 py-4 sm:px-6 lg:px-7">
-          <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Menu Catalog</h1>
+          <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Menu Management</h1>
           <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">Create new dishes, set prices, archive items below</p>
         </header>
 
@@ -315,7 +315,7 @@ function ProductForm() {
               className="mb-3 inline-flex items-center gap-1 font-display text-[12.5px] font-semibold text-[#8d8884] no-underline hover:text-brand-600"
             >
               <IconArrowLeft size={14} stroke={2.2} />
-              Back to the catalog
+              Back to Menu Management
             </Link>
 
             {editing && existing.isError ? (

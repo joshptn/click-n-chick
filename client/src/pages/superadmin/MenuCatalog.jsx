@@ -19,10 +19,10 @@ import CategoryFormModal from "../../components/manager/CategoryFormModal";
 import DeleteProductModal from "../../components/manager/DeleteProductModal";
 import ManageCategoriesModal from "../../components/manager/ManageCategoriesModal";
 import ProductPreviewModal from "../../components/manager/ProductPreviewModal";
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import Button from "../../components/ui/Button";
 import { useCatalog } from "../../hooks/useCatalog";
 import { STATUS_FILTERS, isArchived, matchesStatus } from "../../lib/catalog";
@@ -31,9 +31,11 @@ import { formatPeso } from "../../lib/menu";
 import { SALES_STATUS_NOTE, SALES_STATUS_PREVIEW, matchesSalesStatus, salesStatusOf } from "../../lib/salesStatusPreview";
 import { PRICE_FILTERS, SORTS, categoryTone, matchesPrice, matchesText } from "../../lib/stock";
 
-const PAGE_TITLE = "Menu Catalog · Click n Chick";
+const PAGE_TITLE = "Menu Management · Click n Chick";
 
-const DEFAULTS = { search: "", category: "all", status: "all", price: "any", sales: "all", sort: "name" };
+const DEFAULTS = { search: "", category: "all", status: "all", price: "any", sales: "all" };
+
+const byName = SORTS.find((option) => option.key === "name").compare;
 
 function Thumb({ food, onOpen }) {
   const [failed, setFailed] = useState(false);
@@ -256,7 +258,7 @@ function CardView({ foods, loading, rowProps }) {
 }
 
 /**
- * Menu Catalog: the Store Manager's dishes and categories (BR-29,
+ * Menu Management: the Store Manager's dishes and categories (BR-29,
  * UC-MENU-007..014).
  *
  * Adding and editing open their own page; archiving is the availability
@@ -274,20 +276,20 @@ function MenuCatalog() {
   const [managing, setManaging] = useState(false);
 
   const set = (key) => (value) => setFilters((current) => ({ ...current, [key]: value }));
-  const filtered = Object.keys(DEFAULTS).some((key) => key !== "sort" && filters[key] !== DEFAULTS[key]);
-  const clear = () => setFilters((current) => ({ ...DEFAULTS, sort: current.sort }));
+  const filtered = Object.keys(DEFAULTS).some((key) => filters[key] !== DEFAULTS[key]);
+  const clear = () => setFilters(DEFAULTS);
 
-  const visible = useMemo(() => {
-    const sort = SORTS.find((option) => option.key === filters.sort) ?? SORTS[0];
-
-    return catalog.foods
-      .filter((food) => matchesText(food, filters.search))
-      .filter((food) => filters.category === "all" || String(food.category?.id) === filters.category)
-      .filter((food) => matchesStatus(food, filters.status))
-      .filter((food) => matchesPrice(food, filters.price))
-      .filter((food) => matchesSalesStatus(food, filters.sales))
-      .sort(sort.compare);
-  }, [catalog.foods, filters]);
+  const visible = useMemo(
+    () =>
+      catalog.foods
+        .filter((food) => matchesText(food, filters.search))
+        .filter((food) => filters.category === "all" || String(food.category?.id) === filters.category)
+        .filter((food) => matchesStatus(food, filters.status))
+        .filter((food) => matchesPrice(food, filters.price))
+        .filter((food) => matchesSalesStatus(food, filters.sales))
+        .sort(byName),
+    [catalog.foods, filters]
+  );
 
   const counts = useMemo(
     () =>
@@ -343,7 +345,7 @@ function MenuCatalog() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Menu Catalog</h1>
+                <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Menu Management</h1>
                 <LivePill />
               </div>
               <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
@@ -374,104 +376,82 @@ function MenuCatalog() {
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
-          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center">
-            <StaffSearch
-              value={filters.search}
-              onChange={set("search")}
-              placeholder="Search dish name…"
-              title="Search by dish name, ID or category"
-              label="Search dishes"
-              className="lg:max-w-[300px]"
-            />
+          <FilterBar
+            testId="catalog-filters"
+            search={{
+              value: filters.search,
+              onChange: set("search"),
+              placeholder: "Search dish name…",
+              title: "Search by dish name, ID or category",
+              label: "Search dishes",
+            }}
+            tabs={{
+              items: [
+                { key: "all", label: "ALL", count: catalog.isLoading ? undefined : catalog.foods.length },
+                ...catalog.categories.map((category) => ({ key: String(category.id), label: category.name, count: counts[category.id] ?? 0 })),
+              ],
+              value: filters.category,
+              onChange: set("category"),
+              label: "Filter by category",
+              testIdPrefix: "category",
+            }}
+            searchBelow
+            below={
+              <>
+                <FilterSelect
+                  label="Status"
+                  value={filters.status}
+                  onChange={set("status")}
+                  options={STATUS_FILTERS.map((option) =>
+                    option.key === "archived" ? { ...option, label: `Archived (${archivedCount})` } : option
+                  )}
+                  active={filters.status !== "all"}
+                  testId="filter-status"
+                />
+                <FilterSelect
+                  label="Price"
+                  value={filters.price}
+                  onChange={set("price")}
+                  options={PRICE_FILTERS}
+                  active={filters.price !== "any"}
+                  testId="filter-price"
+                />
 
-            <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
-              {[{ id: "all", name: "All" }, ...catalog.categories].map((category) => {
-                const active = filters.category === String(category.id);
+                {/* Kept apart from the real filters: its values are a placeholder. */}
+                <div className="col-span-2 flex h-[34px] items-center gap-1.5 rounded-full border border-dashed border-[#e4ddd3] bg-[#fdfbf8] pl-2.5 pr-0.5 sm:col-span-1 [&_select]:h-[28px]">
+                  <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
+                    <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-[0.5px] text-[#a39f9b]">
+                      Preview
+                      <IconInfoCircle size={12} stroke={2} />
+                    </span>
+                  </Tooltip>
+                  <FilterSelect
+                    label="Sales status (preview)"
+                    value={filters.sales}
+                    onChange={set("sales")}
+                    options={[{ key: "all", label: "Any sales status" }, ...SALES_STATUS_PREVIEW]}
+                    active={filters.sales !== "all"}
+                    testId="filter-sales"
+                  />
+                </div>
 
-                return (
-                  <button
-                    key={category.id}
-                    type="button"
-                    onClick={() => set("category")(String(category.id))}
-                    aria-pressed={active}
-                    data-testid={`category-${category.id}`}
-                    className={`shrink-0 rounded-full border px-3.5 py-1.5 font-display font-semibold transition-colors ${
-                      active
-                        ? "border-brand-500 bg-brand-500 text-white shadow-[0_4px_12px_-4px_rgba(255,139,43,0.6)]"
-                        : "border-[#ece7e0] bg-white text-[#5f5b58] hover:border-brand-200"
-                    }`}
-                  >
-                    {/* On the span: Mantine resets type on <button> itself. */}
-                    <span className="text-[11.5px] uppercase tracking-[0.4px]">{category.name}</span>
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setManaging(true)}
-                data-testid="manage-categories"
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-[#e4ddd3] bg-transparent px-3 py-1.5 font-display font-semibold text-[#8d8884] transition-colors hover:border-brand-300 hover:text-brand-600"
-              >
-                <IconCategory size={14} stroke={2} />
-                <span className="text-[11.5px]">Manage</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            <FilterSelect
-              label="Status"
-              value={filters.status}
-              onChange={set("status")}
-              options={STATUS_FILTERS.map((option) =>
-                option.key === "archived" ? { ...option, label: `Archived (${archivedCount})` } : option
-              )}
-              active={filters.status !== "all"}
-              testId="filter-status"
-            />
-            <FilterSelect
-              label="Price"
-              value={filters.price}
-              onChange={set("price")}
-              options={PRICE_FILTERS}
-              active={filters.price !== "any"}
-              testId="filter-price"
-            />
-            <FilterSelect label="Sort" value={filters.sort} onChange={set("sort")} options={SORTS} active={false} testId="filter-sort" />
-
-            {/* Kept apart from the real filters: its values are a placeholder. */}
-            <div className="flex items-center gap-1.5 rounded-full border border-dashed border-[#e4ddd3] bg-[#fdfbf8] py-0.5 pl-2.5 pr-0.5">
-              <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
-                <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-[0.5px] text-[#a39f9b]">
-                  Preview
-                  <IconInfoCircle size={12} stroke={2} />
-                </span>
-              </Tooltip>
-              <FilterSelect
-                label="Sales status (preview)"
-                value={filters.sales}
-                onChange={set("sales")}
-                options={[{ key: "all", label: "Any sales status" }, ...SALES_STATUS_PREVIEW]}
-                active={filters.sales !== "all"}
-                testId="filter-sales"
-              />
-            </div>
-
-            <div className="col-span-2 flex items-center gap-3 font-display text-[11.5px] text-[#8d8884] sm:ml-auto">
-              {!catalog.isLoading && (
-                <span data-testid="result-count">
-                  {visible.length === catalog.foods.length
-                    ? `${catalog.foods.length} dishes`
-                    : `${visible.length} of ${catalog.foods.length} dishes`}
-                </span>
-              )}
-              {filtered && (
-                <button type="button" onClick={clear} className="bg-transparent font-semibold text-brand-600 hover:text-brand-800">
-                  <span className="text-[11.5px]">Clear filters</span>
-                </button>
-              )}
-            </div>
-          </div>
+                <FilterMeta onClear={filtered ? clear : undefined}>
+                  {!catalog.isLoading &&
+                    (visible.length === catalog.foods.length ? `${catalog.foods.length} dishes` : `${visible.length} of ${catalog.foods.length} dishes`)}
+                </FilterMeta>
+              </>
+            }
+          >
+            <button
+              type="button"
+              onClick={() => setManaging(true)}
+              data-testid="manage-categories"
+              className="inline-flex h-[34px] shrink-0 items-center justify-center gap-1 rounded-full border border-dashed border-[#e4ddd3] bg-transparent px-3 font-display font-semibold text-[#8d8884] transition-colors hover:border-brand-300 hover:text-brand-600"
+            >
+              <IconCategory size={14} stroke={2} />
+              <span className="text-[11.5px]">Manage categories</span>
+            </button>
+          </FilterBar>
 
           {catalog.isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
