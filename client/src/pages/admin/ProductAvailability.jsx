@@ -4,11 +4,11 @@ import { useMediaQuery } from "@mantine/hooks";
 import { IconInfoCircle, IconPhotoOff, IconRefresh, IconToolsKitchen2 } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
 import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import StockControl from "../../components/staff/StockControl";
 import Button from "../../components/ui/Button";
@@ -256,6 +256,16 @@ function ProductAvailability() {
       .sort(sort.compare);
   }, [stock.foods, filters]);
 
+  const categoryCounts = useMemo(
+    () =>
+      stock.foods.reduce((total, food) => {
+        if (food.category?.id) total[food.category.id] = (total[food.category.id] ?? 0) + 1;
+
+        return total;
+      }, {}),
+    [stock.foods]
+  );
+
   const summaryCards = SUMMARY.map((card) => ({ ...card, total: stock.summary?.[card.key] ?? 0 }));
   const soldOut = stock.summary?.out_of_stock ?? 0;
 
@@ -290,14 +300,6 @@ function ProductAvailability() {
                 Adjust stock and switch dishes on or off. Names, prices and categories are set by the Store Manager.
               </p>
             </div>
-
-            <StaffSearch
-              value={filters.search}
-              onChange={set("search")}
-              placeholder="Search dish name or ID…"
-              title="Search by dish name, ID or category"
-              label="Search dishes"
-            />
           </div>
 
           <div className="mt-4">
@@ -314,95 +316,74 @@ function ProductAvailability() {
             <ReadOnlyNotice>Stock and availability are changed by the Store Agent (BR-29). You are viewing them read-only.</ReadOnlyNotice>
           )}
 
-          <div className="flex flex-col gap-2.5">
-            <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 text-[12px] sm:mx-0 sm:flex-wrap sm:px-0">
-              {[{ id: "all", name: "All" }, ...stock.categories].map((category) => {
-                const active = filters.category === String(category.id);
+          <FilterBar
+            testId="stock-filters"
+            search={{
+              value: filters.search,
+              onChange: set("search"),
+              placeholder: "Search dish name or ID…",
+              title: "Search by dish name, ID or category",
+              label: "Search dishes",
+            }}
+            tabs={{
+              items: [
+                { key: "all", label: "ALL", count: stock.isLoading ? undefined : stock.foods.length },
+                ...stock.categories.map((category) => ({ key: String(category.id), label: category.name, count: categoryCounts[category.id] ?? 0 })),
+              ],
+              value: filters.category,
+              onChange: set("category"),
+              label: "Filter by category",
+              testIdPrefix: "category",
+            }}
+          >
+            <FilterSelect
+              label="Stock"
+              value={filters.stock}
+              onChange={set("stock")}
+              options={STOCK_FILTERS}
+              active={filters.stock !== "all"}
+              testId="filter-stock"
+            />
+            <FilterSelect
+              label="Price"
+              value={filters.price}
+              onChange={set("price")}
+              options={PRICE_FILTERS}
+              active={filters.price !== "any"}
+              testId="filter-price"
+            />
+            <FilterSelect
+              label="Sort"
+              value={filters.sort}
+              onChange={set("sort")}
+              options={SORTS}
+              active={false}
+              testId="filter-sort"
+            />
 
-                return (
-                  <button
-                    key={category.id}
-                    type="button"
-                    onClick={() => set("category")(String(category.id))}
-                    aria-pressed={active}
-                    data-testid={`category-${category.id}`}
-                    className={`shrink-0 rounded-full border px-3.5 py-1.5 font-display font-semibold transition-colors ${
-                      active
-                        ? "border-brand-500 bg-brand-500 text-white shadow-[0_4px_12px_-4px_rgba(255,139,43,0.6)]"
-                        : "border-[#ece7e0] bg-white text-[#5f5b58] hover:border-brand-200"
-                    }`}
-                  >
-                    {/* On the span: Mantine resets type on <button> itself. */}
-                    <span className="text-[11.5px] uppercase tracking-[0.4px]">{category.name}</span>
-                  </button>
-                );
-              })}
+            {/* Kept apart from the real filters: its values are a placeholder. */}
+            <div className="col-span-2 flex items-center gap-1.5 rounded-full border border-dashed border-[#e4ddd3] bg-[#fdfbf8] py-0.5 pl-2.5 pr-0.5 sm:col-span-1">
+              <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
+                <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-[0.5px] text-[#a39f9b]">
+                  Preview
+                  <IconInfoCircle size={12} stroke={2} />
+                </span>
+              </Tooltip>
+              <FilterSelect
+                label="Sales status (preview)"
+                value={filters.sales}
+                onChange={set("sales")}
+                options={[{ key: "all", label: "Any sales status" }, ...SALES_STATUS_PREVIEW]}
+                active={filters.sales !== "all"}
+                testId="filter-sales"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <FilterSelect
-                label="Stock"
-                value={filters.stock}
-                onChange={set("stock")}
-                options={STOCK_FILTERS}
-                active={filters.stock !== "all"}
-                testId="filter-stock"
-              />
-              <FilterSelect
-                label="Price"
-                value={filters.price}
-                onChange={set("price")}
-                options={PRICE_FILTERS}
-                active={filters.price !== "any"}
-                testId="filter-price"
-              />
-              <FilterSelect
-                label="Sort"
-                value={filters.sort}
-                onChange={set("sort")}
-                options={SORTS}
-                active={false}
-                testId="filter-sort"
-              />
-
-              {/* Kept apart from the real filters: its values are a placeholder. */}
-              <div className="col-span-2 flex items-center gap-1.5 rounded-full border border-dashed border-[#e4ddd3] bg-[#fdfbf8] py-0.5 pl-2.5 pr-0.5 sm:col-span-1">
-                <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
-                  <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-[0.5px] text-[#a39f9b]">
-                    Preview
-                    <IconInfoCircle size={12} stroke={2} />
-                  </span>
-                </Tooltip>
-                <FilterSelect
-                  label="Sales status (preview)"
-                  value={filters.sales}
-                  onChange={set("sales")}
-                  options={[{ key: "all", label: "Any sales status" }, ...SALES_STATUS_PREVIEW]}
-                  active={filters.sales !== "all"}
-                  testId="filter-sales"
-                />
-              </div>
-
-              <div className="col-span-2 flex items-center gap-3 font-display text-[11.5px] text-[#8d8884] sm:ml-auto">
-                {!stock.isLoading && (
-                  <span data-testid="result-count">
-                    {visible.length === stock.foods.length
-                      ? `${stock.foods.length} dishes`
-                      : `${visible.length} of ${stock.foods.length} dishes`}
-                  </span>
-                )}
-                {filtered && (
-                  <button
-                    type="button"
-                    onClick={() => setFilters((current) => ({ ...DEFAULTS, sort: current.sort }))}
-                    className="bg-transparent font-semibold text-brand-600 hover:text-brand-800"
-                  >
-                    <span className="text-[11.5px]">Clear filters</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+            <FilterMeta onClear={filtered ? () => setFilters((current) => ({ ...DEFAULTS, sort: current.sort })) : undefined}>
+              {!stock.isLoading &&
+                (visible.length === stock.foods.length ? `${stock.foods.length} dishes` : `${visible.length} of ${stock.foods.length} dishes`)}
+            </FilterMeta>
+          </FilterBar>
 
           {stock.isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
