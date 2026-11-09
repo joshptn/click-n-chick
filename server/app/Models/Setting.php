@@ -18,6 +18,8 @@ class Setting extends Model
 
     public const DELIVERY_EXTRA_FEE_PER_KM = 'delivery.extra_fee_per_km';
 
+    public const DELIVERY_MAX_KM = 'delivery.max_driving_km';
+
     public const LOYALTY_POINTS_PER_PESO = 'loyalty.points_per_peso';
 
     public const LOYALTY_PESO_PER_POINT = 'loyalty.peso_per_point';

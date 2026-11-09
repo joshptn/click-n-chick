@@ -2,6 +2,7 @@
 
 namespace App\Services\Geo;
 
+use App\Services\Orders\DeliveryPricing;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -158,7 +159,7 @@ class NominatimClient
     {
         $lat = (float) config('store.origin.latitude');
         $lng = (float) config('store.origin.longitude');
-        $radius = (float) config('store.max_driving_km', 45.0) * 1.25;
+        $radius = app(DeliveryPricing::class)->maxDrivingKm() * 1.25;
 
         $latSpan = $radius / 111.0;
         $lngSpan = $radius / max(0.1, 111.0 * cos(deg2rad($lat)));

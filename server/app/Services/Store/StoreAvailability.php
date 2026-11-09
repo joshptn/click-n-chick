@@ -3,6 +3,7 @@
 namespace App\Services\Store;
 
 use App\Models\Setting;
+use App\Services\Orders\DeliveryPricing;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
@@ -227,6 +228,7 @@ class StoreAvailability
             'delivery_enabled' => $this->deliveryEnabled(),
             'accepting_delivery' => $this->acceptsDelivery(),
             'accepting_pickup' => $acceptsOrders,
+            'max_driving_km' => app(DeliveryPricing::class)->maxDrivingKm(),
             'next_opens_at' => $this->nextOpensAt()?->toIso8601String(),
             'pickup_window' => [
                 'earliest' => $window['earliest']->toIso8601String(),
