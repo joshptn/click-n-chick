@@ -6,6 +6,7 @@ import { LastOrderEventContext, LiveNotificationsContext } from "./realtimeSlice
 import toast from "../components/app/Toast";
 import { ROLES } from "../lib/roles";
 import { disconnectEcho, getEcho, isRealtimeConfigured } from "../lib/echo";
+import { analyticsRefresher } from "../lib/analytics";
 import { STORE_STATUS_KEY } from "../lib/store";
 import { endSession, sessionDeviceId } from "../lib/session";
 
@@ -33,6 +34,9 @@ const RealtimeContext = createContext(null);
 export function RealtimeProvider({ children }) {
   const { user, token } = useContext(AuthContext);
   const queryClient = useQueryClient();
+  const analytics = useMemo(() => analyticsRefresher(queryClient), [queryClient]);
+
+  useEffect(() => analytics.cancel, [analytics]);
 
   const [status, setStatus] = useState("idle");
   const [notifications, setNotifications] = useState([]);
@@ -196,6 +200,7 @@ export function RealtimeProvider({ children }) {
         .listen(".order", (payload) => {
         setLastOrderEvent(payload);
         queryClient.invalidateQueries({ queryKey: ["orders"] });
+        analytics.order(payload?.order?.status);
 
         // A new advance request is announced by its own staff notification
         // ("New advance request"); this toast is for orders joining the line.
@@ -223,7 +228,7 @@ export function RealtimeProvider({ children }) {
         echo.leave(name);
       });
     };
-  }, [token, user?.id, user?.role, queryClient, markSubscribed]);
+  }, [token, user?.id, user?.role, queryClient, markSubscribed, analytics]);
 
   useEffect(() => {
     if (!token) {
