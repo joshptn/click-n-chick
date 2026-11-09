@@ -145,7 +145,7 @@ function StaffSidebar({ onNavigate }) {
           entries: [
             { label: "Menu Management", icon: IconToolsKitchen2, to: "/superadmin/menu" },
             { label: "User Management", icon: IconUsers, to: "/superadmin/users" },
-            { label: "Store Settings", icon: IconBuildingStore },
+            { label: "Store Settings", icon: IconBuildingStore, to: "/superadmin/settings" },
           ],
         },
       ]
