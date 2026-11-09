@@ -66,7 +66,7 @@ function stop(handler) {
  * number (BR-22c), and only payment moves an accepted request on (BR-16g) -
  * so the awaiting-payment card offers a reminder, never a forward step.
  */
-function AdvanceOrderCard({ order, busy, canDecide, onAccept, onReject, onRemind, onAdvance, onOpen }) {
+function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, onAdvance, onOpen }) {
   const reduceMotion = useReducedMotion();
   const stage = advanceStage(order);
   const forward = stage === "kitchen" ? advanceLabel(order) : null;
@@ -168,7 +168,7 @@ function AdvanceOrderCard({ order, busy, canDecide, onAccept, onReject, onRemind
 
       {/* Sized here: Mantine's global `button { font-size: inherit }` is unlayered
           and beats a text utility on the button itself. */}
-      <div className="mt-2.5 text-[12px]">
+      <div className="mt-2.5 text-[12px] empty:hidden">
         {stage === "closed" ? (
           <p
             className={`m-0 flex items-center justify-center gap-1.5 py-1 font-display text-[11.5px] font-semibold ${OUTCOME_TONES[outcome.tone]}`}
@@ -177,7 +177,7 @@ function AdvanceOrderCard({ order, busy, canDecide, onAccept, onReject, onRemind
             {outcome.label}
           </p>
         ) : stage === "decide" ? (
-          canDecide ? (
+          canAct ? (
             <div className={`grid gap-1.5 ${order.collection_passed ? "grid-cols-1" : "grid-cols-2"}`}>
               {/* A date that has gone can only be declined (the server refuses
                   ADVANCE_DATE_PASSED), so the customer hears back and rebooks. */}
@@ -204,11 +204,11 @@ function AdvanceOrderCard({ order, busy, canDecide, onAccept, onReject, onRemind
             </div>
           ) : (
             <p className="m-0 rounded-[8px] bg-[#faf6f0] px-3 py-1.5 text-center font-display text-[10.5px] text-[#8d8884]">
-              A Store Agent decides requests.
+              Waiting for a Store Agent&rsquo;s decision.
             </p>
           )
         ) : stage === "payment" ? (
-          canDecide ? (
+          canAct ? (
             <button
               type="button"
               disabled={busy || coolingDown}
@@ -226,7 +226,7 @@ function AdvanceOrderCard({ order, busy, canDecide, onAccept, onReject, onRemind
             </p>
           )
         ) : stage === "scheduled" ? (
-          order.can_start_preparing ? (
+          order.can_start_preparing && canAct ? (
             <button
               type="button"
               disabled={busy}
@@ -244,7 +244,7 @@ function AdvanceOrderCard({ order, busy, canDecide, onAccept, onReject, onRemind
                 : `Prepared on the day · ${collectionLabel(order).split(" · ")[0]}`}
             </p>
           )
-        ) : forward ? (
+        ) : forward && canAct ? (
           <button
             type="button"
             disabled={busy}

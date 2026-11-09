@@ -6,7 +6,7 @@ import { useLastOrderEvent } from "../../context/useRealtime";
 /**
  * The Store Manager's landing page - still a placeholder.
  *
- * Framed by the staff portal so the Manager's sidebar (Menu Catalog and the
+ * Framed by the staff portal so the Manager's sidebar (Menu Management and the
  * shared staff pages) is reachable from where sign-in lands them.
  */
 function SuperAdminDashboard() {

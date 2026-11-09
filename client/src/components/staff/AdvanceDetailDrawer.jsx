@@ -37,7 +37,7 @@ const OUTCOME_TONES = {
  * Read from the page's own data by id, so a broadcast that moves the order
  * updates the drawer in place.
  */
-function AdvanceDetailDrawer({ order, opened, onClose, busy, canDecide, onAccept, onReject, onRemind, onAdvance, onCancel }) {
+function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, onReject, onRemind, onAdvance, onCancel }) {
   const stage = order ? advanceStage(order) : null;
   const outcome = stage === "closed" ? closedOutcome(order) : null;
   const forward = stage === "kitchen" ? advanceLabel(order) : null;
@@ -174,42 +174,36 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canDecide, onAccept
             </Section>
           </div>
 
-          {stage !== "closed" && (
+          {stage !== "closed" && canAct && (
             <div className="sticky bottom-0 flex flex-col gap-2 border-t border-[#f3ede4] bg-white px-5 py-3 text-[13px]">
               {stage === "decide" ? (
-                canDecide ? (
-                  <div className={`grid gap-2 ${order.collection_passed ? "grid-cols-1" : "grid-cols-2"}`}>
-                    {order.collection_passed ? (
-                      <p className="m-0 rounded-[10px] bg-[#fdecec] px-3 py-2 text-center font-display text-[12px] text-[#e5322d]">
-                        This date has passed. Decline it so the customer can choose another.
-                      </p>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onAccept(order)}
-                        className="h-[36px] rounded-[9px] bg-[#2f9e44] font-display font-semibold text-white transition-colors hover:bg-[#278a3a] disabled:opacity-55"
-                      >
-                        Accept request
-                      </button>
-                    )}
+                <div className={`grid gap-2 ${order.collection_passed ? "grid-cols-1" : "grid-cols-2"}`}>
+                  {order.collection_passed ? (
+                    <p className="m-0 rounded-[10px] bg-[#fdecec] px-3 py-2 text-center font-display text-[12px] text-[#e5322d]">
+                      This date has passed. Decline it so the customer can choose another.
+                    </p>
+                  ) : (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => onReject(order)}
-                      className="h-[36px] rounded-[9px] bg-[#e5322d] font-display font-semibold text-white transition-colors hover:bg-[#cc2a25] disabled:opacity-55"
+                      onClick={() => onAccept(order)}
+                      className="h-[36px] rounded-[9px] bg-[#2f9e44] font-display font-semibold text-white transition-colors hover:bg-[#278a3a] disabled:opacity-55"
                     >
-                      Decline
+                      Accept request
                     </button>
-                  </div>
-                ) : (
-                  <p className="m-0 rounded-[10px] bg-[#faf6f0] px-3 py-2.5 text-center font-display text-[12.5px] text-[#8d8884]">
-                    A Store Agent accepts or declines requests.
-                  </p>
-                )
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onReject(order)}
+                    className="h-[36px] rounded-[9px] bg-[#e5322d] font-display font-semibold text-white transition-colors hover:bg-[#cc2a25] disabled:opacity-55"
+                  >
+                    Decline
+                  </button>
+                </div>
               ) : (
                 <>
-                  {stage === "payment" && canDecide && (
+                  {stage === "payment" && (
                     <button
                       type="button"
                       disabled={busy || coolingDown}

@@ -10,12 +10,15 @@ use App\Services\Auth\DeviceRegistrar;
 use App\Services\Otp\OtpService;
 use App\Services\Verification\Channel;
 use App\Services\Verification\ChannelRegistry;
+use App\Services\Verification\VerificationChannel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -189,6 +192,11 @@ class AuthController extends Controller
             return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
+        // After the password check, so it cannot reveal which accounts exist.
+        if ($user->isSuspended()) {
+            return response()->json(DeviceRegistrar::suspendedPayload(), 403);
+        }
+
         $registry = app(ChannelRegistry::class);
 
         // Gate on the per-channel timestamp, NOT on account_status. That column
@@ -197,7 +205,7 @@ class AuthController extends Controller
         if (! $user->hasVerifiedChosenChannel()) {
             $transport = $registry->forUser($user);
 
-            return response()->json([
+            return response()->json($this->firstSignInCode($user, $transport, $identifier, $request) + [
                 'status' => User::STATUS_PENDING_VERIFICATION,
                 // Always names the specific channel - never "verify your account".
                 'message' => $transport->channel() === Channel::Email
@@ -249,6 +257,46 @@ class AuthController extends Controller
             // and leave immediately when another device signs it out.
             'device_id' => $token->accessToken->known_device_id,
         ];
+    }
+
+    /**
+     * Code for an account a Store Manager created: `active`, never verified.
+     * They were not sent one at creation, so the first correct password is the
+     * moment. Self-registered accounts got theirs at registration.
+     *
+     * @return array<string, mixed>
+     */
+    private function firstSignInCode(User $user, VerificationChannel $transport, string $identifier, Request $request): array
+    {
+        if ($user->account_status !== User::STATUS_ACTIVE || $transport->identifierFor($user) === null) {
+            return [];
+        }
+
+        $usedEmail = filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false;
+
+        // The code screen needs the identifier the code goes to, and it was not typed.
+        if ($usedEmail !== ($transport->channel() === Channel::Email)) {
+            return ['sign_in_with_channel' => true];
+        }
+
+        $otp = app(OtpService::class);
+        $hash = app(ChannelRegistry::class)->hash($transport->channel(), $transport->identifierFor($user));
+        $wait = $otp->secondsUntilResendAllowed($hash, OtpCode::PURPOSE_REGISTRATION);
+
+        if ($wait > 0) {
+            return ['resend_available_in' => $wait];
+        }
+
+        try {
+            $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $transport->channel());
+        } catch (Throwable $e) {
+            // They still reach the code screen, and Resend can try again.
+            Log::warning('Could not send a first sign-in code.', ['error' => $e->getMessage()]);
+
+            return ['resend_available_in' => 0];
+        }
+
+        return ['resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS];
     }
 
     public function userDetails(Request $request)
@@ -357,46 +405,5 @@ class AuthController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
-    }
-
-    public function updateUserRole(Request $request, User $user)
-    {
-        $actor = $request->user();
-
-        $validated = $request->validate([
-            'role' => ['required', 'string', Rule::in(['super_admin', 'admin', 'customer'])],
-        ]);
-
-        if ($actor->id === $user->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You cannot change your own role.',
-            ], 422);
-        }
-
-        $isDemotingASuperAdmin = $user->role === 'super_admin'
-            && $validated['role'] !== 'super_admin';
-
-        if ($isDemotingASuperAdmin) {
-            $remaining = User::where('role', 'super_admin')
-                ->whereKeyNot($user->getKey())
-                ->count();
-
-            if ($remaining < 1) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot remove the last super admin.',
-                ], 422);
-            }
-        }
-
-        $user->role = $validated['role'];
-        $user->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Role updated successfully.',
-            'user' => $user->fresh(),
-        ], 200);
     }
 }

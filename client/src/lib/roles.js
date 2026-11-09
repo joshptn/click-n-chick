@@ -4,4 +4,6 @@ export const ROLES = {
   CUSTOMER: "customer",
 };
 
+export const canOperate = (user) => user?.role === ROLES.ADMIN;
+
 export default ROLES;

@@ -24,6 +24,13 @@ class StockController extends Controller
 {
     public const MAX_COUNT = 9999;
 
+    public const MAX_BULK = 500;
+
+    private const BULK_RULES = [
+        'food_ids' => ['required', 'array', 'min:1', 'max:'.self::MAX_BULK],
+        'food_ids.*' => ['integer', 'distinct'],
+    ];
+
     public function __construct(private StockReservation $stock) {}
 
     /** GET /api/agent/stock - every dish, switched off or not. */
@@ -130,6 +137,65 @@ class StockController extends Controller
             $food,
             $food->is_available ? $food->food_name.' is back on the menu.' : $food->food_name.' is switched off.'
         );
+    }
+
+    /** PATCH /api/agent/stock/availability - the ticked dishes, together. */
+    public function bulkAvailability(Request $request)
+    {
+        $validated = $request->validate(self::BULK_RULES + [
+            'is_available' => ['required', 'boolean'],
+        ]);
+
+        $available = (bool) $validated['is_available'];
+        $ids = $this->stock->setAvailabilityOf($validated['food_ids'], $available);
+
+        return $this->answerMany($ids, $available ? ' back on the menu.' : ' turned off.');
+    }
+
+    /**
+     * PATCH /api/agent/stock/count - the counts of the ticked dishes.
+     *
+     *   {"food_ids": [1, 2], "adjust_by": 1}       the same step for each
+     *   {"food_ids": [1, 2], "stock_quantity": 0}  sold out; no other figure
+     */
+    public function bulkStock(Request $request)
+    {
+        $validated = $request->validate(self::BULK_RULES + [
+            'adjust_by' => ['sometimes', 'integer', 'not_in:0', 'min:-'.self::MAX_COUNT, 'max:'.self::MAX_COUNT],
+            'stock_quantity' => ['sometimes', 'integer', 'in:0'],
+        ]);
+
+        $adjusting = array_key_exists('adjust_by', $validated);
+
+        if ($adjusting === array_key_exists('stock_quantity', $validated)) {
+            throw ValidationException::withMessages([
+                'stock_quantity' => 'Send either adjust_by or stock_quantity.',
+            ]);
+        }
+
+        $ids = $adjusting
+            ? $this->stock->adjustMany($validated['food_ids'], (int) $validated['adjust_by'], self::MAX_COUNT)
+            : $this->stock->markSoldOut($validated['food_ids']);
+
+        if ($ids === []) {
+            return response()->json([
+                'message' => 'None of these dishes has a count to change.',
+                'error_code' => 'STOCK_UNTRACKED',
+            ], 422);
+        }
+
+        return $this->answerMany($ids, $adjusting ? ' updated.' : ' marked sold out.');
+    }
+
+    /** @param  list<int>  $ids */
+    private function answerMany(array $ids, string $outcome)
+    {
+        $foods = Food::query()->with('category')->withHeldQuantity()->whereKey($ids)->get();
+
+        return response()->json([
+            'message' => ($foods->count() === 1 ? '1 dish' : $foods->count().' dishes').$outcome,
+            'items' => StockItemResource::collection($foods),
+        ]);
     }
 
     private function answer(Food $food, string $message)

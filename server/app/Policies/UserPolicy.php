@@ -51,6 +51,16 @@ class UserPolicy
         return $this->isStoreManager($user) && $user->id !== $target->id;
     }
 
+    public function create(User $user): bool
+    {
+        return $this->isStoreManager($user);
+    }
+
+    public function suspend(User $user, User $target): bool
+    {
+        return $this->isStoreManager($user) && $user->id !== $target->id;
+    }
+
     public function delete(User $user, User $target): bool
     {
         return $this->isStoreManager($user) && $user->id !== $target->id;

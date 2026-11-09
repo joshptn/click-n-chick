@@ -233,6 +233,172 @@ class StockManagementTest extends TestCase
     // Availability, and the boundary
     // -----------------------------------------------------------------
 
+    public function test_turning_off_ticked_dishes_archives_them_and_leaves_their_counts_alone(): void
+    {
+        Event::fake([MenuBroadcast::class]);
+        $counted = $this->food(['food_name' => 'Counted', 'stock_quantity' => 12]);
+        $madeToOrder = $this->food(['food_name' => 'Made to order', 'stock_quantity' => null]);
+        $untouched = $this->food(['food_name' => 'Not ticked', 'stock_quantity' => 7]);
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/stock/availability', ['food_ids' => [$counted->id, $madeToOrder->id], 'is_available' => false])
+            ->assertOk()
+            ->assertJsonCount(2, 'items');
+
+        $this->assertFalse($counted->fresh()->is_available);
+        $this->assertSame(12, $counted->fresh()->stock_quantity);
+        $this->assertFalse($madeToOrder->fresh()->is_available);
+        $this->assertNull($madeToOrder->fresh()->stock_quantity);
+        $this->assertTrue($untouched->fresh()->is_available);
+        $this->assertSame(7, $untouched->fresh()->stock_quantity);
+        Event::assertDispatchedTimes(MenuBroadcast::class, 2);
+    }
+
+    public function test_turning_ticked_dishes_on_leaves_their_counts_alone(): void
+    {
+        $soldOut = $this->food(['food_name' => 'Sold out', 'stock_quantity' => 0, 'is_available' => false]);
+        $stocked = $this->food(['food_name' => 'Stocked', 'stock_quantity' => 4, 'is_available' => false]);
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/stock/availability', ['food_ids' => [$soldOut->id, $stocked->id], 'is_available' => true])
+            ->assertOk();
+
+        $this->assertTrue($soldOut->fresh()->is_available);
+        $this->assertSame(0, $soldOut->fresh()->stock_quantity);
+        $this->assertTrue($stocked->fresh()->is_available);
+        $this->assertSame(4, $stocked->fresh()->stock_quantity);
+    }
+
+    public function test_a_ticked_dish_deleted_meanwhile_is_skipped(): void
+    {
+        $kept = $this->food(['food_name' => 'Kept']);
+        $deleted = $this->food(['food_name' => 'Deleted']);
+        $deleted->delete();
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/stock/availability', ['food_ids' => [$kept->id, $deleted->id], 'is_available' => false])
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.id', $kept->id);
+    }
+
+    public function test_only_the_store_agent_may_switch_ticked_dishes(): void
+    {
+        $food = $this->food(['stock_quantity' => 5]);
+        $body = ['food_ids' => [$food->id], 'is_available' => false];
+
+        foreach ([User::ROLE_SUPER_ADMIN, User::ROLE_CUSTOMER] as $role) {
+            $this->actingAs($this->user($role), 'sanctum')
+                ->patchJson('/api/agent/stock/availability', $body)
+                ->assertForbidden();
+        }
+
+        $this->assertTrue($food->fresh()->is_available);
+        $this->assertSame(5, $food->fresh()->stock_quantity);
+    }
+
+    public function test_switching_ticked_dishes_needs_a_list_of_dishes(): void
+    {
+        $agent = $this->agent();
+
+        $this->actingAs($agent, 'sanctum')
+            ->patchJson('/api/agent/stock/availability', ['food_ids' => [], 'is_available' => false])
+            ->assertUnprocessable();
+
+        $this->actingAs($agent, 'sanctum')
+            ->patchJson('/api/agent/stock/availability', ['food_ids' => ['nope'], 'is_available' => false])
+            ->assertUnprocessable();
+    }
+
+    public function test_a_step_moves_every_ticked_count_by_the_same_amount(): void
+    {
+        Event::fake([MenuBroadcast::class]);
+        $low = $this->food(['food_name' => 'Low', 'stock_quantity' => 2]);
+        $high = $this->food(['food_name' => 'High', 'stock_quantity' => 50]);
+        $madeToOrder = $this->food(['food_name' => 'Made to order', 'stock_quantity' => null]);
+        $notTicked = $this->food(['food_name' => 'Not ticked', 'stock_quantity' => 7]);
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/stock/count', ['food_ids' => [$low->id, $high->id, $madeToOrder->id], 'adjust_by' => 1])
+            ->assertOk()
+            ->assertJsonCount(2, 'items');
+
+        $this->assertSame(3, $low->fresh()->stock_quantity);
+        $this->assertSame(51, $high->fresh()->stock_quantity);
+        $this->assertNull($madeToOrder->fresh()->stock_quantity);
+        $this->assertSame(7, $notTicked->fresh()->stock_quantity);
+        Event::assertDispatchedTimes(MenuBroadcast::class, 2);
+    }
+
+    public function test_a_step_keeps_each_count_within_its_limits(): void
+    {
+        $empty = $this->food(['food_name' => 'Empty', 'stock_quantity' => 0]);
+        $full = $this->food(['food_name' => 'Full', 'stock_quantity' => StockController::MAX_COUNT]);
+        $agent = $this->agent();
+
+        $this->actingAs($agent, 'sanctum')
+            ->patchJson('/api/agent/stock/count', ['food_ids' => [$empty->id], 'adjust_by' => -1])
+            ->assertOk();
+        $this->actingAs($agent, 'sanctum')
+            ->patchJson('/api/agent/stock/count', ['food_ids' => [$full->id], 'adjust_by' => 1])
+            ->assertOk();
+
+        $this->assertSame(0, $empty->fresh()->stock_quantity);
+        $this->assertSame(StockController::MAX_COUNT, $full->fresh()->stock_quantity);
+    }
+
+    public function test_ticked_dishes_can_be_marked_sold_out_together(): void
+    {
+        $counted = $this->food(['food_name' => 'Counted', 'stock_quantity' => 12]);
+        $madeToOrder = $this->food(['food_name' => 'Made to order', 'stock_quantity' => null]);
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/stock/count', ['food_ids' => [$counted->id, $madeToOrder->id], 'stock_quantity' => 0])
+            ->assertOk()
+            ->assertJsonCount(1, 'items');
+
+        $this->assertSame(0, $counted->fresh()->stock_quantity);
+        $this->assertTrue($counted->fresh()->is_available);
+        $this->assertNull($madeToOrder->fresh()->stock_quantity);
+    }
+
+    public function test_the_shared_count_takes_one_change_and_no_other_figure(): void
+    {
+        $food = $this->food(['stock_quantity' => 5]);
+        $agent = $this->agent();
+
+        foreach ([[], ['adjust_by' => 1, 'stock_quantity' => 0], ['stock_quantity' => 3], ['stock_quantity' => null], ['adjust_by' => 0]] as $change) {
+            $this->actingAs($agent, 'sanctum')
+                ->patchJson('/api/agent/stock/count', ['food_ids' => [$food->id]] + $change)
+                ->assertUnprocessable();
+        }
+
+        $this->assertSame(5, $food->fresh()->stock_quantity);
+    }
+
+    public function test_a_shared_change_with_no_counted_dish_is_refused(): void
+    {
+        $madeToOrder = $this->food(['stock_quantity' => null]);
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/stock/count', ['food_ids' => [$madeToOrder->id], 'adjust_by' => 1])
+            ->assertUnprocessable()
+            ->assertJsonPath('error_code', 'STOCK_UNTRACKED');
+    }
+
+    public function test_only_the_store_agent_may_change_ticked_counts(): void
+    {
+        $food = $this->food(['stock_quantity' => 5]);
+
+        foreach ([User::ROLE_SUPER_ADMIN, User::ROLE_CUSTOMER] as $role) {
+            $this->actingAs($this->user($role), 'sanctum')
+                ->patchJson('/api/agent/stock/count', ['food_ids' => [$food->id], 'stock_quantity' => 0])
+                ->assertForbidden();
+        }
+
+        $this->assertSame(5, $food->fresh()->stock_quantity);
+    }
+
     public function test_the_agent_switches_a_dish_off_and_on(): void
     {
         $food = $this->food();

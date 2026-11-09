@@ -30,7 +30,7 @@ function orderingCaption(status) {
 
 function ToggleRow({ title, caption, checked, onChange, disabled, testId }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-1.5 transition-colors hover:bg-[#faf6f0]">
+    <label className="flex cursor-pointer items-center justify-between gap-2 rounded-[10px] px-3 py-1 transition-colors hover:bg-[#faf6f0]">
       <span className="min-w-0">
         <span className={`block font-display text-[12px] font-semibold ${checked ? "text-brand-600" : "text-[#6f6b68]"}`}>
           {title}

@@ -6,6 +6,7 @@ import {
   IconCircleCheck,
   IconCircleX,
   IconExternalLink,
+  IconHourglassHigh,
   IconMail,
   IconPhone,
   IconPhotoOff,
@@ -91,7 +92,7 @@ function Outcome({ claim }) {
  * Approval is on the account, not on an order - once approved, the customer
  * may take the discount at checkout on food items, one discounted order a day.
  */
-function ClaimReviewPanel({ claim, percentage, busy, approving, onApprove, onReject, nextClaim, onNext }) {
+function ClaimReviewPanel({ claim, percentage, busy, approving, canAct, onApprove, onReject, nextClaim, onNext }) {
   const reduceMotion = useReducedMotion();
   const [enlarged, setEnlarged] = useState(false);
 
@@ -181,7 +182,15 @@ function ClaimReviewPanel({ claim, percentage, busy, approving, onApprove, onRej
             </p>
           </div>
 
-          {pending ? (
+          {pending && !canAct ? (
+            <p
+              data-testid="claim-awaiting"
+              className="m-0 flex h-[44px] items-center justify-center gap-2 rounded-[10px] bg-[#fff8e1] font-display text-[13px] font-semibold text-[#c98500]"
+            >
+              <IconHourglassHigh size={17} stroke={2.1} />
+              Awaiting Store Agent review
+            </p>
+          ) : pending ? (
             <div className="grid grid-cols-[1.4fr_1fr] gap-2.5 text-[13px]">
               <button
                 type="button"

@@ -131,7 +131,7 @@ class OrderController extends Controller implements HasMiddleware
 
     public function updateOrderStatus(Request $request, $orderId)
     {
-        $this->authorize('isAdmin', Order::class);
+        $this->authorize('operate', Order::class);
 
         $validated = $request->validate([
             'status' => ['required', 'string', Rule::in(OrderStatus::all())],
@@ -181,7 +181,7 @@ class OrderController extends Controller implements HasMiddleware
 
     public function updateOrderETC(Request $request, $orderId)
     {
-        $this->authorize('isAdmin', Order::class);
+        $this->authorize('operate', Order::class);
 
         $request->validate([
             'etc' => 'required|numeric',

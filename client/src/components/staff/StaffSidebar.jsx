@@ -33,7 +33,7 @@ import { pages, preloadWhenIdle } from "../../lib/pages";
 // The pages each role's sidebar links to. Staff move between them all day, so
 // their code is fetched once the first staff page has settled.
 const SIDEBAR_PAGES = {
-  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.OrderRecords],
+  manager: [pages.SuperAdminDashboard, pages.MenuCatalog, pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.DailySalesReport, pages.OrderRecords, pages.UserManagement],
   agent: [pages.AdminDashboard, pages.AdvanceOrders, pages.DiscountRequests, pages.ProductAvailability, pages.OrderRecords],
 };
 
@@ -53,6 +53,45 @@ function Badge({ count, inverted = false }) {
 
 const rowClass =
   "flex w-full items-center gap-2.5 rounded-[9px] px-3 py-2 font-display text-[12.5px] font-medium no-underline transition-colors";
+
+function NavRow({ entry, onNavigate }) {
+  const Icon = entry.icon;
+
+  if (!entry.to) {
+    return (
+      <Tooltip label="Coming next" position="right" withArrow openDelay={300}>
+        <span role="link" aria-disabled="true" className={`${rowClass} cursor-default text-[#a39f9b]`}>
+          <Icon size={17} stroke={1.9} className="shrink-0" />
+          <span className="flex-1 leading-snug">{entry.label}</span>
+          <Badge count={entry.count} />
+        </span>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <NavLink
+      to={entry.to}
+      end={entry.end}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        `${rowClass} ${
+          isActive
+            ? "bg-brand-500 font-semibold text-white shadow-[0_6px_16px_-6px_rgba(255,139,43,0.6)]"
+            : "text-[#6f6b68] hover:bg-[#faf6f0] hover:text-ink"
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon size={17} stroke={1.9} className="shrink-0" />
+          <span className="flex-1 leading-snug">{entry.label}</span>
+          <Badge count={entry.count} inverted={isActive} />
+        </>
+      )}
+    </NavLink>
+  );
+}
 
 function StaffSidebar({ onNavigate }) {
   const { user } = useContext(AuthContext);
@@ -88,32 +127,38 @@ function StaffSidebar({ onNavigate }) {
     count: discounts.data?.total ?? 0,
   };
 
-  const entries = manager
+  const allOrders = { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true };
+  const orderRecords = { label: "Order Records", icon: IconArchive, to: "/admin/records" };
+
+  const groups = manager
     ? [
-        { label: "Dashboard", icon: IconLayoutDashboard, to: "/superadmin", end: true },
-        { label: "Menu Catalog", icon: IconToolsKitchen2, to: "/superadmin/menu" },
-        { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
-        advanceEntry,
-        discountEntry,
-        { label: "Daily Sales Report", icon: IconChartLine },
-        { label: "User Management", icon: IconUsers },
-        { label: "Store Settings", icon: IconBuildingStore },
-        { label: "Order Records", icon: IconArchive, to: "/admin/records" },
+        {
+          label: "Overview",
+          entries: [
+            { label: "Dashboard", icon: IconLayoutDashboard, to: "/superadmin", end: true },
+            { label: "Daily Sales Report", icon: IconChartLine, to: "/superadmin/reports/daily" },
+          ],
+        },
+        { label: "Operations", entries: [allOrders, advanceEntry, discountEntry, orderRecords] },
+        {
+          label: "Administration",
+          entries: [
+            { label: "Menu Management", icon: IconToolsKitchen2, to: "/superadmin/menu" },
+            { label: "User Management", icon: IconUsers, to: "/superadmin/users" },
+            { label: "Store Settings", icon: IconBuildingStore },
+          ],
+        },
       ]
     : [
-        { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true },
-        advanceEntry,
-        discountEntry,
-        { label: "Pending Order", icon: IconHourglassHigh },
-        { label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" },
-        { label: "Order Records", icon: IconArchive, to: "/admin/records" },
+        { label: "Operations", entries: [allOrders, advanceEntry, discountEntry, { label: "Pending Order", icon: IconHourglassHigh }, orderRecords] },
+        { label: "Menu", entries: [{ label: "Product Availability", icon: IconToolsKitchen2, to: "/admin/products" }] },
       ];
 
   const roleLabel = manager ? "Store Manager" : "Store Agent";
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="flex items-center gap-2 px-4 pb-5 pt-5">
+      <div className="flex items-center gap-2 px-4 pb-4 pt-5">
         <img src={LogoIcon} alt="" draggable={false} className="h-8 w-8 select-none object-contain" />
         <div className="leading-tight">
           <p className="m-0 font-logo text-[16px] font-bold tracking-[-0.3px] text-brand-700">
@@ -123,52 +168,25 @@ function StaffSidebar({ onNavigate }) {
         </div>
       </div>
 
-      <nav aria-label="Staff" className="flex flex-col gap-0.5 px-2.5">
-        {entries.map((entry) => {
-          const Icon = entry.icon;
+      {/* Scrolls by itself so a short laptop screen never pushes the account row off. */}
+      <nav aria-label="Staff" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2.5 pb-3">
+        {groups.map((group) => (
+          <div key={group.label} role="group" aria-label={group.label} className="flex flex-col gap-0.5">
+            <p aria-hidden="true" className="m-0 px-3 pb-1 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]">
+              {group.label}
+            </p>
 
-          if (!entry.to) {
-            return (
-              <Tooltip key={entry.label} label="Coming next" position="right" withArrow openDelay={300}>
-                <span role="link" aria-disabled="true" className={`${rowClass} cursor-default text-[#a39f9b]`}>
-                  <Icon size={17} stroke={1.9} className="shrink-0" />
-                  <span className="flex-1 leading-snug">{entry.label}</span>
-                  <Badge count={entry.count} />
-                </span>
-              </Tooltip>
-            );
-          }
-
-          return (
-            <NavLink
-              key={entry.to}
-              to={entry.to}
-              end={entry.end}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                `${rowClass} ${
-                  isActive
-                    ? "bg-brand-500 font-semibold text-white shadow-[0_6px_16px_-6px_rgba(255,139,43,0.6)]"
-                    : "text-[#6f6b68] hover:bg-[#faf6f0] hover:text-ink"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon size={17} stroke={1.9} className="shrink-0" />
-                  <span className="flex-1 leading-snug">{entry.label}</span>
-                  <Badge count={entry.count} inverted={isActive} />
-                </>
-              )}
-            </NavLink>
-          );
-        })}
+            {group.entries.map((entry) => (
+              <NavRow key={entry.label} entry={entry} onNavigate={onNavigate} />
+            ))}
+          </div>
+        ))}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-1.5 border-t border-[#f3ede4] px-2.5 pb-3 pt-3">
+      <div className="flex shrink-0 flex-col gap-1 border-t border-[#f3ede4] px-2.5 pb-2 pt-2">
         <StoreToggles />
 
-        <div className="mt-1 flex flex-col gap-0.5 border-t border-[#f3ede4] pt-2">
+        <div className="mt-1 flex flex-col gap-0.5 border-t border-[#f3ede4] pt-1">
           <NotificationMenu trigger="row" position="right-end" targetFor={staffNotificationTarget} />
           <AccountMenu trigger="row" position="right-end" showOrders={false} subtitle={roleLabel} />
         </div>

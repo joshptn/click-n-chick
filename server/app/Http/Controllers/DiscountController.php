@@ -230,8 +230,11 @@ class DiscountController extends Controller
      */
     private function notifyReviewers(Discount $claim, User $claimant): void
     {
+        // The Store Manager cannot decide one, so is not asked to. The queue and
+        // its count still update for them over admin.discounts.
         $reviewers = User::query()
-            ->whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN])
+            ->where('role', User::ROLE_ADMIN)
+            ->where('account_status', User::STATUS_ACTIVE)
             ->get(['id']);
 
         $name = trim("{$claimant->first_name} {$claimant->last_name}") ?: 'A customer';

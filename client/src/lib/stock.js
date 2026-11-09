@@ -30,6 +30,19 @@ export function setAvailability(id, isAvailable) {
   return api.patch(`/api/foods/${id}/availability`, { is_available: isAvailable });
 }
 
+export function setAvailabilityOf(ids, isAvailable) {
+  return api.patch("/api/agent/stock/availability", { food_ids: ids, is_available: isAvailable });
+}
+
+/** The same step for each ticked dish. Made-to-order dishes have no count. */
+export function adjustStockOf(ids, by) {
+  return api.patch("/api/agent/stock/count", { food_ids: ids, adjust_by: by });
+}
+
+export function markSoldOutOf(ids) {
+  return api.patch("/api/agent/stock/count", { food_ids: ids, stock_quantity: 0 });
+}
+
 /** The stock filter, by what the server says - never re-derived from the count. */
 export const STOCK_FILTERS = [
   { key: "all", label: "All stock" },

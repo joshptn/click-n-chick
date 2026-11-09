@@ -19,11 +19,10 @@ import { formatTime } from "../../lib/orders";
  * Read from the board's own data by id, so it stays current as broadcasts move
  * the order along and closes itself onto a notice if the order leaves the board.
  */
-function OrderDetailDrawer({ order, opened, onClose, busy, canConfirmDelivery, onAdvance, onReject, onCancel }) {
+function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, onReject, onCancel }) {
   const delivery = order?.order_type === "delivery";
   const finished = ["completed", "delivered", "cancelled"].includes(order?.status);
   const forward = order ? advanceLabel(order) : null;
-  const blockedDelivery = order?.next_status === "delivered" && !canConfirmDelivery;
   const mapUrl =
     order?.delivery?.latitude && order?.delivery?.longitude
       ? `https://www.google.com/maps/search/?api=1&query=${order.delivery.latitude},${order.delivery.longitude}`
@@ -166,7 +165,7 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canConfirmDelivery, o
             )}
           </div>
 
-          {!finished && (
+          {!finished && canAct && (
             <div className="sticky bottom-0 flex flex-col gap-2 border-t border-[#f3ede4] bg-white px-5 py-3 text-[13px]">
               {order.status === "placed" ? (
                 <div className="grid grid-cols-2 gap-2">
@@ -189,22 +188,16 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canConfirmDelivery, o
                 </div>
               ) : (
                 <>
-                  {blockedDelivery ? (
-                    <p className="m-0 rounded-[10px] bg-[#faf6f0] px-3 py-2.5 text-center font-display text-[12.5px] text-[#8d8884]">
-                      The Store Agent confirms delivery.
-                    </p>
-                  ) : (
-                    forward && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onAdvance(order)}
-                        className="inline-flex h-[36px] items-center justify-center gap-1.5 rounded-[10px] bg-brand-500 font-display font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-55"
-                      >
-                        {forward}
-                        <IconArrowRight size={14} stroke={2.4} />
-                      </button>
-                    )
+                  {forward && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onAdvance(order)}
+                      className="inline-flex h-[36px] items-center justify-center gap-1.5 rounded-[10px] bg-brand-500 font-display font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-55"
+                    >
+                      {forward}
+                      <IconArrowRight size={14} stroke={2.4} />
+                    </button>
                   )}
                   <button
                     type="button"

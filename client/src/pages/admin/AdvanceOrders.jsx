@@ -6,11 +6,12 @@ import AuthContext from "../../context/AuthContext";
 import AdvanceDetailDrawer from "../../components/staff/AdvanceDetailDrawer";
 import AdvanceOrderCard from "../../components/staff/AdvanceOrderCard";
 import CancelOrderModal from "../../components/staff/CancelOrderModal";
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import LivePill from "../../components/staff/LivePill";
 import OrderBoard from "../../components/staff/OrderBoard";
+import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import ReasonModal from "../../components/staff/ReasonModal";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useAdvanceRequests } from "../../hooks/useAdvanceRequests";
@@ -23,7 +24,7 @@ import {
   collectionLabel,
   matchesSearch,
 } from "../../lib/agent";
-import { ROLES } from "../../lib/roles";
+import { canOperate } from "../../lib/roles";
 
 const PAGE_TITLE = "Advance requests · Click n Chick";
 
@@ -45,7 +46,8 @@ function cancelDescription(order) {
  * of the kitchen (BR-16e); only the customer's payment moves an accepted
  * request on (BR-16g); a paid order is prepared on its collection date
  * (UC-ADV-012) and then runs the ordinary pickup chain. Every change arrives
- * over admin.orders, so other agents' decisions land here too.
+ * over admin.orders, so other agents' decisions land here too. The Store
+ * Manager gets the same list, read-only.
  */
 function AdvanceOrders() {
   const { user } = useContext(AuthContext);
@@ -59,9 +61,7 @@ function AdvanceOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedId = searchParams.get("order");
-  // OrderPolicy::decideAdvance: deciding and chasing payment are the Store
-  // Agent's; the Store Manager sees the list.
-  const canDecide = user?.role === ROLES.ADMIN;
+  const canAct = canOperate(user);
   const searching = search.trim() !== "";
   const summary = advance.data?.summary;
 
@@ -76,6 +76,7 @@ function AdvanceOrders() {
   }, [advance.orders, search, searching, summary]);
 
   const awaiting = columns[0].total;
+  const shown = columns.reduce((count, column) => count + column.orders.length, 0);
   const dueToday = summary?.due_today ?? 0;
 
   useEffect(() => {
@@ -129,7 +130,7 @@ function AdvanceOrders() {
   };
 
   const handlers = {
-    canDecide,
+    canAct,
     onAccept: advance.accept,
     onReject: setDeclining,
     onRemind: advance.remind,
@@ -158,14 +159,6 @@ function AdvanceOrders() {
                 {summary?.awaiting_payment > 0 && ` · ${summary.awaiting_payment} awaiting payment`}
               </p>
             </div>
-
-            <StaffSearch
-              value={search}
-              onChange={setSearch}
-              placeholder="Search requests…"
-              title="Search by order number, customer, phone or item"
-              label="Search advance requests"
-            />
           </div>
 
           <div className="mt-4">
@@ -174,17 +167,36 @@ function AdvanceOrders() {
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
+          {!canAct && <ReadOnlyNotice>Requests are decided by the Store Agent. You are viewing them read-only.</ReadOnlyNotice>}
+
           {dueToday > 0 && (
             <p className="m-0 flex items-start gap-2 rounded-[10px] bg-[#fff1e6] px-3.5 py-2.5 font-display text-[12px] text-brand-800 ring-1 ring-inset ring-[#ffd6b3]">
               <IconInfoCircle size={15} stroke={2} className="mt-[1px] shrink-0" />
               <span>
                 <strong className="font-semibold">
                   {dueToday} advance order{dueToday === 1 ? " is" : "s are"} due today.
-                </strong>{" "}
-                Start preparing from the Scheduled column; from then on they follow the ordinary pickup steps here.
+                </strong>
+                {canAct && " Start preparing from the Scheduled column; from then on they follow the ordinary pickup steps here."}
               </span>
             </p>
           )}
+
+          <FilterBar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search requests…",
+              title: "Search by order number, customer, phone or item",
+              label: "Search advance requests",
+            }}
+          >
+            {!advance.isLoading && (
+              <FilterMeta>
+                {searching && `${shown} of `}
+                {advance.orders.length} {advance.orders.length === 1 ? "request" : "requests"}
+              </FilterMeta>
+            )}
+          </FilterBar>
 
           {advance.isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">

@@ -293,6 +293,70 @@ class StockReservation
         return $result;
     }
 
+    /**
+     * Switch several dishes on or off together, all or none. Counts are left
+     * alone.
+     *
+     * @param  list<int>  $foodIds
+     * @return list<int> the dishes changed; one deleted meanwhile is skipped
+     */
+    public function setAvailabilityOf(array $foodIds, bool $available): array
+    {
+        $changed = DB::transaction(function () use ($foodIds, $available) {
+            $foods = $this->locked(collect($foodIds));
+
+            foreach ($foods as $food) {
+                $food->is_available = $available;
+                $food->save();
+            }
+
+            return $foods->keys()->all();
+        });
+
+        $this->announce($changed);
+
+        return $changed;
+    }
+
+    /**
+     * Move several counts by the same amount, kept between 0 and $ceiling.
+     *
+     * @param  list<int>  $foodIds
+     * @return list<int> the dishes changed; made-to-order dishes have no count
+     */
+    public function adjustMany(array $foodIds, int $by, int $ceiling): array
+    {
+        return $this->changeCounts($foodIds, fn (int $count) => min($ceiling, max(0, $count + $by)));
+    }
+
+    /**
+     * @param  list<int>  $foodIds
+     * @return list<int> the dishes changed; made-to-order dishes have no count
+     */
+    public function markSoldOut(array $foodIds): array
+    {
+        return $this->changeCounts($foodIds, fn () => 0);
+    }
+
+    /** @return list<int> */
+    private function changeCounts(array $foodIds, callable $next): array
+    {
+        $changed = DB::transaction(function () use ($foodIds, $next) {
+            $foods = $this->locked(collect($foodIds))->whereNotNull('stock_quantity');
+
+            foreach ($foods as $food) {
+                $food->stock_quantity = $next($food->stock_quantity);
+                $food->save();
+            }
+
+            return $foods->keys()->all();
+        });
+
+        $this->announce($changed);
+
+        return $changed;
+    }
+
     public function setAvailability(Food $food, bool $available): Food
     {
         $food->forceFill(['is_available' => $available])->save();

@@ -4,9 +4,11 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Services\Verification\Channel;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -88,9 +90,74 @@ class User extends Authenticatable
 
     public const STATUS_ACTIVE = 'active';
 
+    public const STATUS_SUSPENDED = 'suspended';
+
+    /** The one row orders point at once the staff member who cancelled them is deleted. */
+    public const DELETED_STAFF_EMAIL = 'deleted-staff@system.invalid';
+
+    /** The channel timestamp login gates on, in SQL (hasVerifiedChosenChannel). */
+    private const CHOSEN_CHANNEL_VERIFIED_AT = "(CASE WHEN verification_channel = 'email' THEN email_verified_at ELSE phone_verified_at END)";
+
     public function isPendingVerification(): bool
     {
         return $this->account_status === self::STATUS_PENDING_VERIFICATION;
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->account_status === self::STATUS_SUSPENDED;
+    }
+
+    /** Everyone but the deleted-staff placeholder, which is not an account. */
+    public function scopeRealAccounts(Builder $query): Builder
+    {
+        return $query->where('email', '!=', self::DELETED_STAFF_EMAIL);
+    }
+
+    /** So the placeholder cannot be opened, changed or deleted through a route. */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->where($field ?? $this->getRouteKeyName(), $value)->realAccounts()->first();
+    }
+
+    /**
+     * Keeps a store cancellation counting as the store's after the staff member
+     * is deleted, without naming them. It cannot sign in: suspended, and a
+     * password nobody has.
+     */
+    public static function deletedStaff(): self
+    {
+        $existing = static::query()->where('email', self::DELETED_STAFF_EMAIL)->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $placeholder = new static;
+        $placeholder->first_name = 'Deleted';
+        $placeholder->last_name = 'staff';
+        $placeholder->email = self::DELETED_STAFF_EMAIL;
+        $placeholder->password = Str::random(64);
+        $placeholder->role = self::ROLE_ADMIN;
+        $placeholder->account_status = self::STATUS_SUSPENDED;
+        $placeholder->save();
+
+        return $placeholder;
+    }
+
+    public function scopeSignInReady(Builder $query): Builder
+    {
+        return $query->where('account_status', self::STATUS_ACTIVE)
+            ->whereRaw(self::CHOSEN_CHANNEL_VERIFIED_AT.' IS NOT NULL');
+    }
+
+    public function scopeAwaitingVerification(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $where) => $where
+            ->where('account_status', self::STATUS_PENDING_VERIFICATION)
+            ->orWhere(fn (Builder $active) => $active
+                ->where('account_status', self::STATUS_ACTIVE)
+                ->whereRaw(self::CHOSEN_CHANNEL_VERIFIED_AT.' IS NULL')));
     }
 
     public function hasVerifiedChannel(Channel|string|null $channel): bool
@@ -198,6 +265,15 @@ class User extends Authenticatable
     public function latestDiscountClaim()
     {
         return $this->hasOne(Discount::class)->latestOfMany();
+    }
+
+    /** The approved claim behind an entitlement, if there is one. */
+    public function approvedDiscount()
+    {
+        return $this->hasOne(Discount::class)->ofMany(
+            ['id' => 'max'],
+            fn ($query) => $query->where('discount_status', Discount::STATUS_APPROVED)
+        );
     }
 
     /**

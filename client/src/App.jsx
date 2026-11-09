@@ -34,6 +34,7 @@ const {
   UserManagement,
   MenuCatalog,
   ProductForm,
+  DailySalesReport,
 } = pages
 
 const routes = (
@@ -78,6 +79,7 @@ const routes = (
       <Route path="/superadmin/menu" element={<MenuCatalog />} />
       <Route path="/superadmin/menu/new" element={<ProductForm />} />
       <Route path="/superadmin/menu/:id/edit" element={<ProductForm />} />
+      <Route path="/superadmin/reports/daily" element={<DailySalesReport />} />
     </Route>
   </>
 )

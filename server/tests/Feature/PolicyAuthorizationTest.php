@@ -194,13 +194,13 @@ class PolicyAuthorizationTest extends TestCase
         $this->assertTrue(Gate::forUser($this->user(User::ROLE_ADMIN))->allows('cancel', $order));
     }
 
-    public function test_fulfilment_updates_are_staff_only(): void
+    public function test_fulfilment_updates_are_the_store_agents_alone(): void
     {
         $owner = $this->user(User::ROLE_CUSTOMER);
         $order = $this->order($owner);
 
         $this->assertTrue(Gate::forUser($this->user(User::ROLE_ADMIN))->allows('update', $order));
-        $this->assertTrue(Gate::forUser($this->user(User::ROLE_SUPER_ADMIN))->allows('update', $order));
+        $this->assertFalse(Gate::forUser($this->user(User::ROLE_SUPER_ADMIN))->allows('update', $order), 'The Store Manager monitors fulfilment.');
         $this->assertFalse(Gate::forUser($owner)->allows('update', $order), 'A customer must not move their own order through fulfilment.');
     }
 

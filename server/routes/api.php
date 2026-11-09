@@ -24,10 +24,12 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecaptchaConfigController;
+use App\Http\Controllers\SalesReportController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StoreStatusController;
 use App\Http\Controllers\SystemSettingController;
 use App\Http\Controllers\TwoFactorController;
+use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VerificationChannelController;
 use App\Services\Recaptcha\RecaptchaAction;
 use Illuminate\Support\Facades\Route;
@@ -166,23 +168,18 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
         ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
 });
 
-// Superadmin and Admin
+// Both staff roles. The operational pages are read here by the Store Manager too;
+// everything that changes an order or a discount claim is in the Store Agent group.
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,super_admin'])->group(function () {
     Route::get('/admin/discount-claims', [DiscountController::class, 'index']);
-    Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
-    Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
 
     Route::patch('/admin/store/toggles', [SystemSettingController::class, 'updateStoreToggles'])
         ->middleware('throttle:user-update');
 
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
-    Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
-    Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
 
     Route::get('/agent/queue', [OrderQueueController::class, 'index']);
     Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
-    Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
-    Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
     
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
 
@@ -194,6 +191,19 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/agent/stock', [StockController::class, 'index']);
     Route::get('/agent/advance-requests/{order}', [AdvanceRequestController::class, 'show'])
         ->whereNumber('order');
+});
+
+// Store Agent
+Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
+    Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
+    Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
+
+    Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
+    Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
+
+    Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
+    Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
+
     Route::post('/agent/advance-requests/{order}/accept', [AdvanceRequestController::class, 'accept'])
         ->whereNumber('order');
     Route::post('/agent/advance-requests/{order}/reject', [AdvanceRequestController::class, 'reject'])
@@ -201,12 +211,11 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::post('/agent/advance-requests/{order}/remind', [AdvanceRequestController::class, 'remind'])
         ->whereNumber('order')
         ->middleware('throttle:user-update');
-});
 
-// Store Agent
-Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
     Route::patch('/foods/{food}/stock', [StockController::class, 'update']);
     Route::patch('/foods/{food}/availability', [StockController::class, 'availability']);
+    Route::patch('/agent/stock/availability', [StockController::class, 'bulkAvailability']);
+    Route::patch('/agent/stock/count', [StockController::class, 'bulkStock']);
 });
 
 // Store Manager
@@ -221,14 +230,32 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::put('/category/{category}', [CategoryController::class, 'update']);
     Route::patch('/category/{category}', [CategoryController::class, 'update']);
     Route::delete('/category/{category}', [CategoryController::class, 'destroy']);
+    Route::get('/admin/reports/daily-sales', [SalesReportController::class, 'daily']);
 
     Route::get('/admin/posters', [PosterController::class, 'all']);
     Route::post('/admin/posters', [PosterController::class, 'store']);
     Route::post('/admin/posters/{poster}', [PosterController::class, 'update']);
     Route::delete('/admin/posters/{poster}', [PosterController::class, 'destroy']);
 
-    Route::patch('/admin/users/{user}', [AuthController::class, 'updateUserRole'])
+    Route::get('/admin/users', [UserManagementController::class, 'index']);
+    Route::get('/admin/users/{user}', [UserManagementController::class, 'show'])->whereNumber('user');
+    Route::post('/admin/users', [UserManagementController::class, 'store'])
+        ->middleware(['throttle:user-update', 'confirm-password:create an account']);
+    Route::patch('/admin/users/{user}/profile', [UserManagementController::class, 'updateProfile'])
+        ->whereNumber('user')
+        ->middleware('throttle:user-update');
+    Route::patch('/admin/users/{user}', [UserManagementController::class, 'updateRole'])
+        ->whereNumber('user')
         ->middleware(['throttle:user-update', 'confirm-password:change a user role']);
+    Route::post('/admin/users/{user}/suspend', [UserManagementController::class, 'suspend'])
+        ->whereNumber('user')
+        ->middleware(['throttle:user-update', 'confirm-password:suspend an account']);
+    Route::post('/admin/users/{user}/reactivate', [UserManagementController::class, 'reactivate'])
+        ->whereNumber('user')
+        ->middleware(['throttle:user-update', 'confirm-password:reactivate an account']);
+    Route::delete('/admin/users/{user}', [UserManagementController::class, 'destroy'])
+        ->whereNumber('user')
+        ->middleware(['throttle:user-update', 'confirm-password:delete an account']);
 
     Route::get('/admin/settings/discount', [SystemSettingController::class, 'showDiscount']);
     Route::put('/admin/settings/discount', [SystemSettingController::class, 'updateDiscount'])

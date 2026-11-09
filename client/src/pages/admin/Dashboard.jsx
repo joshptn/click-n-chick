@@ -4,16 +4,17 @@ import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import CancelOrderModal from "../../components/staff/CancelOrderModal";
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import LivePill from "../../components/staff/LivePill";
 import OrderBoard from "../../components/staff/OrderBoard";
 import OrderDetailDrawer from "../../components/staff/OrderDetailDrawer";
+import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useAgentBoard } from "../../hooks/useAgentBoard";
 import { BOARD_COLUMNS, columnFor, matchesSearch } from "../../lib/agent";
-import { ROLES } from "../../lib/roles";
+import { canOperate } from "../../lib/roles";
 import { formatStoreTime, useStoreStatus } from "../../lib/store";
 
 const PAGE_TITLE = "Orders · Click n Chick";
@@ -64,7 +65,7 @@ function StoreNotice({ store }) {
  *
  * Moves go through /api/agent/orders/{id}/advance, which walks the order's own
  * lifecycle, so the board never decides a target status. Another agent's moves
- * arrive over admin.orders.
+ * arrive over admin.orders. The Store Manager gets the same board, read-only.
  */
 function AdminDashboard() {
   const { user } = useContext(AuthContext);
@@ -79,7 +80,7 @@ function AdminDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedId = searchParams.get("order");
-  const canConfirmDelivery = user?.role === ROLES.ADMIN;
+  const canAct = canOperate(user);
   const searching = search.trim() !== "";
 
   const columns = useMemo(() => {
@@ -94,6 +95,7 @@ function AdminDashboard() {
   }, [board.orders, board.queue, search, searching]);
 
   const newCount = columns[0].total;
+  const shown = columns.reduce((count, column) => count + column.orders.length, 0);
 
   useEffect(() => {
     document.title = newCount > 0 ? `(${newCount}) New order${newCount === 1 ? "" : "s"} · Click n Chick` : PAGE_TITLE;
@@ -139,7 +141,7 @@ function AdminDashboard() {
 
   const cardProps = {
     isBusy: board.isBusy,
-    canConfirmDelivery,
+    canAct,
     onAdvance: board.advance,
     onReject: (order) => setCancelling({ order, mode: "reject" }),
     onOpen: openOrder,
@@ -163,14 +165,6 @@ function AdminDashboard() {
                 {summary?.cancelled_today > 0 && ` · ${summary.cancelled_today} cancelled`}
               </p>
             </div>
-
-            <StaffSearch
-              value={search}
-              onChange={setSearch}
-              placeholder="Search orders…"
-              title="Search by order number, customer, phone or item"
-              label="Search orders"
-            />
           </div>
 
           <div className="mt-4">
@@ -179,7 +173,26 @@ function AdminDashboard() {
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
+          {!canAct && <ReadOnlyNotice>Orders are moved by the Store Agent. You are viewing this board read-only.</ReadOnlyNotice>}
+
           <StoreNotice store={storeStatus ?? board.queue?.store} />
+
+          <FilterBar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search orders…",
+              title: "Search by order number, customer, phone or item",
+              label: "Search orders",
+            }}
+          >
+            {!board.isLoading && (
+              <FilterMeta>
+                {searching && `${shown} of `}
+                {board.orders.length} {board.orders.length === 1 ? "order" : "orders"}
+              </FilterMeta>
+            )}
+          </FilterBar>
 
           {board.isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
@@ -209,7 +222,7 @@ function AdminDashboard() {
         opened={Boolean(selectedId) && !board.isLoading}
         onClose={closeOrder}
         busy={selected ? board.isBusy(selected.id) : false}
-        canConfirmDelivery={canConfirmDelivery}
+        canAct={canAct}
         onAdvance={board.advance}
         onReject={(order) => setCancelling({ order, mode: "reject" })}
         onCancel={(order) => setCancelling({ order, mode: "cancel" })}

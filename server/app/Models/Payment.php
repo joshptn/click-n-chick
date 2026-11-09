@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Payment extends Model
 {
     use HasFactory;
+
+    public const STATUS_PAID = 'paid';
 
     protected $fillable = [
         'order_id',
@@ -30,6 +33,12 @@ class Payment extends Model
             'refunded_at' => 'datetime',
             'refund_amount' => 'decimal:2',
         ];
+    }
+
+    /** Money confirmed as received: a paid record with the moment it was paid. */
+    public function scopeVerified(Builder $query): Builder
+    {
+        return $query->where('payments.payment_status', self::STATUS_PAID)->whereNotNull('payments.paid_at');
     }
 
     public function order()

@@ -41,9 +41,9 @@ class OrderRecordController extends Controller
 
     public const SORTS = ['newest', 'oldest', 'total_high', 'total_low'];
 
-    private const CLOSED_AT = 'COALESCE(orders.closed_at, orders.updated_at)';
+    private const CLOSED_AT = Order::CLOSED_AT_SQL;
 
-    private const TOTAL = 'COALESCE(orders.total_amount, orders.total_price, 0)';
+    private const TOTAL = Order::TOTAL_SQL;
 
     private const LIST_WITH = ['user:id,first_name,last_name', 'items.food:id,food_name'];
 
@@ -84,6 +84,7 @@ class OrderRecordController extends Controller
         $query = (clone $base)
             ->when($outcome !== 'all', fn (Builder $query) => $query->whereIn('status', self::OUTCOMES[$outcome]))
             ->with(self::LIST_WITH)
+            ->withExists(['payments as payment_verified' => fn (Builder $payment) => $payment->verified()])
             ->withSum('items as item_count', 'quantity');
 
         $this->sort($query, $validated['sort'] ?? 'newest');

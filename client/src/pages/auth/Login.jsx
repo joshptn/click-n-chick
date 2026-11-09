@@ -60,8 +60,15 @@ function Login() {
             state: {
               identifier: typed,
               maskedIdentifier: err.payload.identifier ?? err.payload.phone_number,
+              resendAvailableIn: err.payload.resend_available_in,
             },
           });
+          return;
+        }
+
+        // An account the store created has nothing to finish at /register.
+        if (err.payload.sign_in_with_channel) {
+          setError(`Sign in with your ${channel === CHANNELS.EMAIL ? "email address" : "phone number"} so we can send your verification code.`);
           return;
         }
 
