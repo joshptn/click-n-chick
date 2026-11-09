@@ -214,6 +214,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])-
 
     Route::patch('/foods/{food}/stock', [StockController::class, 'update']);
     Route::patch('/foods/{food}/availability', [StockController::class, 'availability']);
+    Route::patch('/agent/stock/availability', [StockController::class, 'bulkAvailability']);
+    Route::patch('/agent/stock/count', [StockController::class, 'bulkStock']);
 });
 
 // Store Manager
