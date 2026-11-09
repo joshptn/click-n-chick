@@ -31,6 +31,9 @@ Object.assign(process.env, {
   // Nothing leaves the machine.
   MAIL_MAILER: "array",
   RECAPTCHA_ENABLED: "false",
+  // Open around the clock, so the suite can run at any hour.
+  STORE_OPENS_AT: "00:00",
+  STORE_CLOSES_AT: "23:59",
   ALLOWED_ORIGINS: `http://127.0.0.1:${APP_PORT}`,
   REVERB_HOST: "127.0.0.1",
   REVERB_PORT: String(REVERB_PORT),

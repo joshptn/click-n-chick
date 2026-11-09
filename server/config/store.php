@@ -12,7 +12,7 @@ return [
     'max_driving_km' => (float) env('STORE_MAX_DRIVING_KM', 45.0),
 
     'hours' => [
-        'opens_at' => env('STORE_OPENS_AT', '01:00'),
+        'opens_at' => env('STORE_OPENS_AT', '07:00'),
         'closes_at' => env('STORE_CLOSES_AT', '20:00'),
     ],
 
