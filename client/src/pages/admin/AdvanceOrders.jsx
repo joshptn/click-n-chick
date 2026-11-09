@@ -6,12 +6,12 @@ import AuthContext from "../../context/AuthContext";
 import AdvanceDetailDrawer from "../../components/staff/AdvanceDetailDrawer";
 import AdvanceOrderCard from "../../components/staff/AdvanceOrderCard";
 import CancelOrderModal from "../../components/staff/CancelOrderModal";
+import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import LivePill from "../../components/staff/LivePill";
 import OrderBoard from "../../components/staff/OrderBoard";
 import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import ReasonModal from "../../components/staff/ReasonModal";
 import StaffLayout from "../../components/staff/StaffLayout";
-import StaffSearch from "../../components/staff/StaffSearch";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useAdvanceRequests } from "../../hooks/useAdvanceRequests";
@@ -76,6 +76,7 @@ function AdvanceOrders() {
   }, [advance.orders, search, searching, summary]);
 
   const awaiting = columns[0].total;
+  const shown = columns.reduce((count, column) => count + column.orders.length, 0);
   const dueToday = summary?.due_today ?? 0;
 
   useEffect(() => {
@@ -158,14 +159,6 @@ function AdvanceOrders() {
                 {summary?.awaiting_payment > 0 && ` · ${summary.awaiting_payment} awaiting payment`}
               </p>
             </div>
-
-            <StaffSearch
-              value={search}
-              onChange={setSearch}
-              placeholder="Search requests…"
-              title="Search by order number, customer, phone or item"
-              label="Search advance requests"
-            />
           </div>
 
           <div className="mt-4">
@@ -187,6 +180,23 @@ function AdvanceOrders() {
               </span>
             </p>
           )}
+
+          <FilterBar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search requests…",
+              title: "Search by order number, customer, phone or item",
+              label: "Search advance requests",
+            }}
+          >
+            {!advance.isLoading && (
+              <FilterMeta>
+                {searching && `${shown} of `}
+                {advance.orders.length} {advance.orders.length === 1 ? "request" : "requests"}
+              </FilterMeta>
+            )}
+          </FilterBar>
 
           {advance.isError ? (
             <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
