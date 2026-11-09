@@ -78,6 +78,7 @@ export const pages = {
   MenuCatalog: lazyPage(() => import("../pages/superadmin/MenuCatalog")),
   ProductForm: lazyPage(() => import("../pages/superadmin/ProductForm")),
   DailySalesReport: lazyPage(() => import("../pages/superadmin/DailySalesReport")),
+  StoreSettings: lazyPage(() => import("../pages/superadmin/StoreSettings")),
 };
 
 /**
