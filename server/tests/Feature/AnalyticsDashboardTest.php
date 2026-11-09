@@ -308,20 +308,31 @@ class AnalyticsDashboardTest extends TestCase
     // Sales
     // -----------------------------------------------------------------
 
-    public function test_the_chart_matches_the_daily_sales_report(): void
+    /** @return array<int, array<string, mixed>> */
+    private function days(): array
     {
-        $this->closed(OrderStatus::COMPLETED, '2026-11-09 12:00:00', 300.25);
-        $this->closed(OrderStatus::DELIVERED, '2026-11-09 13:00:00', 455.50, ['order_type' => 'delivery']);
+        return $this->analytics()->json('sales.days');
+    }
+
+    private function today(array $days): array
+    {
+        return collect($days)->firstWhere('key', self::TODAY);
+    }
+
+    public function test_every_level_of_the_chart_matches_the_daily_sales_report(): void
+    {
+        $this->closed(OrderStatus::COMPLETED, '2026-11-09 12:05:00', 300.25);
+        $this->closed(OrderStatus::DELIVERED, '2026-11-09 13:40:00', 455.50, ['order_type' => 'delivery']);
 
         $total = $this->manager()->getJson('/api/admin/reports/daily-sales?date='.self::TODAY)->assertOk()->json('fulfilled.total');
-        $sales = $this->analytics()->json('sales');
+        $today = $this->today($this->days());
+        $quarters = array_merge(...array_column($today['hours'], 'quarters'));
 
         $this->assertEquals(755.75, $total);
-
-        foreach (['weekly', 'daily', 'hourly'] as $view) {
-            $this->assertEquals($total, round(array_sum(array_column($sales[$view], 'value')), 2), $view);
-            $this->assertSame(2, array_sum(array_column($sales[$view], 'orders')), $view);
-        }
+        $this->assertEquals($total, $today['value']);
+        $this->assertEquals($total, round(array_sum(array_column($today['hours'], 'value')), 2));
+        $this->assertEquals($total, round(array_sum(array_column($quarters, 'value')), 2));
+        $this->assertSame(2, array_sum(array_column($quarters, 'orders')));
     }
 
     public function test_cancelled_declined_and_open_orders_are_never_sales(): void
@@ -331,52 +342,50 @@ class AnalyticsDashboardTest extends TestCase
         $this->closed(OrderStatus::REJECTED, '2026-11-09 12:00:00', 300, ['scheduled_for' => $this->at('2026-11-12 12:00:00')]);
         $this->placed('2026-11-09 12:00:00', ['total_amount' => 400]);
 
-        $hourly = $this->analytics()->json('sales.hourly');
+        $today = $this->today($this->days());
 
-        $this->assertEquals(100.0, array_sum(array_column($hourly, 'value')));
-        $this->assertSame(1, array_sum(array_column($hourly, 'orders')));
+        $this->assertEquals(100.0, $today['value']);
+        $this->assertSame(1, $today['orders']);
     }
 
-    public function test_each_view_covers_its_own_window(): void
+    public function test_the_week_covers_the_last_seven_days(): void
     {
         $this->closed(OrderStatus::COMPLETED, '2026-11-09 12:00:00', 10);
         $this->closed(OrderStatus::COMPLETED, '2026-11-03 12:00:00', 20);
         $this->closed(OrderStatus::COMPLETED, '2026-11-02 12:00:00', 40);
-        $this->closed(OrderStatus::COMPLETED, '2026-10-11 12:00:00', 80);
-        $this->closed(OrderStatus::COMPLETED, '2026-10-10 12:00:00', 160);
 
-        $sales = $this->analytics()->json('sales');
+        $days = $this->days();
 
-        $this->assertCount(7, $sales['weekly']);
-        $this->assertSame('2026-11-03', $sales['weekly'][0]['key']);
-        $this->assertEquals(30.0, array_sum(array_column($sales['weekly'], 'value')));
-
-        $this->assertCount(30, $sales['daily']);
-        $this->assertSame('2026-10-11', $sales['daily'][0]['key']);
-        $this->assertEquals(150.0, array_sum(array_column($sales['daily'], 'value')));
-
-        $this->assertEquals(10.0, array_sum(array_column($sales['hourly'], 'value')));
+        $this->assertCount(7, $days);
+        $this->assertSame('2026-11-03', $days[0]['key']);
+        $this->assertSame(self::TODAY, $days[6]['key']);
+        $this->assertEquals(30.0, array_sum(array_column($days, 'value')));
     }
 
-    public function test_sales_are_filed_under_the_store_day_and_hour_they_closed(): void
+    public function test_a_sale_lands_on_its_store_day_hour_and_quarter_hour(): void
     {
-        // 23:30 and 00:30 Manila: either side of midnight there, one UTC day.
+        // 23:30 and 00:50 Manila: either side of midnight there, one UTC day.
         $this->closed(OrderStatus::COMPLETED, '2026-11-08 23:30:00', 100);
-        $this->closed(OrderStatus::COMPLETED, '2026-11-09 00:30:00', 200);
+        $this->closed(OrderStatus::COMPLETED, '2026-11-09 00:50:00', 200);
 
-        $sales = $this->analytics()->json('sales');
-        $daily = collect($sales['daily'])->keyBy('key');
+        $days = collect($this->days())->keyBy('key');
 
-        $this->assertEquals(100.0, $daily['2026-11-08']['value']);
-        $this->assertEquals(200.0, $daily['2026-11-09']['value']);
-        $this->assertEquals(200.0, collect($sales['hourly'])->keyBy('key')[0]['value']);
+        $this->assertEquals(100.0, $days['2026-11-08']['value']);
+        $this->assertEquals(200.0, $days['2026-11-09']['value']);
+
+        $lateHour = collect($days['2026-11-08']['hours'])->firstWhere('key', 23);
+        $earlyHour = collect($days['2026-11-09']['hours'])->firstWhere('key', 0);
+
+        $this->assertEquals(100.0, collect($lateHour['quarters'])->firstWhere('key', 30)['value']);
+        $this->assertEquals(200.0, collect($earlyHour['quarters'])->firstWhere('key', 45)['value']);
+        $this->assertSame([0, 15, 30, 45], array_column($earlyHour['quarters'], 'key'));
     }
 
-    public function test_hours_are_trimmed_to_trading_hours(): void
+    public function test_a_quiet_day_shows_trading_hours_only(): void
     {
-        $hours = array_column($this->analytics()->json('sales.hourly'), 'key');
-
-        $this->assertSame(range(7, 20), $hours);
+        foreach ($this->days() as $day) {
+            $this->assertSame(range(7, 20), array_column($day['hours'], 'key'));
+        }
     }
 
     public function test_top_five_products_come_from_the_last_seven_days_of_fulfilled_orders(): void
@@ -450,11 +459,11 @@ class AnalyticsDashboardTest extends TestCase
         $order = $this->onBoard(OrderStatus::PREPARING);
 
         $this->operations()->assertJsonPath('preparing.count', 1);
-        $this->assertSame(0, array_sum(array_column($this->analytics()->json('sales.hourly'), 'orders')));
+        $this->assertSame(0, $this->today($this->days())['orders']);
 
         $order->forceFill(['status' => OrderStatus::COMPLETED])->save();
 
         $this->operations()->assertJsonPath('preparing.count', 0);
-        $this->assertSame(1, array_sum(array_column($this->analytics()->json('sales.hourly'), 'orders')));
+        $this->assertSame(1, $this->today($this->days())['orders']);
     }
 }

@@ -10,14 +10,17 @@ use Carbon\CarbonImmutable;
  *
  * The same sales as the Daily Sales Report: orders that closed as completed or
  * delivered, on the store day they closed, at their checkout totals (BR-42).
+ *
+ * The week comes back nested as days, hours, and quarter hours from one query,
+ * so drilling into the chart asks the server for nothing more.
  */
 class SalesAnalytics
 {
     private const WEEK_DAYS = 7;
 
-    private const MONTH_DAYS = 30;
-
     private const TOP_PRODUCTS = 5;
+
+    private const QUARTER_MINUTES = 15;
 
     public function __construct(
         private DailySalesReport $report,
@@ -30,47 +33,57 @@ class SalesAnalytics
         $timezone = $this->store->timezone();
         $today = CarbonImmutable::now($timezone)->startOfDay();
         $tomorrow = $today->addDay();
-        $todayKey = $today->toDateString();
+        $weekStart = $today->subDays(self::WEEK_DAYS - 1);
 
-        $daily = [];
+        $days = [];
 
-        for ($day = $today->subDays(self::MONTH_DAYS - 1); $day->lessThan($tomorrow); $day = $day->addDay()) {
-            $daily[$day->toDateString()] = ['key' => $day->toDateString(), 'orders' => 0, 'value' => 0.0];
+        for ($day = $weekStart; $day->lessThan($tomorrow); $day = $day->addDay()) {
+            $days[$day->toDateString()] = $this->bucket($day->toDateString()) + ['hours' => $this->emptyHours()];
         }
 
-        $hourly = [];
-
-        for ($hour = 0; $hour < 24; $hour++) {
-            $hourly[$hour] = ['key' => $hour, 'orders' => 0, 'value' => 0.0];
-        }
-
-        foreach ($this->report->fulfilledRows($today->subDays(self::MONTH_DAYS - 1), $tomorrow) as $row) {
+        foreach ($this->report->fulfilledRows($weekStart, $tomorrow) as $row) {
             $closed = CarbonImmutable::parse($row->closed, 'UTC')->setTimezone($timezone);
             $date = $closed->toDateString();
 
-            if (! isset($daily[$date])) {
+            if (! isset($days[$date])) {
                 continue;
             }
 
-            $this->add($daily[$date], (float) $row->amount);
+            $amount = (float) $row->amount;
+            $hour = (int) $closed->format('G');
+            $quarter = (int) floor((int) $closed->format('i') / self::QUARTER_MINUTES);
 
-            if ($date === $todayKey) {
-                $this->add($hourly[(int) $closed->format('G')], (float) $row->amount);
-            }
+            $this->add($days[$date], $amount);
+            $this->add($days[$date]['hours'][$hour], $amount);
+            $this->add($days[$date]['hours'][$hour]['quarters'][$quarter], $amount);
         }
-
-        $weekStart = $today->subDays(self::WEEK_DAYS - 1);
 
         return [
             'timezone' => $timezone,
             'generated_at' => now()->toIso8601String(),
             'sales' => [
-                'weekly' => array_slice(array_values($daily), -self::WEEK_DAYS),
-                'daily' => array_values($daily),
-                'hourly' => $this->tradingHours($hourly),
+                'days' => array_map(fn (array $day) => ['hours' => $this->tradingHours($day['hours'])] + $day, array_values($days)),
             ],
             'products' => $this->report->topProducts($weekStart, $tomorrow, self::TOP_PRODUCTS),
         ];
+    }
+
+    private function bucket(int|string $key): array
+    {
+        return ['key' => $key, 'orders' => 0, 'value' => 0.0];
+    }
+
+    private function emptyHours(): array
+    {
+        $hours = [];
+
+        for ($hour = 0; $hour < 24; $hour++) {
+            $quarters = array_map(fn (int $minute) => $this->bucket($minute), range(0, 45, self::QUARTER_MINUTES));
+
+            $hours[$hour] = $this->bucket($hour) + ['quarters' => $quarters];
+        }
+
+        return $hours;
     }
 
     private function add(array &$bucket, float $amount): void
