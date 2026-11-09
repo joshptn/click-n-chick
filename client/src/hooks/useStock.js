@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import toast from "../components/app/Toast";
-import { STOCK_KEY, adjustStock, fetchStock, setAvailability, setStock } from "../lib/stock";
+import { STOCK_KEY, adjustStock, adjustStockOf, fetchStock, markSoldOutOf, setAvailability, setAvailabilityOf, setStock } from "../lib/stock";
 
 const STEP_KEY = ["stock-step"];
 
@@ -142,6 +142,61 @@ export function useStock() {
     onSettled: settle,
   });
 
+  const applyItems = (response) =>
+    queryClient.setQueryData(STOCK_KEY, (current) => (response?.items ?? []).reduce((data, item) => withItem(data, item), current));
+
+  // The steps for ticked dishes share the single steps' key, so quick presses
+  // of either settle together.
+  const stepMany = useMutation({
+    mutationKey: STEP_KEY,
+    mutationFn: ({ foods, by }) => adjustStockOf(foods.map((food) => food.id), by),
+    onMutate: async ({ foods, by }) => {
+      await queryClient.cancelQueries({ queryKey: STOCK_KEY });
+
+      const previous = queryClient.getQueryData(STOCK_KEY);
+      const ids = new Set(foods.map((food) => food.id));
+
+      if (previous) {
+        queryClient.setQueryData(STOCK_KEY, {
+          ...previous,
+          data: previous.data.map((food) => (ids.has(food.id) && food.is_tracked ? stepped(food, by, threshold) : food)),
+        });
+      }
+
+      return { previous };
+    },
+    onSuccess: (response) => {
+      if (lastStep()) applyItems(response);
+    },
+    onError: (error, _vars, context) => {
+      rollback(context);
+      toast.error(error.message, "Could not change the stock");
+    },
+    onSettled: () => {
+      if (lastStep()) settle();
+    },
+  });
+
+  // Not optimistic, and no error toast: the confirm dialog waits for the answer
+  // and shows the reason itself.
+  const switchMany = useMutation({
+    mutationFn: ({ foods, isAvailable }) => setAvailabilityOf(foods.map((food) => food.id), isAvailable),
+    onSuccess: (response, { isAvailable }) => {
+      applyItems(response);
+      toast.success(response?.message ?? "Availability updated.", isAvailable ? "Back on the menu" : "Turned off");
+    },
+    onSettled: settle,
+  });
+
+  const soldOutMany = useMutation({
+    mutationFn: (foods) => markSoldOutOf(foods.map((food) => food.id)),
+    onSuccess: (response) => {
+      applyItems(response);
+      toast.success(response?.message ?? "Stock updated.", "Marked sold out");
+    },
+    onSettled: settle,
+  });
+
   return {
     foods: query.data?.data ?? [],
     categories: query.data?.categories ?? [],
@@ -155,6 +210,9 @@ export function useStock() {
     step: (food, by) => step.mutate({ food, by }),
     recount: (food, count) => recount.mutateAsync({ food, count }),
     toggle: (food, isAvailable) => toggle.mutate({ food, isAvailable }),
+    stepMany: (foods, by) => stepMany.mutate({ foods, by }),
+    switchMany: (foods, isAvailable) => switchMany.mutateAsync({ foods, isAvailable }),
+    soldOutMany: (foods) => soldOutMany.mutateAsync(foods),
   };
 }
 
