@@ -23,9 +23,21 @@ use Illuminate\Support\Facades\DB;
  * The reasons are stored on the order and shown to the customer. They are also
  * how reports tell an expiry apart from a customer's own cancellation, so they
  * are kept here, once, and matched exactly.
+ *
+ * Two callers share these rules, so they cannot drift apart:
+ *
+ *   - Immediate enforcement: every action on an advance order calls enforce()
+ *     first. An expired request is cancelled there and then, and the action is
+ *     refused, even if the sweep has not reached it yet.
+ *   - Scheduled cleanup: advance:expire-unpaid runs every five minutes and
+ *     cancels whatever nobody has touched.
  */
 final class AdvanceExpiry
 {
+    public const ERROR_CODE = 'ADVANCE_EXPIRED';
+
+    public function __construct(private OrderAnnouncer $announcer) {}
+
     public const PAYMENT_DEADLINE = 'Payment was not received within 24 hours of the store accepting this request.';
 
     public const PAYMENT_BEFORE_COLLECTION = 'Payment was not received before the collection time.';
@@ -111,6 +123,53 @@ final class AdvanceExpiry
 
             return $locked;
         });
+    }
+
+    /** Cancel one request if it is still due and tell the customer and staff. */
+    public function expireAndAnnounce(Order $order, ?CarbonImmutable $now = null): ?Order
+    {
+        $expired = $this->expire($order, $now);
+
+        if ($expired !== null) {
+            $this->announcer->statusChanged($expired);
+        }
+
+        return $expired;
+    }
+
+    /**
+     * Immediate enforcement, called before any action on an order.
+     *
+     * Returns null when the action may go ahead. When the order is an unpaid
+     * advance request past its deadline or collection time, it is cancelled now
+     * through expire(), the given model is refreshed to match, and the refusal
+     * to send back is returned.
+     *
+     * @return array{message: string, error_code: string, status: string}|null
+     */
+    public function enforce(Order $order, ?CarbonImmutable $now = null): ?array
+    {
+        // Cheap for everything that is not an unpaid advance request: no lock,
+        // no transaction, no query.
+        if ($this->reasonFor($order, $now) === null) {
+            return null;
+        }
+
+        $expired = $this->expireAndAnnounce($order, $now);
+
+        $order->refresh();
+
+        if ($expired === null) {
+            // Paid or answered in the meantime; the caller's own checks decide.
+            return null;
+        }
+
+        return [
+            'message' => 'This request has expired and has been cancelled. '
+                .$expired->cancellation_reason.' Nothing was charged.',
+            'error_code' => self::ERROR_CODE,
+            'status' => (string) $expired->status,
+        ];
     }
 
     private function unpaid(Builder $query): Builder

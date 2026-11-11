@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\OrderQueueResource;
 use App\Models\Order;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
@@ -25,6 +26,7 @@ class OrderQueueController extends Controller
     public function __construct(
         private StoreAvailability $store,
         private OrderAnnouncer $announcer,
+        private AdvanceExpiry $expiry,
     ) {}
 
     public function index(Request $request)
@@ -161,6 +163,10 @@ class OrderQueueController extends Controller
     {
         $this->authorize('update', $order);
 
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
+
         $to = $order->nextStatus();
 
         if ($to === null) {
@@ -234,6 +240,10 @@ class OrderQueueController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
             'refund' => ['sometimes', 'boolean'],
         ]);
+
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
 
         if ($order->isTerminal()) {
             return response()->json([

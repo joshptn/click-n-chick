@@ -27,6 +27,14 @@ const LIST_FOR = {
   cancelled: "closed",
 };
 
+function expired(error) {
+  if (error?.payload?.error_code !== "ADVANCE_EXPIRED") return false;
+
+  toast.warning(error.message, "Request expired");
+
+  return true;
+}
+
 const LISTS = ["awaiting_decision", "awaiting_payment", "scheduled", "due_today", "in_kitchen", "closed"];
 
 const byCollection = (a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for);
@@ -95,6 +103,8 @@ export function useAdvanceRequests() {
 
   const failed = useCallback(
     (title) => (error) => {
+      if (expired(error)) return;
+
       // Someone else answered it first; the refetch shows what they decided.
       if (error?.payload?.error_code === "ALREADY_ANSWERED") {
         toast.warning(error.message, "Already answered");
@@ -140,6 +150,8 @@ export function useAdvanceRequests() {
     onMutate: (order) => mark(order.id, true),
     onSuccess: (response) => toast.success(response?.message ?? "Reminder sent.", "Reminder sent"),
     onError: (error) => {
+      if (expired(error)) return;
+
       if (error?.status === 429) {
         toast.warning(error.message, "Reminded recently");
 
@@ -169,6 +181,8 @@ export function useAdvanceRequests() {
     onError: (error, _order, context) => {
       if (context?.previous) queryClient.setQueryData(ADVANCE_REQUESTS_KEY, context.previous);
 
+      if (expired(error)) return;
+
       toast.error(error.message, "Could not move the order");
     },
     onSettled: (_response, _error, order) => {
@@ -192,7 +206,11 @@ export function useAdvanceRequests() {
       });
       toast.success(response?.message ?? "Order cancelled.", "Order cancelled");
     },
-    onError: (error) => toast.error(error.message, "Could not cancel the order"),
+    onError: (error) => {
+      if (expired(error)) return;
+
+      toast.error(error.message, "Could not cancel the order");
+    },
     onSettled: (_response, _error, { order }) => {
       mark(order.id, false);
       settle();

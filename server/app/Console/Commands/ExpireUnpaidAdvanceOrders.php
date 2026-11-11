@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Services\Orders\AdvanceExpiry;
-use App\Services\Orders\OrderAnnouncer;
 use Illuminate\Console\Command;
 
 class ExpireUnpaidAdvanceOrders extends Command
@@ -12,7 +11,7 @@ class ExpireUnpaidAdvanceOrders extends Command
 
     protected $description = 'Cancel unpaid advance requests past their payment deadline or collection time';
 
-    public function handle(AdvanceExpiry $expiry, OrderAnnouncer $announcer): int
+    public function handle(AdvanceExpiry $expiry): int
     {
         $due = $expiry->due();
 
@@ -39,10 +38,7 @@ class ExpireUnpaidAdvanceOrders extends Command
                 continue;
             }
 
-            $expired = $expiry->expire($order);
-
-            if ($expired !== null) {
-                $announcer->statusChanged($expired);
+            if ($expiry->expireAndAnnounce($order) !== null) {
                 $cancelled++;
             }
         }

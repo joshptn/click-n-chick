@@ -39,7 +39,8 @@ class AdvanceRequestResource extends JsonResource
             'collection_time' => $collectAt?->format('H:i'),
             'days_until_collection' => $daysUntil,
             'is_due_today' => $collectAt?->isSameDay(now($timezone)) ?? false,
-            'collection_passed' => $daysUntil !== null && $daysUntil < 0,
+            // The collection time itself, the moment an unanswered request expires (BR-16h).
+            'collection_passed' => $collectAt !== null && $collectAt->lessThanOrEqualTo(now()),
             // UC-ADV-012 and BR-16g: on or after the collection date, and paid.
             'can_start_preparing' => $this->status === OrderStatus::SCHEDULED
                 && $this->isPaid()
