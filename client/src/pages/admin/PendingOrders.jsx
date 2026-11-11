@@ -174,7 +174,7 @@ function PendingOrders() {
   const selectedId = searchParams.get("order");
   const groups = pending.data?.groups;
   const summary = pending.data?.summary;
-  const orders = groups ? [...groups.now, ...groups.later, ...groups.preparing, ...groups.earlier] : [];
+  const orders = groups ? [...groups.now, ...groups.later, ...groups.preparing, ...groups.unsettled] : [];
   const selected = selectedId ? orders.find((order) => String(order.id) === selectedId) ?? null : null;
 
   useEffect(() => {
@@ -244,7 +244,7 @@ function PendingOrders() {
   const jumpTo = (key) => groupRefs.current[key === "total" ? "now" : key]?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const rowProps = { canAct, isBusy: pending.isBusy, onOpen: openOrder, onMove: pending.advance };
-  const empty = summary && summary.now + summary.later + summary.preparing + summary.earlier === 0;
+  const empty = summary && summary.now + summary.later + summary.preparing + summary.unsettled === 0;
 
   return (
     <StaffLayout>
@@ -288,8 +288,8 @@ function PendingOrders() {
             <>
               <Group testId="pending-now" title="Due Now" tone="bg-brand-500" orders={groups.now} rowProps={rowProps} innerRef={(node) => (groupRefs.current.now = node)} />
               <Group testId="pending-later" title="Due Later" tone="bg-[#8d8884]" orders={groups.later} rowProps={rowProps} innerRef={(node) => (groupRefs.current.later = node)} />
-              <Group testId="pending-preparing" title="Being Prepared" tone="bg-[#5b8def]" orders={groups.preparing} rowProps={rowProps} />
-              {groups.earlier.length > 0 && <Group testId="pending-earlier" title="Left Open From Earlier Days" tone="bg-[#d92d20]" orders={groups.earlier} withDate rowProps={rowProps} />}
+              <Group testId="pending-preparing" title="Preparing" tone="bg-[#5b8def]" orders={groups.preparing} rowProps={rowProps} />
+              {groups.unsettled.length > 0 && <Group testId="pending-unsettled" title="Unsettled Orders" tone="bg-[#d92d20]" orders={groups.unsettled} withDate rowProps={rowProps} />}
             </>
           )}
         </div>

@@ -105,7 +105,7 @@ class PendingOrdersTest extends TestCase
         $response = $this->pending();
 
         $this->assertSame([$confirmed->id], $this->ids($response, 'now'));
-        $response->assertJsonPath('groups.later', [])->assertJsonPath('groups.earlier', []);
+        $response->assertJsonPath('groups.later', [])->assertJsonPath('groups.unsettled', []);
     }
 
     public function test_an_order_is_due_now_within_the_kitchen_lead_time(): void
@@ -165,17 +165,41 @@ class PendingOrdersTest extends TestCase
         $this->assertSame([$order->id], $this->ids($this->pending(), 'now'));
     }
 
-    public function test_orders_left_open_from_earlier_days_are_listed_apart(): void
+    public function test_unsettled_orders_are_open_immediate_orders_from_earlier_days(): void
     {
-        $regular = $this->queued(OrderStatus::PREPARING, [], '2026-11-08');
-        $advance = $this->order(OrderStatus::SCHEDULED, ['scheduled_for' => $this->at('17:00:00', '2026-11-07')]);
+        $open = [OrderStatus::PLACED, OrderStatus::CONFIRMED, OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP];
+        $unsettled = array_map(fn (string $status) => $this->queued($status, [], '2026-11-08')->id, $open);
+        $unsettled[] = $this->queued(OrderStatus::ON_THE_WAY, ['order_type' => 'delivery'], '2026-11-05')->id;
+
         $this->queued(OrderStatus::COMPLETED, [], '2026-11-08');
+        $this->queued(OrderStatus::DELIVERED, ['order_type' => 'delivery'], '2026-11-08');
         $this->queued(OrderStatus::CANCELLED, [], '2026-11-08');
 
         $response = $this->pending();
 
-        $this->assertEqualsCanonicalizing([$regular->id, $advance->id], $this->ids($response, 'earlier'));
-        $response->assertJsonPath('summary.earlier', 2)->assertJsonPath('summary.now', 0);
+        $this->assertEqualsCanonicalizing($unsettled, $this->ids($response, 'unsettled'));
+        $response->assertJsonPath('summary.unsettled', 5)->assertJsonPath('summary.now', 0);
+    }
+
+    public function test_advance_orders_from_earlier_days_stay_on_the_advance_page(): void
+    {
+        foreach ([OrderStatus::CONFIRMED, OrderStatus::SCHEDULED, OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP] as $status) {
+            $this->order($status, ['scheduled_for' => $this->at('17:00:00', '2026-11-07')]);
+        }
+
+        $this->pending()->assertJsonPath('summary', ['now' => 0, 'later' => 0, 'unsettled' => 0, 'preparing' => 0]);
+    }
+
+    public function test_an_unsettled_order_can_still_be_moved_on(): void
+    {
+        $order = $this->queued(OrderStatus::PREPARING, [], '2026-11-08');
+
+        $this->pending()->assertJsonPath('groups.unsettled.0.next_status', OrderStatus::READY_FOR_PICKUP);
+
+        $this->actingAs($this->user(), 'sanctum')->postJson("/api/agent/orders/{$order->id}/advance")->assertOk();
+
+        $this->assertSame(OrderStatus::READY_FOR_PICKUP, $order->fresh()->status);
+        $this->assertSame([$order->id], $this->ids($this->pending(), 'unsettled'));
     }
 
     public function test_orders_being_prepared_today_have_their_own_group(): void
@@ -189,7 +213,7 @@ class PendingOrdersTest extends TestCase
         $response = $this->pending();
 
         $this->assertSame([$advance->id, $regular->id], $this->ids($response, 'preparing'));
-        $this->assertSame([$earlier->id], $this->ids($response, 'earlier'));
+        $this->assertSame([$earlier->id], $this->ids($response, 'unsettled'));
         $response->assertJsonPath('summary.preparing', 2)->assertJsonPath('summary.later', 0);
     }
 
@@ -224,7 +248,7 @@ class PendingOrdersTest extends TestCase
     public function test_an_empty_store_is_reported_as_empty(): void
     {
         $this->pending()
-            ->assertJsonPath('summary', ['now' => 0, 'later' => 0, 'earlier' => 0, 'preparing' => 0])
+            ->assertJsonPath('summary', ['now' => 0, 'later' => 0, 'unsettled' => 0, 'preparing' => 0])
             ->assertJsonPath('lead_minutes', 20);
     }
 }

@@ -35,7 +35,36 @@ function createConfirmedOrder({ broadcast = false } = {}) {
   ).match(/ID(\d+)/)[1];
 }
 
+function createYesterdaysOrders() {
+  const [regular, advance] = tinker(
+    [
+      `$u = App\\Models\\User::where("email","${CUSTOMER.email}")->first();`,
+      '$r = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"preparing","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"queue_date"=>now("Asia/Manila")->subDay()->toDateString(),"queue_number"=>rand(5000,9000),"queued_at"=>now()->subDay()]);',
+      '$a = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"scheduled","payment_status"=>"paid","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"scheduled_for"=>now()->subDay()]);',
+      'echo "IDS".$r->id."-".$a->id;',
+    ].join(" ")
+  ).match(/IDS(\d+)-(\d+)/).slice(1);
+
+  return { regular, advance };
+}
+
 test.describe("Pending Orders", () => {
+  test("Unsettled Orders lists yesterday's immediate orders, not advance orders, and they can be moved on", async ({ page }) => {
+    const { regular, advance } = createYesterdaysOrders();
+
+    await signIn(page, STAFF);
+    await page.getByRole("link", { name: /Pending Orders/ }).click();
+
+    const group = page.getByTestId("pending-unsettled");
+    const row = group.locator(`[data-order="${regular}"]`);
+
+    await expect(row).toBeVisible();
+    await expect(page.locator(`[data-testid="pending-row"][data-order="${advance}"]`)).toHaveCount(0);
+
+    await row.getByTestId("pending-move").click();
+    await expect(row).toContainText("Ready for pickup", { timeout: 15_000 });
+  });
+
   test("a new pending order arrives live, and the row's control moves it to Being Prepared", async ({ page }) => {
     await signIn(page, STAFF);
     await page.getByRole("link", { name: /Pending Orders/ }).click();
