@@ -79,7 +79,7 @@ export const ADVANCE_COLUMNS = [
   { key: "requests", label: "Requests", tone: "orange", statuses: ["submitted"] },
   { key: "payment", label: "Awaiting Payment", tone: "amber", statuses: ["accepted", "awaiting_payment"] },
   { key: "scheduled", label: "Scheduled", tone: "blue", statuses: ["confirmed", "scheduled"] },
-  { key: "kitchen", label: "In Kitchen", tone: "green", statuses: ["preparing", "ready_for_pickup"] },
+  { key: "kitchen", label: "Preparing", tone: "green", statuses: ["preparing", "ready_for_pickup"] },
   { key: "closed", label: "Closed", tone: "slate", statuses: ["completed", "rejected", "cancelled"] },
 ];
 
