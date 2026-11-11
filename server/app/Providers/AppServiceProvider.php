@@ -75,7 +75,7 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('login', function (Request $request) {
             return [
-                Limit::perMinute(5)->by($this->emailKey($request).'|'.$request->ip()),
+                Limit::perMinute(5)->by('account:'.$this->loginKey($request).'|'.$request->ip()),
                 Limit::perMinute(20)->by($request->ip()),
             ];
         });
@@ -186,10 +186,25 @@ class AppServiceProvider extends ServiceProvider
         return $registry->hash($transport->channel(), $raw) ?? 'unresolved';
     }
 
-    protected function emailKey(Request $request): string
+    /**
+     * The account a sign-in is aimed at, so its attempts are limited on their own.
+     *
+     * The app signs in with `login` (an email or a phone number); `email` is the
+     * older field. Reading only `email` once left every app sign-in sharing one
+     * key per IP, so five people on the same network locked each other out.
+     * A phone number is reduced to its digits, so spacing and dashes cannot be
+     * used to spread guesses at one account across several limits.
+     */
+    protected function loginKey(Request $request): string
     {
-        $email = $request->input('email');
+        $identifier = $request->input('login', $request->input('email'));
 
-        return is_string($email) ? Str::lower($email) : '';
+        if (! is_string($identifier) || trim($identifier) === '') {
+            return '';
+        }
+
+        $identifier = Str::lower(trim($identifier));
+
+        return str_contains($identifier, '@') ? $identifier : preg_replace('/\D/', '', $identifier);
     }
 }
