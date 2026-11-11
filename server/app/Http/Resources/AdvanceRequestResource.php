@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Http\Controllers\AdvanceRequestController;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -74,6 +75,7 @@ class AdvanceRequestResource extends JsonResource
             'can_remind_at' => $remindableAt?->toIso8601String(),
 
             'cancellation_reason' => $this->cancellation_reason,
+            'expired_unpaid' => AdvanceExpiry::expired((string) $this->status, $this->cancellation_reason, $this->cancelled_by),
             // Whether the shop closed it (rejection, staff cancellation) rather
             // than the customer or the payment deadline, which leave it empty.
             'cancelled_by_store' => $this->cancelled_by !== null

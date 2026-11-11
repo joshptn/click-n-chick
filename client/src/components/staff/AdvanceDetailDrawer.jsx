@@ -157,7 +157,7 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                       <span className={order.payment_overdue ? "font-semibold text-[#e5322d]" : "text-[#c98500]"}>
                         {order.payment_overdue ? "Payment overdue" : `Pay by ${formatStamp(order.payment_due_at)}`}
                       </span>
-                      <span className="text-[#8d8884]"> · unpaid after 24 hours, it cancels itself</span>
+                      <span className="text-[#8d8884]"> · unpaid after 24 hours or at the collection time, it cancels itself</span>
                     </Line>
                   ) : (
                     <Line icon={IconHourglassHigh}>
