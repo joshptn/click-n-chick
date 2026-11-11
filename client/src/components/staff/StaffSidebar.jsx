@@ -127,7 +127,7 @@ function StaffSidebar({ onNavigate }) {
     count: discounts.data?.total ?? 0,
   };
 
-  const allOrders = { label: "All Orders", icon: IconClipboardList, to: "/admin", end: true };
+  const allOrders = { label: "Today's Orders", icon: IconClipboardList, to: "/admin", end: true };
   const orderRecords = { label: "Order Records", icon: IconArchive, to: "/admin/records" };
   const pendingOrders = { label: "Pending Orders", icon: IconHourglassHigh, to: "/admin/pending-orders" };
 
@@ -146,7 +146,7 @@ function StaffSidebar({ onNavigate }) {
           entries: [
             { label: "Menu Management", icon: IconToolsKitchen2, to: "/superadmin/menu" },
             { label: "User Management", icon: IconUsers, to: "/superadmin/users" },
-            { label: "Store Settings", icon: IconBuildingStore, to: "/superadmin/settings" },
+            { label: "Store Management", icon: IconBuildingStore, to: "/superadmin/settings" },
           ],
         },
       ]
