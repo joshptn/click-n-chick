@@ -10,7 +10,9 @@ Artisan::command('inspire', function () {
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
 
-Schedule::command('advance:expire-unpaid')->hourly();
+// Every five minutes, so a request is cancelled close to its collection time.
+// Overlap-safe, and each cancellation re-checks the order under a lock.
+Schedule::command('advance:expire-unpaid')->everyFiveMinutes()->withoutOverlapping();
 
 Schedule::command('advance:notify-due')->hourly();
 

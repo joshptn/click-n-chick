@@ -2,14 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Events\OrderBroadcast;
 use App\Models\Food;
+use App\Models\Notification;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Payment;
 use App\Models\User;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use App\Services\Verification\Channel;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -204,7 +210,7 @@ class AdvancePaymentDeadlineTest extends TestCase
         $this->assertSame(OrderStatus::CONFIRMED, $order->fresh()->status);
     }
 
-    public function test_an_unanswered_request_is_never_expired(): void
+    public function test_an_unanswered_request_is_left_alone_until_its_collection_time(): void
     {
         $customer = $this->user(User::ROLE_CUSTOMER);
 
@@ -215,6 +221,151 @@ class AdvancePaymentDeadlineTest extends TestCase
         $this->artisan('advance:expire-unpaid')->assertSuccessful();
 
         $this->assertSame(OrderStatus::SUBMITTED, $order->fresh()->status);
+    }
+
+    public function test_an_unanswered_request_is_cancelled_once_its_collection_time_passes(): void
+    {
+        $order = $this->advanceOrder($this->user(User::ROLE_CUSTOMER), [
+            'scheduled_for' => CarbonImmutable::now()->subMinute(),
+        ]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        $fresh = $order->fresh();
+
+        $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
+        $this->assertSame(AdvanceExpiry::UNANSWERED, $fresh->cancellation_reason);
+        $this->assertNull($fresh->cancelled_by);
+        $this->assertSame(0.0, (float) $fresh->refund_owed);
+    }
+
+    public function test_an_unpaid_request_is_cancelled_at_its_collection_time_inside_the_window(): void
+    {
+        // Accepted an hour ago for a collection time that has just passed.
+        $order = $this->advanceOrder($this->user(User::ROLE_CUSTOMER), [
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'accepted_at' => CarbonImmutable::now()->subHour(),
+            'scheduled_for' => CarbonImmutable::now()->subMinutes(5),
+        ]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        $fresh = $order->fresh();
+
+        $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
+        $this->assertSame(AdvanceExpiry::PAYMENT_BEFORE_COLLECTION, $fresh->cancellation_reason);
+    }
+
+    public function test_the_reason_is_whichever_limit_passed_first(): void
+    {
+        // The 24 hours ran out yesterday; the collection time passed today.
+        $order = $this->advanceOrder($this->user(User::ROLE_CUSTOMER), [
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'accepted_at' => CarbonImmutable::now()->subHours(50),
+            'scheduled_for' => CarbonImmutable::now()->subHour(),
+        ]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        $this->assertSame(AdvanceExpiry::PAYMENT_DEADLINE, $order->fresh()->cancellation_reason);
+    }
+
+    public function test_a_request_with_a_payment_record_is_never_expired_even_if_its_status_lags(): void
+    {
+        $order = $this->advanceOrder($this->user(User::ROLE_CUSTOMER), [
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'accepted_at' => CarbonImmutable::now()->subHours(30),
+            'scheduled_for' => CarbonImmutable::now()->subHour(),
+        ]);
+
+        Payment::create([
+            'order_id' => $order->id,
+            'payment_method' => 'gcash',
+            'payment_status' => Payment::STATUS_PAID,
+            'paid_at' => CarbonImmutable::now()->subHours(2),
+        ]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        $this->assertSame(OrderStatus::AWAITING_PAYMENT, $order->fresh()->status);
+    }
+
+    public function test_paid_orders_past_their_collection_time_are_never_expired(): void
+    {
+        $past = ['scheduled_for' => CarbonImmutable::now()->subDay(), 'accepted_at' => CarbonImmutable::now()->subDays(3), 'payment_status' => 'paid'];
+
+        $orders = array_map(
+            fn (string $status) => $this->advanceOrder($this->user(User::ROLE_CUSTOMER), $past + ['status' => $status]),
+            [OrderStatus::CONFIRMED, OrderStatus::SCHEDULED, OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP]
+        );
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        foreach ($orders as $order) {
+            $this->assertNotSame(OrderStatus::CANCELLED, $order->fresh()->status);
+        }
+    }
+
+    public function test_immediate_orders_are_never_expired(): void
+    {
+        $order = Order::create([
+            'user_id' => $this->user(User::ROLE_CUSTOMER)->id,
+            'order_type' => 'pickup',
+            'status' => OrderStatus::PLACED,
+            'pickup_at' => CarbonImmutable::now()->subDay(),
+            'subtotal' => 200,
+            'total_amount' => 200,
+            'total_price' => 200,
+            'payment_status' => 'unpaid',
+        ]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        $this->assertSame(OrderStatus::PLACED, $order->fresh()->status);
+    }
+
+    public function test_running_the_sweep_twice_cancels_and_announces_once(): void
+    {
+        Event::fake([OrderBroadcast::class]);
+
+        $order = $this->advanceOrder($this->user(User::ROLE_CUSTOMER), [
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'accepted_at' => CarbonImmutable::now()->subHours(30),
+        ]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+        $closedAt = $order->fresh()->closed_at;
+
+        $this->travel(10)->minutes();
+        $this->artisan('advance:expire-unpaid')->expectsOutputToContain('Nothing to expire')->assertSuccessful();
+
+        $this->assertEquals($closedAt, $order->fresh()->closed_at);
+        Event::assertDispatchedTimes(OrderBroadcast::class, 1);
+    }
+
+    public function test_the_customer_is_told_why_it_was_cancelled(): void
+    {
+        $customer = $this->user(User::ROLE_CUSTOMER);
+
+        $this->advanceOrder($customer, ['scheduled_for' => CarbonImmutable::now()->subMinute()]);
+
+        $this->artisan('advance:expire-unpaid')->assertSuccessful();
+
+        $notice = Notification::query()->where('user_id', $customer->id)->latest('id')->first();
+
+        $this->assertNotNull($notice);
+        $this->assertStringContainsString('did not answer this request before the collection time', $notice->body);
+        $this->assertStringContainsString('Nothing had been paid', $notice->body);
+    }
+
+    public function test_the_scheduler_runs_the_sweep_every_five_minutes_without_overlap(): void
+    {
+        $event = collect(app(Schedule::class)->events())
+            ->first(fn ($event) => str_contains((string) $event->command, 'advance:expire-unpaid'));
+
+        $this->assertNotNull($event);
+        $this->assertSame('*/5 * * * *', $event->expression);
+        $this->assertTrue($event->withoutOverlapping);
     }
 
     public function test_a_dry_run_changes_nothing(): void
