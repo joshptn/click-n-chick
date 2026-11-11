@@ -481,6 +481,45 @@ class AdvancePaymentDeadlineTest extends TestCase
         $this->assertExpiredOnTheSpot($order, AdvanceExpiry::PAYMENT_DEADLINE);
     }
 
+    /** BR-16g: no staff route sets an advance status by name, so payment cannot be stepped over. */
+    public function test_the_direct_status_route_refuses_every_advance_order(): void
+    {
+        $agent = $this->user(User::ROLE_ADMIN);
+        $customer = $this->user(User::ROLE_CUSTOMER);
+
+        $cases = [
+            [OrderStatus::SUBMITTED, OrderStatus::ACCEPTED, []],
+            [OrderStatus::AWAITING_PAYMENT, OrderStatus::CONFIRMED, ['accepted_at' => CarbonImmutable::now()->subHour()]],
+            [OrderStatus::AWAITING_PAYMENT, OrderStatus::CANCELLED, ['accepted_at' => CarbonImmutable::now()->subHour()]],
+            [OrderStatus::CONFIRMED, OrderStatus::SCHEDULED, ['payment_status' => 'paid']],
+            [OrderStatus::SCHEDULED, OrderStatus::PREPARING, ['payment_status' => 'paid', 'scheduled_for' => CarbonImmutable::now()->addHour()]],
+        ];
+
+        foreach ($cases as [$from, $to, $overrides]) {
+            $order = $this->advanceOrder($customer, ['status' => $from] + $overrides);
+
+            $this->actingAs($agent)->putJson("/api/order/{$order->id}/status", ['status' => $to])
+                ->assertStatus(422)
+                ->assertJsonPath('error_code', 'ADVANCE_ORDER_ROUTE');
+
+            $this->assertSame($from, $order->fresh()->status, "{$from} must not move to {$to}");
+        }
+    }
+
+    public function test_the_direct_status_route_still_moves_immediate_orders(): void
+    {
+        $order = $this->advanceOrder($this->user(User::ROLE_CUSTOMER), [
+            'status' => OrderStatus::PLACED,
+            'scheduled_for' => null,
+            'payment_status' => 'paid',
+        ]);
+
+        $this->actingAs($this->user(User::ROLE_ADMIN))->putJson("/api/order/{$order->id}/status", ['status' => OrderStatus::CONFIRMED])
+            ->assertOk();
+
+        $this->assertSame(OrderStatus::CONFIRMED, $order->fresh()->status);
+    }
+
     public function test_the_stock_hold_sweep_lock_also_expires_after_ten_minutes(): void
     {
         $event = collect(app(Schedule::class)->events())

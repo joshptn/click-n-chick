@@ -148,6 +148,14 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json($refusal, 422);
         }
 
+        if ($order->isAdvance()) {
+            return response()->json([
+                'message' => 'Advance orders are moved from the Advance Orders page.',
+                'error_code' => 'ADVANCE_ORDER_ROUTE',
+                'status' => $order->status,
+            ], 422);
+        }
+
         $target = $validated['status'];
 
         if ($order->status === $target) {
