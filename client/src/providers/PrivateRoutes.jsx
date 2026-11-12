@@ -17,7 +17,7 @@ function PrivateRoutes({
   unauthorizedTo = "/unauthorized",
   children,
 }) {
-  const { user, token, isBootstrapping } = useContext(AuthContext);
+  const { user, token, isBootstrapping, signedOut } = useContext(AuthContext);
   const location = useLocation();
 
   // A token exists but we have not yet heard back who it belongs to. Deciding
@@ -30,8 +30,11 @@ function PrivateRoutes({
     );
   }
 
+  // The page is remembered for a visitor who arrived without a session (a link,
+  // a bookmark, a session that expired), not for one who just signed out of it:
+  // whoever signs in next on this browser may be someone else.
   if (!token || !user) {
-    return <Navigate to={redirectTo} state={{ from: location }} replace />;
+    return <Navigate to={redirectTo} state={signedOut ? undefined : { from: location }} replace />;
   }
 
   if (allowedRoles?.length && !allowedRoles.includes(user.role)) {

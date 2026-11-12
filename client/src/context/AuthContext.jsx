@@ -1,10 +1,25 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 import { disconnectEcho } from '../lib/echo';
 import { deviceHeader } from '../lib/deviceId';
 import { clearStoredSession } from '../lib/session';
+import { queryClient } from '../lib/queryClient';
 
 const AuthContext = createContext();
+
+/**
+ * Forget everything the previous account fetched.
+ *
+ * The query cache outlives a sign-out, and keys like ["profile"] or
+ * ["cart", "account", ...] name no account - so the next person to sign in on
+ * this browser was shown the last one's profile, cart and orders until each
+ * refetch landed. clear() also cancels what is still in flight, so a late
+ * answer cannot write the old account's data back in. Done before the state
+ * change that re-renders the app, so no screen ever draws from it.
+ */
+function forgetPreviousAccount() {
+    queryClient.clear();
+}
 
 
 export default AuthContext
@@ -30,6 +45,23 @@ export function AuthProvider({children}) {
         Boolean(JSON.parse(localStorage.getItem('token')) || null)
     );
 
+    // The token a sign-in, sign-up or challenge has just handed over together
+    // with its user. That response is as authoritative as /api/user, so the
+    // boot check below is skipped for it instead of asking again.
+    const adoptedToken = useRef(null);
+
+    // True from a sign-out in this tab until the next sign-in. The route guard
+    // reads it so the page signed out of is not remembered as the place to
+    // return to: the next person to sign in on this browser would otherwise be
+    // taken to the previous account's page. Set in the same update as the
+    // token, so the guard never renders one without the other.
+    const [signedOut, setSignedOut] = useState(false);
+
+    // Who is signed in right now, for adoptSession, which is stable and so
+    // cannot read the state directly.
+    const current = useRef({ token, userId: null });
+    current.current = { token, userId: user?.id ?? null };
+
     const url = import.meta.env.VITE_API_URL
 
     // Purge the key written by older builds so existing installs stop carrying
@@ -41,6 +73,11 @@ export function AuthProvider({children}) {
     useEffect(() => {
         if (!token) {
             setUser(null);
+            setIsBootstrapping(false);
+            return undefined;
+        }
+
+        if (adoptedToken.current === token) {
             setIsBootstrapping(false);
             return undefined;
         }
@@ -80,8 +117,19 @@ export function AuthProvider({children}) {
     }, [token, url]);
 
     const adoptSession = useCallback((data) => {
+        // A different account signing in over one that never signed out (a
+        // reset link or a code opened in a signed-in tab). A guest signing in
+        // has nothing to forget, and keeps the menu it already loaded.
+        const previous = current.current;
+
+        if (previous.token && previous.token !== data.token && previous.userId !== data.user?.id) {
+            forgetPreviousAccount();
+        }
+
+        adoptedToken.current = data.token;
         setToken(data.token);
         setUser(data.user);
+        setSignedOut(false);
 
         localStorage.setItem('token', JSON.stringify(data.token));
 
@@ -160,9 +208,14 @@ export function AuthProvider({children}) {
         // otherwise keep the previous user's subscriptions alive.
         disconnectEcho();
 
+        // Storage first, so a request still in flight sees the session gone
+        // (api.js discards its answer), then the cache, then the re-render.
+        clearStoredSession();
+        forgetPreviousAccount();
+
         setUser(null);
         setToken(null);
-        clearStoredSession();
+        setSignedOut(true);
     }, [token, url]);
 
     const context = useMemo(() => ({
@@ -173,7 +226,8 @@ export function AuthProvider({children}) {
         token,
         setUser,
         isBootstrapping,
-    }), [loginUser, adoptSession, logoutUser, user, token, isBootstrapping]);
+        signedOut,
+    }), [loginUser, adoptSession, logoutUser, user, token, isBootstrapping, signedOut]);
     return (
         <AuthContext.Provider value={context}>
             {children}
