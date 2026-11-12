@@ -30,6 +30,9 @@ final class RecaptchaAction
 
     public const TWO_FACTOR_CHALLENGE = 'two_factor_challenge';
 
+    /** Another code for a sign-in challenge already issued. */
+    public const TWO_FACTOR_RESEND = 'two_factor_resend';
+
     public const TWO_FACTOR_ENABLE = 'two_factor_enable';
 
     public const PASSWORD_FORGOT = 'password_forgot';
@@ -55,6 +58,7 @@ final class RecaptchaAction
             'otpResend' => self::OTP_RESEND,
             'otpVerify' => self::OTP_VERIFY,
             'twoFactorChallenge' => self::TWO_FACTOR_CHALLENGE,
+            'twoFactorResend' => self::TWO_FACTOR_RESEND,
             'twoFactorEnable' => self::TWO_FACTOR_ENABLE,
             'passwordForgot' => self::PASSWORD_FORGOT,
             'passwordReset' => self::PASSWORD_RESET,

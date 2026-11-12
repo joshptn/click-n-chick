@@ -11,6 +11,7 @@ import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import { CHANNELS } from "../../lib/verificationChannels";
 import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
+import toast from "../../components/app/Toast";
 
 const ROLE_DESTINATIONS = {
   [ROLES.SUPER_ADMIN]: "/superadmin",
@@ -18,12 +19,15 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
+/** The code was sent as the challenge was issued, so the first resend waits the full cooldown. */
+const RESEND_COOLDOWN_SECONDS = 60;
+
 function TwoFactorChallenge() {
   const nav = useNavigate();
   const location = useLocation();
   const { adoptSession } = useContext(AuthContext);
 
-  const { challengeToken, channel, identifier, reason } = location.state ?? {};
+  const { challengeToken, channel, identifier, reason, from } = location.state ?? {};
 
   // The same screen serves two challenges. A step-up is issued because this
   // browser scored badly on reCAPTCHA (FR-01.15 / BR-35), not because the
@@ -33,6 +37,7 @@ function TwoFactorChallenge() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
   const codeRef = useRef(null);
 
   useEffect(() => {
@@ -41,7 +46,22 @@ function TwoFactorChallenge() {
     }
   }, [challengeToken, nav]);
 
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+
+    const timer = window.setInterval(() => {
+      setCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
   const url = import.meta.env.VITE_API_URL;
+
+  const expired = () => {
+    toast.warning("This sign-in attempt has expired. Please sign in again.", "Start again");
+    nav("/login", { replace: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,7 +85,7 @@ function TwoFactorChallenge() {
 
       if (!response.ok) {
         if (data.reason === "challenge_expired") {
-          nav("/login", { replace: true });
+          expired();
           return;
         }
 
@@ -73,12 +93,45 @@ function TwoFactorChallenge() {
       }
 
       adoptSession(data);
-      nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
+      nav(from ?? ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
     } catch (err) {
       setError(err.message);
       if (codeRef.current) codeRef.current.value = "";
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError("");
+
+    try {
+      const response = await fetch(`${url}/api/2fa/resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
+        body: JSON.stringify(
+          await withRecaptcha({ challenge_token: challengeToken }, RECAPTCHA_ACTIONS.TWO_FACTOR_RESEND)
+        ),
+        credentials: "include",
+      });
+
+      const data = await response.json();
+
+      if (data.reason === "challenge_expired") {
+        expired();
+        return;
+      }
+
+      setCooldown(data.resend_available_in ?? RESEND_COOLDOWN_SECONDS);
+
+      if (!response.ok) {
+        toast.warning(data.message || "Please wait before requesting another code.", "Hold on");
+        return;
+      }
+
+      toast.info(data.message, "Code sent");
+    } catch {
+      toast.error("We could not send a new code. Please try again.");
     }
   };
 
@@ -155,6 +208,15 @@ function TwoFactorChallenge() {
         <Button type="submit" fullWidth size="lg" loading={loading} loadingLabel="Verifying..." className="mt-1">
           Continue
         </Button>
+
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={cooldown > 0 || loading}
+          className="mx-auto bg-transparent font-display text-[12.5px] font-bold text-brand-600 transition-opacity hover:underline disabled:cursor-not-allowed disabled:text-[#a39f9b] disabled:no-underline"
+        >
+          {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
+        </button>
       </form>
     </AuthLayout>
   );

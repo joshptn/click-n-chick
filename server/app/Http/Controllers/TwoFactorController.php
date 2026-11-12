@@ -403,6 +403,60 @@ class TwoFactorController extends Controller
         ]);
     }
 
+    /**
+     * POST /api/2fa/resend - another code for a challenge already issued.
+     *
+     * The challenge token stays the same; only a fresh code goes out, over the
+     * channel the challenge named, and only once the resend cooldown has
+     * passed. An unknown or expired token gets the same answer challenge()
+     * gives, so the client sends the user back to sign in.
+     */
+    public function resend(Request $request)
+    {
+        $request->validate([
+            'challenge_token' => ['required', 'string', 'max:128'],
+        ]);
+
+        $cached = Cache::get(self::CHALLENGE_PREFIX.hash('sha256', $request->input('challenge_token')));
+        $kind = is_array($cached) ? ($cached['kind'] ?? self::KIND_TWO_FACTOR) : self::KIND_TWO_FACTOR;
+        $userId = is_array($cached) ? ($cached['user_id'] ?? null) : $cached;
+        $user = $userId === null ? null : User::find($userId);
+
+        if ($user === null || $user->isSuspended() || ($kind === self::KIND_TWO_FACTOR && ! $user->hasTwoFactorEnabled())) {
+            return response()->json([
+                'message' => 'This sign-in attempt has expired. Please sign in again.',
+                'reason' => 'challenge_expired',
+            ], 422);
+        }
+
+        [$purpose, $channel] = $kind === self::KIND_STEP_UP
+            ? [OtpCode::PURPOSE_STEP_UP, $this->stepUpChannelFor($user)]
+            : [OtpCode::PURPOSE_TWO_FACTOR_LOGIN, Channel::tryFromValue($user->two_factor_channel) ?? Channel::Email];
+
+        $transport = $this->channels->for($channel);
+        $wait = $this->otp->secondsUntilResendAllowed(
+            $this->channels->hash($channel, $transport->identifierFor($user)),
+            $purpose
+        );
+
+        if ($wait > 0) {
+            return response()->json([
+                'message' => "Please wait {$wait}s before requesting another code.",
+                'resend_available_in' => $wait,
+            ], 429);
+        }
+
+        $this->otp->send($user, $purpose, $request->ip(), $channel);
+
+        return response()->json([
+            'message' => $channel === Channel::Email
+                ? 'We sent a new code to your email address.'
+                : 'We sent a new code to your phone.',
+            'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
+            'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
+        ]);
+    }
+
     private function rejection(OtpVerificationResult $result)
     {
         return response()->json([
