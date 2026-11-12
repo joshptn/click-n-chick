@@ -27,7 +27,10 @@ return [
 
     'exposed_headers' => [],
 
-    'max_age' => 0,
+    // Browsers may reuse a preflight answer for two hours, so a request with a
+    // JSON body or a custom header is not preceded by an OPTIONS round trip
+    // every time.
+    'max_age' => 7200,
 
     'supports_credentials' => true,
 ];
