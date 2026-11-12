@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -64,6 +65,7 @@ class OrderRecordResource extends JsonResource
             'payment_verified' => (bool) ($this->payment_verified ?? false),
             'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
             'cancelled_by_store' => $this->cancelledByStore(),
+            'expired_unpaid' => AdvanceExpiry::expired($status, $this->cancellation_reason, $this->cancelled_by),
             'cancellation_reason' => $this->cancellation_reason,
 
             'placed_at' => $this->created_at?->toIso8601String(),

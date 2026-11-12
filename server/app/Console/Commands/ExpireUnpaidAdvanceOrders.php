@@ -2,63 +2,51 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Order;
-use App\Services\Orders\OrderAnnouncer;
-use App\Services\Orders\OrderStatus;
-use Carbon\CarbonImmutable;
+use App\Services\Orders\AdvanceExpiry;
 use Illuminate\Console\Command;
 
-/**
- * BR-16f - cancel accepted advance requests left unpaid for 24 hours.
- *
- * Housekeeping rather than protection: the shop is already safe because an
- * unpaid order cannot be prepared (BR-16g). This just stops dead requests
- * accumulating in the agent's list.
- */
 class ExpireUnpaidAdvanceOrders extends Command
 {
     protected $signature = 'advance:expire-unpaid {--dry-run : List what would be cancelled without cancelling it}';
 
-    protected $description = 'Cancel advance requests still unpaid 24 hours after they were accepted';
+    protected $description = 'Cancel unpaid advance requests past their payment deadline or collection time';
 
-    public function handle(OrderAnnouncer $announcer): int
+    public function handle(AdvanceExpiry $expiry): int
     {
-        $cutoff = CarbonImmutable::now()->subHours(Order::ADVANCE_PAYMENT_HOURS);
+        $due = $expiry->due();
 
-        $expired = Order::query()
-            ->whereNotNull('scheduled_for')
-            ->whereIn('status', [OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT])
-            ->where('payment_status', '!=', 'paid')
-            ->whereNotNull('accepted_at')
-            ->where('accepted_at', '<=', $cutoff)
-            ->get();
-
-        if ($expired->isEmpty()) {
+        if ($due->isEmpty()) {
             $this->info('Nothing to expire.');
 
             return self::SUCCESS;
         }
 
-        foreach ($expired as $order) {
-            $this->line("#{$order->id} — accepted {$order->accepted_at}, still unpaid");
+        $cancelled = 0;
 
-            if ($this->option('dry-run')) {
+        foreach ($due as $order) {
+            $reason = $expiry->reasonFor($order);
+
+            if ($reason === null) {
                 continue;
             }
 
-            $order->forceFill([
-                'status' => OrderStatus::CANCELLED,
-                'cancellation_reason' => 'Payment was not received within 24 hours of the store accepting this request.',
-                'refund_owed' => 0,
-            ])->save();
+            $this->line("#{$order->id} ({$order->status}): {$reason}");
 
-            $announcer->statusChanged($order);
+            if ($this->option('dry-run')) {
+                $cancelled++;
+
+                continue;
+            }
+
+            if ($expiry->expireAndAnnounce($order) !== null) {
+                $cancelled++;
+            }
         }
 
         $this->info(
             $this->option('dry-run')
-                ? $expired->count().' request(s) would be cancelled.'
-                : $expired->count().' request(s) cancelled for non-payment.'
+                ? "{$cancelled} request(s) would be cancelled."
+                : "{$cancelled} request(s) cancelled."
         );
 
         return self::SUCCESS;

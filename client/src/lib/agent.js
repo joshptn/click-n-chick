@@ -79,7 +79,7 @@ export const ADVANCE_COLUMNS = [
   { key: "requests", label: "Requests", tone: "orange", statuses: ["submitted"] },
   { key: "payment", label: "Awaiting Payment", tone: "amber", statuses: ["accepted", "awaiting_payment"] },
   { key: "scheduled", label: "Scheduled", tone: "blue", statuses: ["confirmed", "scheduled"] },
-  { key: "kitchen", label: "In Kitchen", tone: "green", statuses: ["preparing", "ready_for_pickup"] },
+  { key: "kitchen", label: "Preparing", tone: "green", statuses: ["preparing", "ready_for_pickup"] },
   { key: "closed", label: "Closed", tone: "slate", statuses: ["completed", "rejected", "cancelled"] },
 ];
 
@@ -186,9 +186,9 @@ export function closedOutcome(order) {
 
   if (order?.cancelled_by_store) return { tone: "red", label: "Cancelled by the store" };
 
-  // The deadline job and the customer both leave cancelled_by empty; the
-  // deadline's reason is the one the job writes.
-  if (/not received within 24 hours/i.test(order?.cancellation_reason ?? "")) {
+  // The expiry job and the customer both leave cancelled_by empty; the server
+  // says which one it was.
+  if (order?.expired_unpaid) {
     return { tone: "amber", label: "Expired unpaid" };
   }
 

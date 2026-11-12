@@ -7,6 +7,7 @@ use App\Exceptions\InsufficientStock;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
 use App\Models\Order;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\OrderAnnouncer;
@@ -141,6 +142,18 @@ class OrderController extends Controller implements HasMiddleware
 
         if (! $order) {
             return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        if ($refusal = app(AdvanceExpiry::class)->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
+
+        if ($order->isAdvance()) {
+            return response()->json([
+                'message' => 'Advance orders are moved from the Advance Orders page.',
+                'error_code' => 'ADVANCE_ORDER_ROUTE',
+                'status' => $order->status,
+            ], 422);
         }
 
         $target = $validated['status'];

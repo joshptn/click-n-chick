@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\AdvanceRequestResource;
 use App\Models\Notification;
 use App\Models\Order;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
@@ -32,6 +33,7 @@ class AdvanceRequestController extends Controller
         private StoreAvailability $store,
         private OrderAnnouncer $announcer,
         private OrderNotice $notice,
+        private AdvanceExpiry $expiry,
     ) {}
 
     public function index(Request $request)
@@ -107,31 +109,40 @@ class AdvanceRequestController extends Controller
     {
         $this->authorize('decideAdvance', $order);
 
+        // A request left unanswered past its collection time can no longer be
+        // honoured (BR-16h); it is cancelled now rather than accepted.
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
+
         if ($order->status !== OrderStatus::SUBMITTED) {
             return response()->json($this->alreadyAnswered($order), 422);
         }
 
-        // A request left unanswered past its own collection date can no longer
-        // be honoured; accepting it would ask the customer to pay for a day that
-        // is gone. Declining tells them to pick another date.
-        $collect = $order->scheduled_for?->toImmutable()->setTimezone($this->store->timezone());
+        // Under a lock, so the sweep cannot cancel it between the check above
+        // and the write below.
+        $answered = DB::transaction(function () use ($order) {
+            $locked = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();
 
-        if ($collect !== null && $collect->startOfDay()->lessThan(CarbonImmutable::now($this->store->timezone())->startOfDay())) {
-            return response()->json([
-                'message' => 'The collection date for this request has passed. Decline it so the customer can choose another date.',
-                'error_code' => 'ADVANCE_DATE_PASSED',
-                'status' => $order->status,
-            ], 422);
-        }
+            if ($locked->status !== OrderStatus::SUBMITTED) {
+                return $locked;
+            }
 
-        DB::transaction(function () use ($order) {
-            $order->accepted_at = CarbonImmutable::now();
-            $order->status = OrderStatus::ACCEPTED;
-            $order->save();
+            $locked->accepted_at = CarbonImmutable::now();
+            $locked->status = OrderStatus::ACCEPTED;
+            $locked->save();
 
-            $order->status = OrderStatus::AWAITING_PAYMENT;
-            $order->save();
+            $locked->status = OrderStatus::AWAITING_PAYMENT;
+            $locked->save();
+
+            return null;
         });
+
+        $order->refresh();
+
+        if ($answered !== null) {
+            return response()->json($this->alreadyAnswered($order), 422);
+        }
 
         $this->announcer->statusChanged($order);
 
@@ -149,16 +160,36 @@ class AdvanceRequestController extends Controller
             'reason' => ['required', 'string', 'min:3', 'max:255'],
         ]);
 
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
+
         if ($order->status !== OrderStatus::SUBMITTED) {
             return response()->json($this->alreadyAnswered($order), 422);
         }
 
-        $order->forceFill([
-            'status' => OrderStatus::REJECTED,
-            'cancellation_reason' => trim($validated['reason']),
-            'cancelled_by' => $request->user()->getKey(),
-            'refund_owed' => 0,
-        ])->save();
+        $answered = DB::transaction(function () use ($order, $validated, $request) {
+            $locked = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();
+
+            if ($locked->status !== OrderStatus::SUBMITTED) {
+                return $locked;
+            }
+
+            $locked->forceFill([
+                'status' => OrderStatus::REJECTED,
+                'cancellation_reason' => trim($validated['reason']),
+                'cancelled_by' => $request->user()->getKey(),
+                'refund_owed' => 0,
+            ])->save();
+
+            return null;
+        });
+
+        $order->refresh();
+
+        if ($answered !== null) {
+            return response()->json($this->alreadyAnswered($order), 422);
+        }
 
         $this->announcer->statusChanged($order);
 
@@ -171,6 +202,10 @@ class AdvanceRequestController extends Controller
     public function remind(Request $request, Order $order)
     {
         $this->authorize('decideAdvance', $order);
+
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
 
         if ($order->isPaid()) {
             return response()->json([

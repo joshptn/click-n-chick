@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\User;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -164,6 +165,21 @@ class DailySalesReportTest extends TestCase
             ->assertJsonPath('not_sold.rejected.value', 444)
             ->assertJsonPath('open.orders', 2)
             ->assertJsonPath('open.value', 1221);
+    }
+
+    public function test_every_kind_of_advance_expiry_counts_as_expired_unpaid(): void
+    {
+        foreach (AdvanceExpiry::REASONS as $reason) {
+            $this->order(['scheduled_for' => now()->addDay(), 'cancellation_reason' => $reason], OrderStatus::CANCELLED);
+        }
+
+        // A customer who happens to write the same words is still the customer.
+        $customer = $this->user();
+        $this->order(['user_id' => $customer->id, 'cancelled_by' => $customer->id, 'cancellation_reason' => AdvanceExpiry::UNANSWERED], OrderStatus::CANCELLED);
+
+        $this->report()
+            ->assertJsonPath('not_sold.cancelled.expired_unpaid', 3)
+            ->assertJsonPath('not_sold.cancelled.by_customer', 1);
     }
 
     public function test_an_order_is_filed_under_the_store_day_it_closed(): void

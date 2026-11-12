@@ -11,6 +11,7 @@ class OrderCancellation
         private CancellationPolicy $policy,
         private OrderAnnouncer $announcer,
         private OrderNotice $notice,
+        private AdvanceExpiry $expiry,
     ) {}
 
     /**
@@ -21,6 +22,19 @@ class OrderCancellation
      */
     public function cancel(Order $order, ?User $by): array
     {
+        // An expired request is closed as expired, not as the customer's own
+        // cancellation, so reports and the customer's notice say what happened.
+        if ($refusal = $this->expiry->enforce($order)) {
+            return [
+                'can_cancel' => false,
+                'refundable' => false,
+                'refund_amount' => 0.0,
+                'code' => $refusal['error_code'],
+                'message' => $refusal['message'],
+                'refundable_through' => null,
+            ];
+        }
+
         $decision = $this->policy->for($order);
 
         if (! $decision['can_cancel']) {

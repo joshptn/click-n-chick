@@ -6,6 +6,7 @@ use App\Models\Food;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use App\Services\Verification\Channel;
 use Carbon\CarbonImmutable;
@@ -320,7 +321,7 @@ class AdvanceRequestDecisionTest extends TestCase
         $this->assertSame($stored, $fresh->getRawOriginal('scheduled_for'));
     }
 
-    public function test_a_request_past_its_collection_date_cannot_be_accepted(): void
+    public function test_a_request_past_its_collection_date_is_expired_instead_of_accepted(): void
     {
         $customer = $this->user(User::ROLE_CUSTOMER);
         $agent = $this->user(User::ROLE_ADMIN);
@@ -331,14 +332,13 @@ class AdvanceRequestDecisionTest extends TestCase
 
         $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")
             ->assertStatus(422)
-            ->assertJsonPath('error_code', 'ADVANCE_DATE_PASSED');
+            ->assertJsonPath('error_code', 'ADVANCE_EXPIRED')
+            ->assertJsonPath('status', OrderStatus::CANCELLED);
 
-        $this->assertSame(OrderStatus::SUBMITTED, $order->fresh()->status);
-
-        // Declining it is still open, so the customer hears back.
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/reject", [
-            'reason' => 'That date has passed - please choose another.',
-        ])->assertOk();
+        $fresh = $order->fresh();
+        $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
+        $this->assertSame(AdvanceExpiry::UNANSWERED, $fresh->cancellation_reason);
+        $this->assertNull($fresh->cancelled_by);
     }
 
     /** UC-ADV-012: the kitchen starts it on the day, not when someone happens to click. */

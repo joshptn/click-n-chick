@@ -179,8 +179,8 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
         ) : stage === "decide" ? (
           canAct ? (
             <div className={`grid gap-1.5 ${order.collection_passed ? "grid-cols-1" : "grid-cols-2"}`}>
-              {/* A date that has gone can only be declined (the server refuses
-                  ADVANCE_DATE_PASSED), so the customer hears back and rebooks. */}
+              {/* Past its collection time the request has expired (BR-16h). Accept
+                  is hidden; any action closes it as expired (ADVANCE_EXPIRED). */}
               {!order.collection_passed && (
                 <button
                   type="button"

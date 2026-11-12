@@ -6,6 +6,7 @@ use App\Models\Food;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
@@ -31,8 +32,6 @@ class DailySalesReport
     private const TOP_ITEMS = 5;
 
     private const FOOD_SALES = 'COALESCE(orders.subtotal, '.Order::TOTAL_SQL.' + COALESCE(orders.discount_amount, 0) - COALESCE(orders.delivery_fee, 0))';
-
-    private const EXPIRED_REASON = '%not received within 24 hours%';
 
     public function __construct(private StoreAvailability $store) {}
 
@@ -296,7 +295,7 @@ class DailySalesReport
         $row = (clone $cancelled)
             ->toBase()
             ->selectRaw("SUM(CASE WHEN {$byStore} THEN 1 ELSE 0 END) AS by_store")
-            ->selectRaw('SUM(CASE WHEN orders.cancelled_by IS NULL AND LOWER(orders.cancellation_reason) LIKE ? THEN 1 ELSE 0 END) AS expired_unpaid', [self::EXPIRED_REASON])
+            ->selectRaw('SUM(CASE WHEN orders.cancelled_by IS NULL AND orders.cancellation_reason IN (?, ?, ?) THEN 1 ELSE 0 END) AS expired_unpaid', AdvanceExpiry::REASONS)
             ->first();
 
         $counted = $this->countAndValue($cancelled, 'value');

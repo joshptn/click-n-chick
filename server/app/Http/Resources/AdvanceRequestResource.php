@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Http\Controllers\AdvanceRequestController;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -38,7 +39,8 @@ class AdvanceRequestResource extends JsonResource
             'collection_time' => $collectAt?->format('H:i'),
             'days_until_collection' => $daysUntil,
             'is_due_today' => $collectAt?->isSameDay(now($timezone)) ?? false,
-            'collection_passed' => $daysUntil !== null && $daysUntil < 0,
+            // The collection time itself, the moment an unanswered request expires (BR-16h).
+            'collection_passed' => $collectAt !== null && $collectAt->lessThanOrEqualTo(now()),
             // UC-ADV-012 and BR-16g: on or after the collection date, and paid.
             'can_start_preparing' => $this->status === OrderStatus::SCHEDULED
                 && $this->isPaid()
@@ -74,6 +76,7 @@ class AdvanceRequestResource extends JsonResource
             'can_remind_at' => $remindableAt?->toIso8601String(),
 
             'cancellation_reason' => $this->cancellation_reason,
+            'expired_unpaid' => AdvanceExpiry::expired((string) $this->status, $this->cancellation_reason, $this->cancelled_by),
             // Whether the shop closed it (rejection, staff cancellation) rather
             // than the customer or the payment deadline, which leave it empty.
             'cancelled_by_store' => $this->cancelled_by !== null

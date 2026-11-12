@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\OrderQueueResource;
 use App\Models\Order;
+use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
@@ -25,6 +26,7 @@ class OrderQueueController extends Controller
     public function __construct(
         private StoreAvailability $store,
         private OrderAnnouncer $announcer,
+        private AdvanceExpiry $expiry,
     ) {}
 
     public function index(Request $request)
@@ -74,9 +76,12 @@ class OrderQueueController extends Controller
      *
      * Confirmed orders the kitchen has not started, sorted by when each is
      * needed, and what it is working on. Advance orders due today are here too,
-     * which the day's board never lists (BR-22c), and so is anything left open
-     * from an earlier day. An order is due "now" once its time is within the
-     * kitchen's lead time.
+     * which the day's board never lists (BR-22c). An order is due "now" once
+     * its time is within the kitchen's lead time.
+     *
+     * Unsettled Orders are immediate orders from an earlier day that never
+     * closed, in any open status, kept here until someone resolves them (BR-47).
+     * Advance orders stay on the Advance Orders page, whatever their date.
      */
     public function pending()
     {
@@ -90,21 +95,19 @@ class OrderQueueController extends Controller
         $dayEnd = $now->startOfDay()->addDay()->utc()->format('Y-m-d H:i:s');
 
         $booked = [OrderStatus::CONFIRMED, OrderStatus::SCHEDULED];
-        $inKitchen = [OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP];
 
         $orders = Order::query()
             ->with(self::WITH)
             ->where(fn (Builder $query) => $query
                 ->where(fn (Builder $regular) => $regular->whereNull('scheduled_for')->where('queue_date', $today)->whereIn('status', [OrderStatus::CONFIRMED, OrderStatus::PREPARING]))
                 ->orWhere(fn (Builder $regular) => $regular->whereNull('scheduled_for')->where('queue_date', '<', $today)->whereNotIn('status', OrderStatus::terminal()))
-                ->orWhere(fn (Builder $advance) => $advance->where('scheduled_for', '>=', $dayStart)->where('scheduled_for', '<', $dayEnd)->whereIn('status', [...$booked, OrderStatus::PREPARING]))
-                ->orWhere(fn (Builder $advance) => $advance->where('scheduled_for', '<', $dayStart)->whereIn('status', [...$booked, ...$inKitchen])))
+                ->orWhere(fn (Builder $advance) => $advance->where('scheduled_for', '>=', $dayStart)->where('scheduled_for', '<', $dayEnd)->whereIn('status', [...$booked, OrderStatus::PREPARING])))
             ->get();
 
         $groups = $orders
             ->sortBy(fn (Order $order) => ($this->neededAt($order) ?? $order->queued_at ?? $order->created_at)?->getTimestamp())
             ->groupBy(fn (Order $order) => match (true) {
-                $this->isFromEarlierDay($order, $today, $dayStart) => 'earlier',
+                $this->isUnsettled($order, $today) => 'unsettled',
                 $order->status === OrderStatus::PREPARING => 'preparing',
                 $this->neededAt($order)?->greaterThan($soon) === true => 'later',
                 default => 'now',
@@ -124,10 +127,10 @@ class OrderQueueController extends Controller
             'summary' => [
                 'now' => $groups->get('now', collect())->count(),
                 'later' => $groups->get('later', collect())->count(),
-                'earlier' => $groups->get('earlier', collect())->count(),
+                'unsettled' => $groups->get('unsettled', collect())->count(),
                 'preparing' => $groups->get('preparing', collect())->count(),
             ],
-            'groups' => ['now' => $rows('now'), 'later' => $rows('later'), 'preparing' => $rows('preparing'), 'earlier' => $rows('earlier')],
+            'groups' => ['now' => $rows('now'), 'later' => $rows('later'), 'preparing' => $rows('preparing'), 'unsettled' => $rows('unsettled')],
         ]);
     }
 
@@ -137,11 +140,10 @@ class OrderQueueController extends Controller
         return ($order->isAdvance() ? $order->scheduled_for : $order->pickup_at)?->toImmutable();
     }
 
-    private function isFromEarlierDay(Order $order, string $today, string $dayStart): bool
+    /** An immediate order from an earlier day's queue that is still open. */
+    private function isUnsettled(Order $order, string $today): bool
     {
-        return $order->isAdvance()
-            ? $order->scheduled_for->format('Y-m-d H:i:s') < $dayStart
-            : CarbonImmutable::parse($order->queue_date)->toDateString() < $today;
+        return ! $order->isAdvance() && CarbonImmutable::parse($order->queue_date)->toDateString() < $today;
     }
 
     public function next(Request $request)
@@ -160,6 +162,10 @@ class OrderQueueController extends Controller
     public function advance(Request $request, Order $order)
     {
         $this->authorize('update', $order);
+
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
 
         $to = $order->nextStatus();
 
@@ -234,6 +240,10 @@ class OrderQueueController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
             'refund' => ['sometimes', 'boolean'],
         ]);
+
+        if ($refusal = $this->expiry->enforce($order)) {
+            return response()->json($refusal, 422);
+        }
 
         if ($order->isTerminal()) {
             return response()->json([

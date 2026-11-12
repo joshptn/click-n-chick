@@ -157,7 +157,7 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                       <span className={order.payment_overdue ? "font-semibold text-[#e5322d]" : "text-[#c98500]"}>
                         {order.payment_overdue ? "Payment overdue" : `Pay by ${formatStamp(order.payment_due_at)}`}
                       </span>
-                      <span className="text-[#8d8884]"> · unpaid after 24 hours, it cancels itself</span>
+                      <span className="text-[#8d8884]"> · unpaid after 24 hours or at the collection time, it cancels itself</span>
                     </Line>
                   ) : (
                     <Line icon={IconHourglassHigh}>
@@ -180,7 +180,8 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                 <div className={`grid gap-2 ${order.collection_passed ? "grid-cols-1" : "grid-cols-2"}`}>
                   {order.collection_passed ? (
                     <p className="m-0 rounded-[10px] bg-[#fdecec] px-3 py-2 text-center font-display text-[12px] text-[#e5322d]">
-                      This date has passed. Decline it so the customer can choose another.
+                      The collection time has passed, so this request has expired. It closes on its own, or now if you
+                      decline it.
                     </p>
                   ) : (
                     <button

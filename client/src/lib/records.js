@@ -142,14 +142,12 @@ export function recordQueryParams(filters) {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined));
 }
 
-const EXPIRED_UNPAID = /not received within 24 hours/i;
-
 /**
  * How a record ended, in the agent's words, with the tone its pill takes.
  *
- * Who cancelled is read from the order: a staff member is the store; the
- * deadline job and the customer both leave cancelled_by unset (or the
- * customer's own id), and the job's reason is the one it always writes.
+ * Who cancelled is read from the order: a staff member is the store, and the
+ * server marks the requests its expiry job cancelled; anything else was the
+ * customer.
  */
 export function recordOutcome(record) {
   switch (record?.status) {
@@ -162,7 +160,7 @@ export function recordOutcome(record) {
       return { tone: "slate", label: "Declined", detail: "Declined by the store" };
     default:
       if (record?.cancelled_by_store) return { tone: "red", label: "Cancelled", detail: "Cancelled by the store" };
-      if (EXPIRED_UNPAID.test(record?.cancellation_reason ?? "")) {
+      if (record?.expired_unpaid) {
         return { tone: "amber", label: "Cancelled", detail: "Expired unpaid" };
       }
 
