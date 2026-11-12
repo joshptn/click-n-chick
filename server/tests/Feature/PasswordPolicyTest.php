@@ -25,12 +25,11 @@ class PasswordPolicyTest extends TestCase
     private function registrationPayload(string $password): array
     {
         return [
-            'email' => 'juan@example.test',
+            'identifier' => 'juan@example.test',
             'password' => $password,
             'password_confirmation' => $password,
             'first_name' => 'Juan',
             'last_name' => 'Dela Cruz',
-            'phone_number' => '+639171234567',
         ];
     }
 

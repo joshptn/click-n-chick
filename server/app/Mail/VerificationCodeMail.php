@@ -10,8 +10,8 @@ use Illuminate\Mail\Mailables\Envelope;
 class VerificationCodeMail extends Mailable
 {
     /**
-     * Not queued: registration blocks on this code arriving, and no queue
-     * worker runs for this app yet. Deliberately holds the code in a public
+     * Not queued: sign-up waits for this code to be handed over so a failed
+     * send is reported at once. Deliberately holds the code in a public
      * property only for the render - nothing logs this object.
      */
     public function __construct(public string $code)

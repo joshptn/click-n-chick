@@ -26,45 +26,51 @@ class RoleAssignmentTest extends TestCase
     // Part 1 - register() must never take a role from the request
     // ---------------------------------------------------------------------
 
-    public function test_registration_ignores_a_role_field_in_the_payload(): void
+    /** Sign up and verify, the only way an account is created, with extra fields in the payload. */
+    private function registerAndVerify(string $email, array $extra): User
     {
-        $response = $this->postJson('/api/register', [
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $this->postJson('/api/register', [
             'first_name' => 'Escalation',
             'last_name' => 'Attempt',
-            'email' => 'escalate@example.test',
+            'identifier' => $email,
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-            'phone_number' => '+639171234567',
-            'role' => 'super_admin',
-        ]);
+        ] + $extra)->assertStatus(201)->assertJsonMissingPath('token');
 
-        // 201 + no user/token in the body: registration is now the blocking
-        // pending_verification step, not an account handover.
-        $response->assertStatus(201);
+        $code = null;
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\VerificationCodeMail::class, function ($mail) use (&$code) {
+            $code = $mail->code;
 
-        $user = User::where('email', 'escalate@example.test')->firstOrFail();
+            return true;
+        });
+
+        $this->postJson('/api/otp/verify', ['identifier' => $email, 'code' => $code])->assertOk();
+
+        return User::where('email', $email)->firstOrFail();
+    }
+
+    public function test_registration_ignores_a_role_field_in_the_payload(): void
+    {
+        $user = $this->registerAndVerify('escalate@example.test', ['role' => 'super_admin']);
 
         $this->assertSame('customer', $user->role, 'register() must not honour a role supplied in the request.');
     }
 
     public function test_registration_ignores_role_like_aliases_in_the_payload(): void
     {
-        $this->postJson('/api/register', [
-            'first_name' => 'Alias',
-            'last_name' => 'Attempt',
-            'email' => 'alias@example.test',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
-            'phone_number' => '+639171234567',
+        $user = $this->registerAndVerify('alias@example.test', [
             'role' => 'super_admin',
             'user_role' => 'super_admin',
             'roles' => ['super_admin'],
             'is_admin' => true,
             'is_super_admin' => true,
             'account_status' => 'privileged',
-        ])->assertStatus(201);
+        ]);
 
-        $this->assertSame('customer', User::where('email', 'alias@example.test')->value('role'));
+        $this->assertSame('customer', $user->role);
+        $this->assertSame(User::STATUS_ACTIVE, $user->account_status);
     }
 
     // ---------------------------------------------------------------------

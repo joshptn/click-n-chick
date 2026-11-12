@@ -57,21 +57,40 @@ class ChannelGatingAndTwoFactorTest extends TestCase
     // Part 1 - gating is per channel, not on account_status
     // -----------------------------------------------------------------
 
-    public function test_login_is_refused_when_the_chosen_channel_is_unverified_even_if_the_status_says_active(): void
+    public function test_login_is_refused_when_nothing_is_verified_even_if_the_status_says_active(): void
     {
         // The exact drift this guards: account_status is mass-assignable, so it
-        // must never be what login trusts.
+        // must never be what login trusts. Nothing verified here, and the
+        // refusal points at the channel the account registered on.
         $user = User::factory()->create([
             'password' => Hash::make('Password123!'),
             'verification_channel' => 'sms',
             'account_status' => User::STATUS_ACTIVE,
             'phone_verified_at' => null,
-            'email_verified_at' => now(),
+            'email_verified_at' => null,
         ]);
 
         $this->postJson('/api/login', ['login' => $user->email, 'password' => 'Password123!'])
             ->assertStatus(403)
-            ->assertJsonPath('verification_channel', 'sms');
+            ->assertJsonPath('verification_channel', 'sms')
+            ->assertJsonMissingPath('token');
+    }
+
+    public function test_only_a_verified_identifier_signs_an_account_in(): void
+    {
+        // Verified by phone only. The email on file was never proven, so it
+        // cannot sign in, and the refusal says which identifier can.
+        $user = $this->verifiedUser('sms');
+
+        $this->postJson('/api/login', ['login' => $user->email, 'password' => 'Password123!'])
+            ->assertStatus(403)
+            ->assertJsonPath('sign_in_with_channel', true)
+            ->assertJsonPath('verification_channel', 'sms')
+            ->assertJsonMissingPath('token');
+
+        $this->postJson('/api/login', ['login' => $user->phone_number, 'password' => 'Password123!'])
+            ->assertOk()
+            ->assertJsonStructure(['token']);
     }
 
     public function test_a_verified_email_does_not_satisfy_a_phone_registration(): void
@@ -98,8 +117,9 @@ class ChannelGatingAndTwoFactorTest extends TestCase
     {
         foreach (['sms', 'email'] as $channel) {
             $user = $this->verifiedUser($channel);
+            $identifier = $channel === 'sms' ? $user->phone_number : $user->email;
 
-            $this->postJson('/api/login', ['login' => $user->email, 'password' => 'Password123!'])
+            $this->postJson('/api/login', ['login' => $identifier, 'password' => 'Password123!'])
                 ->assertOk()
                 ->assertJsonStructure(['user', 'token']);
 
@@ -140,19 +160,18 @@ class ChannelGatingAndTwoFactorTest extends TestCase
         Mail::fake();
         $this->enableSmsChannel();
 
-        // Registered on sms, so the sms code is the only one that exists. Even
-        // if an email code were somehow present, the channel guard rejects it.
+        // Signed up with a phone number, so the sms code is the only one that
+        // exists and the only identifier the sign-up knows.
         $this->postJson('/api/register', [
             'first_name' => 'Juan', 'last_name' => 'Dela Cruz',
-            'email' => 'juan@example.test', 'phone_number' => '+639171234567',
+            'identifier' => '+639171234567',
             'password' => 'Password123!', 'password_confirmation' => 'Password123!',
-            'verification_channel' => 'sms',
         ])->assertCreated();
 
-        $this->postJson('/api/otp/verify', ['email' => 'juan@example.test', 'code' => '123456'])
+        $this->postJson('/api/otp/verify', ['identifier' => 'juan@example.test', 'code' => '123456'])
             ->assertStatus(422);
 
-        $this->assertNull(User::where('email', 'juan@example.test')->value('email_verified_at'));
+        $this->assertDatabaseCount('users', 0);
     }
 
     // -----------------------------------------------------------------

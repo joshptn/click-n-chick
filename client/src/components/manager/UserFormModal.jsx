@@ -8,26 +8,19 @@ import { StepUpCancelled } from "../../hooks/useStepUp";
 import { PASSWORD_RULES, unmetPasswordRules } from "../../lib/passwordRules";
 import { ROLES } from "../../lib/roles";
 import { ROLE_OPTIONS } from "../../lib/users";
-import { CHANNELS } from "../../lib/verificationChannels";
 
 const EMPTY = {
   first_name: "",
   last_name: "",
-  email: "",
-  phone_number: "",
+  identifier: "",
   new_password: "",
   new_password_confirmation: "",
   role: ROLES.CUSTOMER,
-  verification_channel: CHANNELS.EMAIL,
 };
 
 const SELECT =
   "h-[46px] w-full rounded-[10px] border border-[#e8e4de] bg-white px-3 font-display text-[14px] text-ink outline-none focus:border-brand-500";
 
-/**
- * Create an account. There is no discount field: eligibility only ever comes
- * from an ID a Store Agent has approved (BR-08).
- */
 function UserFormModal({ opened, onClose, onSubmit }) {
   const [values, setValues] = useState(EMPTY);
   const [errors, setErrors] = useState({});
@@ -51,7 +44,7 @@ function UserFormModal({ opened, onClose, onSubmit }) {
   const validate = () => {
     const found = {};
 
-    ["first_name", "last_name", "email", "phone_number"].forEach((key) => {
+    ["first_name", "last_name", "identifier"].forEach((key) => {
       if (!values[key].trim()) found[key] = "Required.";
     });
 
@@ -107,12 +100,8 @@ function UserFormModal({ opened, onClose, onSubmit }) {
           </Field>
         </div>
 
-        <Field label="Email" required error={errors.email}>
-          <Input type="email" {...bind("email")} autoComplete="off" data-testid="user-email" />
-        </Field>
-
-        <Field label="Phone number" required error={errors.phone_number}>
-          <Input {...bind("phone_number")} placeholder="0917 123 4567" autoComplete="off" data-testid="user-phone" />
+        <Field label="Phone number or email address" required error={errors.identifier}>
+          <Input {...bind("identifier")} placeholder="0917 123 4567 or name@example.com" autoComplete="off" data-testid="user-identifier" />
         </Field>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -125,27 +114,19 @@ function UserFormModal({ opened, onClose, onSubmit }) {
         </div>
         <p className="m-0 font-display text-[11px] text-[#8d8884]">{PASSWORD_RULES.map((rule) => rule.label).join(" · ")}</p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Role" error={errors.role}>
-            <select className={SELECT} value={values.role} onChange={bind("role").onChange} data-testid="user-role">
-              {ROLE_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Verify by" error={errors.verification_channel}>
-            <select className={SELECT} value={values.verification_channel} onChange={bind("verification_channel").onChange} data-testid="user-channel">
-              <option value={CHANNELS.EMAIL}>Email</option>
-              <option value={CHANNELS.SMS}>SMS</option>
-            </select>
-          </Field>
-        </div>
+        <Field label="Role" error={errors.role}>
+          <select className={SELECT} value={values.role} onChange={bind("role").onChange} data-testid="user-role">
+            {ROLE_OPTIONS.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         <p className="m-0 rounded-[10px] bg-[#faf6f0] px-3 py-2 font-display text-[11.5px] leading-relaxed text-[#6f6b68]">
-          They confirm a one-time code the first time they sign in, using the email or phone chosen above. Discounts are not set here: a Store Agent
-          approves them from the customer&rsquo;s ID.
+          They confirm a one-time code sent to that phone number or email address the first time they sign in. Discounts are not set here: a
+          Store Agent approves them from the customer&rsquo;s ID.
         </p>
 
         {formError && (

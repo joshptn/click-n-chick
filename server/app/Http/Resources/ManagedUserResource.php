@@ -26,7 +26,6 @@ class ManagedUserResource extends JsonResource
     public function toArray($request): array
     {
         $isSelf = (int) $request->user()?->getKey() === (int) $this->id;
-        $settled = ! $this->resource->isPendingVerification();
         $suspended = $this->resource->isSuspended();
         $approved = $this->relationLoaded('approvedDiscount') ? $this->approvedDiscount : null;
 
@@ -44,9 +43,9 @@ class ManagedUserResource extends JsonResource
             'joined_at' => $this->created_at?->toIso8601String(),
             'is_self' => $isSelf,
             'can' => [
-                'edit' => $settled,
-                'change_role' => ! $isSelf && $settled && ! $suspended,
-                'suspend' => ! $isSelf && $settled && ! $suspended,
+                'edit' => true,
+                'change_role' => ! $isSelf && ! $suspended,
+                'suspend' => ! $isSelf && ! $suspended,
                 'reactivate' => ! $isSelf && $suspended,
                 'delete' => ! $isSelf,
             ],
@@ -80,7 +79,7 @@ class ManagedUserResource extends JsonResource
     {
         return match (true) {
             $this->resource->isSuspended() => User::STATUS_SUSPENDED,
-            $this->resource->isPendingVerification(), ! $this->resource->hasVerifiedChosenChannel() => 'unverified',
+            ! $this->resource->hasVerifiedChosenChannel() => 'unverified',
             default => User::STATUS_ACTIVE,
         };
     }

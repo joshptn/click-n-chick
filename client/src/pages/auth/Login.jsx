@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { IconAlertCircle, IconLock, IconUser } from "@tabler/icons-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { IconAlertCircle, IconInfoCircle, IconLock, IconUser } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import AuthLayout from "../../components/auth/AuthLayout";
@@ -8,7 +8,6 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
-import toast from "../../components/app/Toast";
 import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
 import { pages, preloadWhenIdle } from "../../lib/pages";
 
@@ -18,18 +17,31 @@ const ROLE_DESTINATIONS = {
   [ROLES.CUSTOMER]: "/home",
 };
 
+/** Why the visitor was brought here, when a session ended elsewhere (session.js). */
+const REASONS = {
+  session_ended: "Your session has ended. Please sign in again.",
+  signed_out_remotely: "This device was signed out from another device. Sign in again to continue.",
+};
+
 function Login() {
   const { loginUser } = useContext(AuthContext);
   const nav = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const notice = REASONS[searchParams.get("reason")] ?? null;
+  // The page a guard sent the visitor here from; they go back to it after signing in.
+  const from = location.state?.from?.pathname ?? null;
 
   // Most sign-ins land on the menu; fetch its code while the form is filled in.
   useEffect(() => preloadWhenIdle([pages.Home]), []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
     setLoading(true);
     try {
       const data = await loginUser(e);
@@ -43,47 +55,38 @@ function Login() {
             // "two_factor" or "recaptcha_step_up" - the screen words itself
             // differently for each.
             reason: data.reason,
+            from,
           },
         });
         return;
       }
 
-      nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home");
+      nav(from ?? ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
     } catch (err) {
       if (err.status === 403 && err.payload?.status === "pending_verification") {
-        const channel = err.payload.verification_channel ?? CHANNELS.SMS;
-        const typed = e.target.login.value.trim();
-        const typedIsEmail = typed.includes("@");
-
-        if ((channel === CHANNELS.EMAIL) === typedIsEmail) {
-          nav(routeForChannel(channel), {
-            state: {
-              identifier: typed,
-              maskedIdentifier: err.payload.identifier ?? err.payload.phone_number,
-              resendAvailableIn: err.payload.resend_available_in,
-            },
-          });
-          return;
-        }
-
-        // An account the store created has nothing to finish at /register.
+        // The password was right but the identifier typed is not the one this
+        // account verifies with; the server says which one to use.
         if (err.payload.sign_in_with_channel) {
-          setError(`Sign in with your ${channel === CHANNELS.EMAIL ? "email address" : "phone number"} so we can send your verification code.`);
+          setError(err.message);
           return;
         }
 
-        toast.info(
-          channel === CHANNELS.EMAIL
-            ? "Finish verifying your email address to activate your account."
-            : "Finish verifying your phone number to activate your account.",
-          "Almost there"
-        );
-        nav("/register");
+        // An account the store created, signing in for the first time: the
+        // code has just been sent to the identifier they typed.
+        const channel = err.payload.verification_channel ?? CHANNELS.EMAIL;
+
+        nav(routeForChannel(channel), {
+          state: {
+            identifier: e.target.login.value.trim(),
+            maskedIdentifier: err.payload.identifier,
+            resendAvailableIn: err.payload.resend_available_in,
+            from,
+          },
+        });
         return;
       }
 
       setError(err.message);
-      setTimeout(() => setError(""), 4000);
     } finally {
       setLoading(false);
     }
@@ -101,6 +104,16 @@ function Login() {
         </p>
       }
     >
+      {notice && !error && (
+        <div
+          role="status"
+          className="mb-5 flex items-start gap-2.5 rounded-[12px] border border-[#ffe6a8] bg-[#fff9e8] px-4 py-3"
+        >
+          <IconInfoCircle size={19} stroke={2.2} className="mt-px shrink-0 text-[#b7791f]" />
+          <p className="font-display text-[13px] leading-snug text-[#7a5620]">{notice}</p>
+        </div>
+      )}
+
       {error && (
         <div
           role="alert"
