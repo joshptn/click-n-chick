@@ -10,10 +10,9 @@ use Illuminate\Mail\Mailables\Envelope;
 /**
  * Security alert for a sign-in from a device the account has not seen (FR-01.11).
  *
- * Not queued, matching VerificationCodeMail: no queue worker is guaranteed to
- * be running, and a security alert that sits undelivered in a jobs table is
- * worse than one sent inline. The caller sends it inside a try/catch so a mail
- * outage can never break a login.
+ * Sent by the SendNewDeviceAlert job on the queue worker, so the sign-in it
+ * describes never waits on the mail provider. The job sends it inside a
+ * try/catch so a mail outage never surfaces as a failed job.
  */
 class NewDeviceAlertMail extends Mailable
 {
