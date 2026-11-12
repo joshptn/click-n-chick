@@ -1,173 +1,152 @@
 import React from 'react';
-import { Box, Container, Flex, Grid, Group, Image, Text } from '@mantine/core';
 import { IconBrandFacebookFilled, IconClock, IconMail, IconMapPinFilled, IconPhoneFilled } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 
 import LogoIcon from '../../assets/logo-icon.png';
+import { Wordmark } from './SiteHeader';
 
 const MotionDiv = motion.div;
 
-const CONTACT_ROWS = [
-  { key: 'address', icon: IconMapPinFilled, lines: ['Sampaloc, Apalit', 'Pampanga, Philippines'] },
-  { key: 'phone', icon: IconPhoneFilled, lines: ['+63 123 456 789'] },
-  { key: 'email', icon: IconMail, lines: ['info@houseofchicken.com'] },
+const LEGAL_LINKS = [
+  ['Privacy Policy', 'xl:tracking-[2.2px]'],
+  ['Terms of Service', 'xl:tracking-[3.4px]'],
+  ['Cookie Policy', 'xl:tracking-[3.4px]'],
 ];
 
-const LEGAL_LINKS = ['Privacy Policy', 'Terms of Service', 'Cookie Policy'];
+const ROW_TEXT = 'm-0 font-display font-bold text-white text-[15px] leading-[24px] tracking-[0.12em] xl:text-[20px] xl:leading-[30px] xl:tracking-[0.16em]';
 
-function IconBadge({ icon }) {
-  const Glyph = icon;
-
+function IconDisc({ children }) {
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white" aria-hidden="true">
-      <Glyph size={17} stroke={2} />
+    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#f58c2f] text-white xl:h-[51px] xl:w-[51px]" aria-hidden="true">
+      {children}
     </span>
   );
 }
 
-function ColumnHeading({ children }) {
+function Heading({ children, className = '' }) {
   return (
-    <div className="mb-6">
-      <Text fw={800} className="font-display text-[19px] tracking-[-0.2px] text-white">
-        {children}
-      </Text>
-
-      <span className="mt-2 block h-[3px] w-14 rounded-full bg-accent" aria-hidden="true" />
+    <div className={className}>
+      <h3 className="m-0 font-display text-[26px] font-bold leading-[40px] text-[#f58c2f] xl:text-[34.5px] xl:tracking-[0.85px]">{children}</h3>
+      <span className="mt-3 block h-[3px] w-[111px] bg-[#f58c2f] xl:mt-[12.6px]" aria-hidden="true" />
     </div>
   );
 }
 
 export default function SiteFooter() {
   return (
-    <Box
-      id="contact"
-      data-scroll-section
-      component="footer"
-      className="border-t-[6px] border-accent bg-cocoa-700 pb-10 pt-20 text-white"
-    >
-      <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
-        <MotionDiv
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ duration: 0.6 }}
-        >
-          <Grid gutter={{ base: 40, md: 60 }}>
+    <footer id="contact" data-scroll-section className="bg-[#5e2d1e] pb-[34px] pt-12 text-white xl:pt-[55px]">
+      <MotionDiv
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.6 }}
+        className="grid grid-cols-1 gap-12 px-6 lg:grid-cols-[minmax(0,510fr)_minmax(0,472fr)_minmax(0,438fr)] lg:gap-0 lg:pl-5 lg:pr-0"
+      >
+        {/* Brand */}
+        <div>
+          <div className="flex items-center gap-4 xl:gap-[20px]">
+            <img src={LogoIcon} alt="" className="h-16 w-16 object-contain xl:-ml-[3px] xl:-mt-[5px] xl:h-[93px] xl:w-[93px]" />
+            <Wordmark className="text-[32px] xl:-translate-y-1 xl:text-[42.5px]" />
+          </div>
 
-            <Grid.Col span={{ base: 12, md: 4 }}>
-              <Flex direction="column">
-                <Group gap="sm" wrap="nowrap">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm">
-                    <Image src={LogoIcon} alt="" w={34} h={34} fit="contain" />
-                  </div>
+          <span className="mt-8 block h-[3px] w-[111px] bg-[#f58c2f] xl:-ml-px xl:mt-[39px]" aria-hidden="true" />
 
-                  <Text component="span" fw={700} className="font-logo text-[23px] leading-none text-accent-strong">
-                    Click <span className="text-cocoa-300">n</span> Chick
-                  </Text>
-                </Group>
+          <p className="m-0 mt-6 max-w-[420px] xl:max-w-none font-display text-[18px] font-normal leading-[32px] tracking-[0.08em] text-white xl:mt-[31.4px] xl:pl-[14.5px] xl:text-[23.5px] xl:leading-[38.5px] xl:tracking-[0.165em]">
+            Freshly prepared and
+            <br className="hidden xl:block" /> delivered to your doorstep.
+            <br className="hidden xl:block" /> Basta BES, da best —
+            <br className="hidden xl:block" /> always.
+          </p>
+        </div>
 
-                <span className="mt-6 block h-[3px] w-14 rounded-full bg-accent" aria-hidden="true" />
+        {/* Contact */}
+        <div className="xl:pt-[21.4px]">
+          <Heading>Contact Information</Heading>
 
-                <Text className="mt-5 max-w-[300px] font-display text-[14px] leading-[1.7] text-cocoa-300">
-                  Freshly prepared and delivered to your doorstep. Basta BES, da best — always.
-                </Text>
-              </Flex>
-            </Grid.Col>
+          <ul className="m-0 mt-8 list-none p-0 xl:mt-[38px] xl:pl-2">
+            <li className="flex items-center gap-[8.5px]">
+              <IconDisc>
+                <IconMapPinFilled size={22} />
+              </IconDisc>
+              <p className={ROW_TEXT}>
+                Sampaloc, Apalit
+                <br />
+                Pampanga, Philippines
+              </p>
+            </li>
 
-            <Grid.Col span={{ base: 12, md: 4 }}>
-              <ColumnHeading>Contact Information</ColumnHeading>
+            <li className="mt-6 flex items-center gap-[8.5px] xl:mt-[31px]">
+              <IconDisc>
+                <IconPhoneFilled size={22} />
+              </IconDisc>
+              <p className={ROW_TEXT}>+63 123 456 789</p>
+            </li>
 
-              <Flex direction="column" gap="lg">
-                {CONTACT_ROWS.map((row) => (
-                  <Group key={row.key} gap="md" align="center" wrap="nowrap">
-                    <IconBadge icon={row.icon} />
+            <li className="mt-6 flex items-center gap-[8.5px] xl:mt-[30px]">
+              <IconDisc>
+                <IconMail size={22} stroke={1.75} />
+              </IconDisc>
+              <p className={`${ROW_TEXT} break-all`}>info@houseofchicken.com</p>
+            </li>
+          </ul>
+        </div>
 
-                    <div>
-                      {row.lines.map((line) => (
-                        <Text key={line} fw={500} className="font-display text-[14px] leading-[1.45] text-white">
-                          {line}
-                        </Text>
-                      ))}
-                    </div>
-                  </Group>
-                ))}
-              </Flex>
-            </Grid.Col>
+        {/* Follow and hours */}
+        <div className="xl:pt-[21.4px]">
+          <Heading className="xl:pl-[5px]">Follow US</Heading>
 
-            <Grid.Col span={{ base: 12, md: 4 }}>
-              <Flex direction="column" gap={40}>
+          <a
+            href="https://www.facebook.com/"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="mt-8 flex w-fit items-center gap-3 text-white no-underline transition-colors duration-200 hover:text-[#f58c2f] xl:ml-[5px] xl:mt-[42px] xl:gap-[12.5px]"
+          >
+            <IconDisc>
+              <span className="grid h-5 w-5 place-items-center rounded-full bg-white text-[#f58c2f]">
+                <IconBrandFacebookFilled size={14} />
+              </span>
+            </IconDisc>
+            <span className="font-display text-[15px] font-bold tracking-[0.12em] xl:text-[19.5px] xl:tracking-[2.3px]">House of Chicken</span>
+          </a>
 
-                <div>
-                  <ColumnHeading>Follow US</ColumnHeading>
+          <span className="mt-6 block h-1 w-full max-w-[345px] bg-[#f58c2f] xl:mt-[23px]" aria-hidden="true" />
 
-                  <a
-                    href="https://www.facebook.com/"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-4 text-white no-underline transition-colors duration-200 hover:text-accent"
-                  >
-                    <IconBadge icon={IconBrandFacebookFilled} />
+          <p className="m-0 mt-6 font-display text-[20px] font-bold uppercase leading-[32px] tracking-[0.18em] text-[#f58c2f] xl:mt-[26px] xl:pl-[5px] xl:text-[28px] xl:tracking-[4.5px]">
+            Open Hours
+          </p>
 
-                    <Text fw={500} className="font-display text-[14px]">
-                      House of Chicken
-                    </Text>
-                  </a>
-                </div>
+          <div className="mt-5 flex items-center gap-3 xl:mt-[25px] xl:gap-[11px]">
+            <span className="relative grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full bg-[#f58c2f] text-white xl:h-[60px] xl:w-[60px]" aria-hidden="true">
+              <IconClock className="h-[52px] w-[52px] xl:h-[60px] xl:w-[60px]" stroke={2} />
+            </span>
+            <p className="m-0 font-display text-[16px] font-semibold leading-[28px] tracking-[0.15em] text-white xl:text-[21.5px] xl:leading-[32.5px] xl:tracking-[0.18em]">
+              Monday - Sunday
+              <br />
+              <span className="xl:tracking-[0.235em]">9:00 AM - 9:00 PM</span>
+            </p>
+          </div>
+        </div>
+      </MotionDiv>
 
-                <div>
-                  <Text fw={800} className="mb-4 font-display text-[13px] uppercase tracking-[0.18em] text-accent">
-                    Open Hours
-                  </Text>
+      <div className="mx-auto mt-12 h-px w-[calc(100%-48px)] max-w-[1185px] bg-white xl:mt-[125px]" aria-hidden="true" />
 
-                  <Group gap="md" align="center" wrap="nowrap">
-                    <IconBadge icon={IconClock} />
+      <div className="mt-8 flex flex-col items-center gap-4 px-6 md:flex-row md:justify-between xl:mt-[49.5px] xl:pl-[129.5px] xl:pr-[90.5px]">
+        <p className="m-0 text-center font-display text-[13px] font-normal tracking-[0.1em] text-white xl:text-[15px] xl:tracking-[2.1px]">
+          © 2026 House of Chicken. All Rights Reserved.
+        </p>
 
-                    <div>
-                      <Text fw={500} className="font-display text-[14px] text-white">
-                        Monday - Sunday
-                      </Text>
-
-                      <Text fw={500} className="font-display text-[14px] tracking-[0.05em] text-white">
-                        9:00 AM - 9:00 PM
-                      </Text>
-                    </div>
-                  </Group>
-                </div>
-
-              </Flex>
-            </Grid.Col>
-
-          </Grid>
-        </MotionDiv>
-
-        <Box className="mt-16 border-t border-cocoa-600 pt-6">
-          <Grid align="center" gutter="md">
-
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <Text className="text-center font-display text-[12px] text-cocoa-300 md:text-left">
-                © 2026 House of Chicken. All Rights Reserved.
-              </Text>
-            </Grid.Col>
-
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <Group gap="xl" justify="center" className="md:justify-end">
-                {LEGAL_LINKS.map((item) => (
-                  <Text
-                    key={item}
-                    component="button"
-                    type="button"
-                    className="cursor-pointer bg-transparent font-display text-[12px] text-cocoa-300 transition-colors duration-200 hover:text-accent"
-                  >
-                    {item}
-                  </Text>
-                ))}
-              </Group>
-            </Grid.Col>
-
-          </Grid>
-        </Box>
-
-      </Container>
-    </Box>
+        <div className="flex flex-wrap justify-center gap-5 xl:gap-[22px]">
+          {LEGAL_LINKS.map(([item, tracking]) => (
+            <button
+              key={item}
+              type="button"
+              className="cursor-pointer bg-transparent text-white transition-colors duration-200 hover:text-[#f58c2f]"
+            >
+              <span className={`font-display text-[13px] font-normal tracking-[0.1em] xl:text-[15px] ${tracking}`}>{item}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </footer>
   );
 }

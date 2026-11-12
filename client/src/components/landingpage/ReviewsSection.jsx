@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { ActionIcon, Avatar, Box, Card, Container, Flex, Grid, Group, Image, Text } from '@mantine/core';
-import { IconArrowLeft, IconArrowRight, IconQuoteFilled, IconStarFilled } from '@tabler/icons-react';
+import { IconArrowLeft, IconArrowRight, IconQuote, IconStarFilled } from '@tabler/icons-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const MotionDiv = motion.div;
@@ -8,7 +7,7 @@ const MotionDiv = motion.div;
 const REVIEWS = [
   {
     id: 1,
-    text: 'The BES in its literal sense. Out of all the gravy that I have tasted, this one is by far the most magnificent gravy that I ever tasted. 10/10 Chicken too, to the point BES:HOC set my standard taste for a fried chicken.',
+    text: 'The BES in its literal sense. Out of all the gravy that I have tasted, this one is by far the most magnificent gravy that I ever tasted! 10/10 Chicken too, to the point BES:HOC set my standard taste for a fried chicken.',
     author: 'Customer',
     avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=150&auto=format&fit=crop',
   },
@@ -32,135 +31,111 @@ export default function ReviewsSection() {
   const review = REVIEWS[index];
 
   return (
-    <Box id="reviews" data-scroll-section component="section" className="overflow-hidden bg-cream py-24 md:py-32">
-      <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
-        <Grid gutter={{ base: 48, md: 60 }} align="center">
+    <section id="reviews" data-scroll-section className="overflow-hidden bg-[#fff7ed] pb-16 pt-16 lg:pb-[68px] lg:pt-[84px]">
+      <div className="mx-auto grid max-w-[1328px] grid-cols-1 gap-14 px-6 lg:grid-cols-[533px_minmax(0,1fr)] lg:gap-[58.5px]">
+        <MotionDiv
+          initial={{ opacity: 0, x: -30 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.6 }}
+          className="min-w-0"
+        >
+          <div className="flex items-start gap-[15px]">
+            <p className="m-0 mt-[5.7px] font-display text-[16.5px] font-bold leading-[24px] text-[#f58c2f]">Testimonials</p>
+            <IconQuote size={70} stroke={0.95} className="-mb-[23px] -ml-[14px] -mt-[15px] text-[#f58c2f]" aria-hidden="true" />
+          </div>
 
-          <Grid.Col span={{ base: 12, md: 5 }}>
-            <MotionDiv
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.6 }}
-            >
-              <Text fw={700} className="mb-3 font-display text-[13px] uppercase tracking-[0.18em] text-accent">
-                Testimonials
-              </Text>
+          <h2 className="m-0 font-['Roboto',sans-serif] text-[40px] font-bold leading-[1.15] text-[#333333] lg:text-[48px] lg:leading-[56px]">
+            Customer
+            <br />
+            Review
+          </h2>
 
-              <h2 className="m-0 font-display text-[34px] font-extrabold leading-[1.1] tracking-[-1px] text-[#2b2b2b] sm:text-[42px] lg:text-[48px]">
-                Customer Review
-              </h2>
-
-              <div className="mt-5 text-accent" aria-hidden="true">
-                <IconQuoteFilled size={40} className="opacity-25" />
-              </div>
-
-              <div className="relative mt-5 min-h-[132px]">
-                <AnimatePresence mode="wait" initial={false} custom={direction}>
-                  <MotionDiv
-                    key={review.id}
-                    custom={direction}
-                    initial={{ opacity: 0, x: direction * 24 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: direction * -24 }}
-                    transition={{ duration: 0.32, ease: 'easeOut' }}
-                  >
-                    <Text className="font-display text-[13.5px] font-medium leading-[1.75] text-ink-500">
-                      {review.text}
-                    </Text>
-                  </MotionDiv>
-                </AnimatePresence>
-              </div>
-
-              <Flex justify="space-between" align="center" mt="xl" className="border-t border-[#e6ded2] pt-6">
-                <Group gap="md" wrap="nowrap">
-                  <Avatar src={review.avatar} alt="" size={44} radius="xl" />
-
-                  <Text fw={600} className="font-display text-[14px] text-[#2b2b2b]">
-                    {review.author}
-                  </Text>
-                </Group>
-
-                <Group gap={4} wrap="nowrap">
-                  <ActionIcon
-                    onClick={() => paginate(-1)}
-                    variant="subtle"
-                    color="dark"
-                    size="lg"
-                    radius="xl"
-                    aria-label="Previous review"
-                    className="text-ink-500 transition-colors duration-200 hover:bg-brand-50 hover:text-brand-700"
-                  >
-                    <IconArrowLeft size={20} stroke={2} />
-                  </ActionIcon>
-
-                  <ActionIcon
-                    onClick={() => paginate(1)}
-                    variant="subtle"
-                    color="dark"
-                    size="lg"
-                    radius="xl"
-                    aria-label="Next review"
-                    className="text-ink-500 transition-colors duration-200 hover:bg-brand-50 hover:text-brand-700"
-                  >
-                    <IconArrowRight size={20} stroke={2} />
-                  </ActionIcon>
-                </Group>
-              </Flex>
-            </MotionDiv>
-          </Grid.Col>
-
-          <Grid.Col span={{ base: 12, md: 7 }}>
-            <MotionDiv
-              initial={{ opacity: 0, scale: 0.92 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.7 }}
-              className="relative pb-16 md:pb-0"
-            >
-              <div className="aspect-16/11 w-full overflow-hidden rounded-3xl shadow-[0_24px_60px_rgba(65,33,17,0.18)] md:ml-auto md:w-[92%]">
-                <Image
-                  src="https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?q=80&w=1000&auto=format&fit=crop"
-                  alt="A platter of golden crispy fried chicken"
-                  loading="lazy"
-                  className="h-full w-full object-cover"
-                />
-              </div>
-
+          <div className="relative mt-6 min-h-[96px] lg:mt-[35px] lg:min-h-[72px]">
+            <AnimatePresence mode="wait" initial={false} custom={direction}>
               <MotionDiv
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: 0.35 }}
-                className="left-0 z-30 mx-auto -mt-12 w-full max-w-[300px] md:absolute md:bottom-[-28px] md:mx-0 md:mt-0"
+                key={review.id}
+                custom={direction}
+                initial={{ opacity: 0, x: direction * 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: direction * -24 }}
+                transition={{ duration: 0.32, ease: 'easeOut' }}
               >
-                <Card radius="lg" padding="lg" className="border-l-4 border-accent bg-white shadow-[0_18px_44px_rgba(65,33,17,0.18)]">
-                  <Flex justify="space-between" align="center" mb={8} gap="sm">
-                    <Text fw={800} className="font-display text-[15px] text-[#2b2b2b]">
-                      Order now
-                    </Text>
-
-                    <Text fw={900} className="font-display text-[15px] text-accent">
-                      ₱130.00
-                    </Text>
-                  </Flex>
-
-                  <Group gap={4} mb={10} aria-label="Rated 5 out of 5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <IconStarFilled key={star} size={14} className="text-accent" />
-                    ))}
-                  </Group>
-
-                  <Text className="font-display text-[13px] leading-[1.5] text-ink-500">
-                    Golden crispy outside, juicy inside.
-                  </Text>
-                </Card>
+                <p className="m-0 max-w-[530px] font-display text-[13px] font-normal leading-[24px] text-[#828282]">{review.text}</p>
               </MotionDiv>
-            </MotionDiv>
-          </Grid.Col>
+            </AnimatePresence>
+          </div>
 
-        </Grid>
-      </Container>
-    </Box>
+          <div className="mt-10 flex items-center justify-between lg:mt-[70.5px]">
+            <div className="flex items-center gap-[16.5px]">
+              <img src={review.avatar} alt="" className="h-[72px] w-[72px] rounded-full object-cover" />
+              <p className="m-0 font-display text-[16px] font-normal text-[#828282]">{review.author}</p>
+            </div>
+
+            <div className="-mr-[6px] flex items-center gap-[2px]">
+              <button
+                type="button"
+                onClick={() => paginate(-1)}
+                aria-label="Previous review"
+                className="cursor-pointer bg-transparent text-[#828282] transition-colors duration-200 hover:text-[#f58c2f]"
+              >
+                <IconArrowLeft size={29} stroke={1.25} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => paginate(1)}
+                aria-label="Next review"
+                className="cursor-pointer bg-transparent text-[#333333] transition-colors duration-200 hover:text-[#f58c2f]"
+              >
+                <IconArrowRight size={29} stroke={1.25} />
+              </button>
+            </div>
+          </div>
+        </MotionDiv>
+
+        <MotionDiv
+          initial={{ opacity: 0, scale: 0.92 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.7 }}
+          className="relative lg:pb-[26px]"
+        >
+          <div className="aspect-[651.5/453] w-full overflow-hidden lg:ml-auto lg:w-[94.63%]">
+            <img
+              src="https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?q=80&w=1300&auto=format&fit=crop"
+              alt="A platter of golden crispy fried chicken"
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          </div>
+
+          <MotionDiv
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.35 }}
+            className="relative z-10 mx-auto -mt-12 w-full max-w-[420.5px] lg:absolute lg:bottom-0 lg:left-0 lg:mx-0 lg:mt-0"
+          >
+            <div className="rounded-[2px] bg-white pb-8 pl-[30px] pr-[36px] pt-[36px] shadow-[0_4px_10px_rgba(0,0,0,0.1)] lg:h-[213px]">
+              <div className="flex items-start justify-between gap-3">
+                <p className="m-0 font-display text-[20px] font-bold leading-[28px] text-[#333333]">Order now</p>
+                <p className="m-0 -mt-[1.75px] font-display text-[15px] font-bold leading-[20px] text-[#f58c2f]">₱130.00</p>
+              </div>
+
+              <div className="mt-[10.5px] flex gap-[4.3px]" role="img" aria-label="Rated 5 out of 5">
+                {[0, 1, 2, 3, 4].map((star) => (
+                  <IconStarFilled key={star} size={19} className="text-[#f58c2f]" aria-hidden="true" />
+                ))}
+              </div>
+
+              <p className="m-0 mt-[23px] font-display text-[18px] font-normal leading-[30px] text-[#828282] lg:text-[20px]">
+                Golden crispy outside, juicy inside.
+              </p>
+            </div>
+          </MotionDiv>
+        </MotionDiv>
+      </div>
+    </section>
   );
 }

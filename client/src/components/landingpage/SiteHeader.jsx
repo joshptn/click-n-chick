@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Burger, Button, Container, Drawer, Group, Image, Stack, Text } from '@mantine/core';
+import { Burger, Drawer } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { motion } from 'framer-motion';
 
@@ -9,15 +9,11 @@ import { NAV_LINKS } from './menuData';
 
 const MotionHeader = motion.header;
 
-function Wordmark({ onClick }) {
+export function Wordmark({ className = '' }) {
   return (
-    <Group gap="xs" wrap="nowrap" className="cursor-pointer select-none" onClick={onClick}>
-      <Image src={LogoIcon} alt="" w={40} h={40} fit="contain" className="shrink-0" />
-
-      <Text component="span" fw={700} className="font-logo text-[22px] leading-none tracking-[-0.5px] text-brand-700">
-        Click <span className="text-ink">n</span> Chick
-      </Text>
-    </Group>
+    <span className={`font-logo font-semibold leading-none text-[#f58c2f] [word-spacing:0.24em] ${className}`}>
+      Click n Chick
+    </span>
   );
 }
 
@@ -33,43 +29,66 @@ export default function SiteHeader({ active, onNavigate, scrolled }) {
   return (
     <>
       <MotionHeader
-        className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${scrolled ? 'bg-cream/95 py-3 shadow-[0_2px_20px_rgba(65,33,17,0.08)] backdrop-blur-md' : 'bg-transparent py-5'}`}
+        className={`fixed inset-x-0 top-0 z-50 transition-[padding,background-color,box-shadow] duration-300 ${
+          scrolled
+            ? 'bg-[#fff7ed]/95 py-3 shadow-[0_2px_20px_rgba(65,33,17,0.08)] backdrop-blur-md'
+            : 'bg-transparent py-4 lg:py-9'
+        }`}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
-        <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
-          <Group justify="space-between" align="center" wrap="nowrap">
-            <Wordmark onClick={() => go('home')} />
+        <div className="mx-auto flex max-w-[1199px] items-center justify-between gap-4 px-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => go('home')}
+            aria-label="Click n Chick, back to the top"
+            className="flex shrink-0 cursor-pointer items-center gap-3 bg-transparent lg:gap-5"
+          >
+            <img src={LogoIcon} alt="" className="h-8 w-8 select-none object-contain sm:h-9 sm:w-9 lg:-ml-px lg:h-[49.5px] lg:w-[49.5px] lg:translate-y-[0.5px]" />
+            <Wordmark className="text-[22px] sm:text-[26px] md:text-[30px] lg:text-[42.5px]" />
+          </button>
 
-            <Group gap={40} visibleFrom="md">
-              {NAV_LINKS.map(([id, label]) => (
-                <Text
-                  key={id}
-                  component="button"
-                  type="button"
-                  fw={500}
-                  onClick={() => go(id)}
-                  className={`cursor-pointer border-b-2 bg-transparent pb-1 text-[14px] transition-colors duration-200 ${active === id ? 'border-brand-700 text-brand-700' : 'border-transparent text-ink hover:border-brand-300 hover:text-brand-700'}`}
-                >
-                  {label}
-                </Text>
-              ))}
-            </Group>
+          <div className="flex items-center gap-3 md:gap-6 lg:gap-[34px]">
+            <nav aria-label="Sections" className="hidden items-center md:flex lg:gap-[18.5px]">
+              {NAV_LINKS.map(([id, label]) => {
+                const isActive = active === id;
 
-            <Group gap="xs" wrap="nowrap">
-              <Button
-                onClick={() => navigate('/home')}
-                radius="xl"
-                className="h-[42px] bg-brand-500 px-6 text-[12px] font-extrabold tracking-wider shadow-[0_4px_12px_rgba(255,139,43,0.28)] transition-transform duration-200 hover:scale-105 hover:bg-brand-600 sm:px-8"
-              >
-                ORDER NOW
-              </Button>
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => go(id)}
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`relative cursor-pointer bg-transparent px-3 transition-colors duration-200 lg:px-[19px] ${
+                      isActive ? 'text-[#f58c2f]' : 'text-black hover:text-[#f58c2f]'
+                    }`}
+                  >
+                    {/* On the span: Mantine's global CSS resets type on <button>. */}
+                    <span className="block font-display text-[16px] font-normal leading-[32px] lg:text-[22px]">{label}</span>
+                    <span
+                      aria-hidden="true"
+                      className={`absolute inset-x-0 top-[calc(100%+8px)] h-1 bg-[#f58c2f] transition-opacity duration-200 lg:top-[calc(100%+14.5px)] ${
+                        isActive ? 'opacity-100' : 'opacity-0'
+                      }`}
+                    />
+                  </button>
+                );
+              })}
+            </nav>
 
-              <Burger opened={mobileOpen} onClick={openMobile} size="sm" color="#412111" hiddenFrom="md" aria-label="Open navigation" />
-            </Group>
-          </Group>
-        </Container>
+            <button
+              type="button"
+              onClick={() => navigate('/home')}
+              className="h-10 shrink-0 cursor-pointer rounded-[8px] bg-[#f58c2f] px-3.5 text-[#fdfdfd] shadow-[0_4px_4px_rgba(0,0,0,0.12)] transition-colors duration-200 hover:bg-[#e67d20] md:h-12 md:w-[140px] lg:h-[67px] lg:w-[188px]"
+            >
+              <span className="inline-block whitespace-nowrap font-display text-[14px] font-semibold md:text-[16px] lg:translate-y-px lg:text-[20px]">ORDER NOW</span>
+            </button>
+
+            {/* Mantine's sm is 48em, the same 768px as Tailwind's md that shows the nav. */}
+            <Burger opened={mobileOpen} onClick={openMobile} size="sm" color="#412111" hiddenFrom="sm" aria-label="Open navigation" />
+          </div>
+        </div>
       </MotionHeader>
 
       <Drawer
@@ -78,28 +97,35 @@ export default function SiteHeader({ active, onNavigate, scrolled }) {
         position="right"
         size="72%"
         padding="lg"
-        hiddenFrom="md"
-        title={<Wordmark onClick={() => go('home')} />}
-        classNames={{ content: 'bg-cream', header: 'bg-cream' }}
+        hiddenFrom="sm"
+        title={<Wordmark className="text-[24px]" />}
+        classNames={{ content: 'bg-[#fff7ed]', header: 'bg-[#fff7ed]' }}
       >
-        <Stack gap="lg" mt="md">
+        <nav aria-label="Sections" className="mt-4 flex flex-col gap-5">
           {NAV_LINKS.map(([id, label]) => (
-            <Text
+            <button
               key={id}
-              component="button"
               type="button"
-              fw={600}
               onClick={() => go(id)}
-              className={`w-full cursor-pointer border-b border-brand-100 bg-transparent pb-3 text-left text-[16px] ${active === id ? 'text-brand-700' : 'text-ink'}`}
+              className={`w-full cursor-pointer border-b border-[#ffe8d1] bg-transparent pb-3 text-left ${
+                active === id ? 'text-[#f58c2f]' : 'text-black'
+              }`}
             >
-              {label}
-            </Text>
+              <span className="font-display text-[16px] font-semibold">{label}</span>
+            </button>
           ))}
 
-          <Button onClick={() => navigate('/home')} radius="xl" fullWidth className="mt-2 h-[46px] bg-brand-500 font-extrabold tracking-wider hover:bg-brand-600">
-            ORDER NOW
-          </Button>
-        </Stack>
+          <button
+            type="button"
+            onClick={() => {
+              closeMobile();
+              navigate('/home');
+            }}
+            className="mt-2 h-[46px] w-full cursor-pointer rounded-[8px] bg-[#f58c2f] text-[#fdfdfd]"
+          >
+            <span className="font-display text-[15px] font-semibold">ORDER NOW</span>
+          </button>
+        </nav>
       </Drawer>
     </>
   );
