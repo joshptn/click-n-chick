@@ -4,6 +4,7 @@ import { IconInfoCircle, IconRefresh } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import AdvanceDetailDrawer from "../../components/staff/AdvanceDetailDrawer";
+import AdvanceHistoryModal from "../../components/staff/AdvanceHistoryModal";
 import AdvanceOrderCard from "../../components/staff/AdvanceOrderCard";
 import CancelOrderModal from "../../components/staff/CancelOrderModal";
 import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
@@ -58,6 +59,7 @@ function AdvanceOrders() {
   const [activeColumn, setActiveColumn] = useState("requests");
   const [declining, setDeclining] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedId = searchParams.get("order");
@@ -69,14 +71,16 @@ function AdvanceOrders() {
     return ADVANCE_COLUMNS.map((column) => {
       const all = advance.orders.filter((order) => advanceColumnFor(order.status) === column.key);
       const orders = searching ? all.filter((order) => matchesSearch(order, search)) : all;
-      const total = column.key === "closed" ? Math.max(summary?.closed_recently ?? 0, all.length) : all.length;
 
-      return { ...column, orders, total };
+      return { ...column, orders, total: all.length };
     });
-  }, [advance.orders, search, searching, summary]);
+  }, [advance.orders, search, searching]);
 
   const awaiting = columns[0].total;
   const shown = columns.reduce((count, column) => count + column.orders.length, 0);
+  // Open requests only: finished ones are still loaded, so a link to one opens
+  // its drawer, but they live in the history modal rather than on the board.
+  const onBoard = columns.reduce((count, column) => count + column.total, 0);
   const dueToday = summary?.due_today ?? 0;
 
   useEffect(() => {
@@ -159,6 +163,16 @@ function AdvanceOrders() {
                 {summary?.awaiting_payment > 0 && ` · ${summary.awaiting_payment} awaiting payment`}
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              data-testid="view-fulfilled"
+              className="inline-flex h-[38px] shrink-0 items-center self-start rounded-full bg-[#fff6ec] px-4 font-display font-semibold text-brand-600 ring-1 ring-inset ring-[#ffd6b3] transition-colors hover:bg-[#ffecd9] md:self-auto"
+            >
+              {/* On the span: Mantine resets type on <button> itself. */}
+              <span className="text-[13px]">View Fulfilled Orders</span>
+            </button>
           </div>
 
           <div className="mt-4">
@@ -193,7 +207,7 @@ function AdvanceOrders() {
             {!advance.isLoading && (
               <FilterMeta>
                 {searching && `${shown} of `}
-                {advance.orders.length} {advance.orders.length === 1 ? "request" : "requests"}
+                {onBoard} {onBoard === 1 ? "request" : "requests"}
               </FilterMeta>
             )}
           </FilterBar>
@@ -220,14 +234,10 @@ function AdvanceOrders() {
               label="Advance order stages"
             />
           )}
-
-          {summary?.closed_days && (
-            <p className="m-0 text-center font-display text-[11px] text-[#a39f9b]">
-              Closed shows the last {summary.closed_days} days.
-            </p>
-          )}
         </div>
       </main>
+
+      <AdvanceHistoryModal opened={historyOpen} onClose={() => setHistoryOpen(false)} />
 
       <AdvanceDetailDrawer
         order={selected}

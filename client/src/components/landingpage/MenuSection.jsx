@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Box, Button, Container, Flex, Grid, Group, Image, Text } from '@mantine/core';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,52 +12,43 @@ const MotionDiv = motion.div;
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 3000;
 
-// Cards are up to about 400px wide (one, two or three to a row). One fixed size
-// rather than a srcset, so the rotation's preloads are the very files the
-// cards then show.
 const CARD_WIDTH = 640;
 
 function MenuCard({ item, onSelect }) {
   return (
-    <div className="group cursor-pointer" onClick={onSelect}>
-      <div className="relative aspect-4/3 overflow-hidden rounded-3xl border border-cocoa-600 shadow-2xl">
-        {item.is_best_seller && (
-          <Badge
-            radius="sm"
-            className="absolute bottom-4 left-4 z-20 bg-accent-strong px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white"
-          >
-            Best Seller
-          </Badge>
-        )}
-
-        <Image
+    <button type="button" className="group block w-full cursor-pointer bg-transparent text-left" onClick={onSelect}>
+      <div className="relative aspect-[368/296] overflow-hidden rounded-[16px]">
+        <img
           src={cloudinaryUrl(item.thumbnail, CARD_WIDTH)}
           alt={item.food_name}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
         />
+
+        {item.is_best_seller && (
+          <span className="absolute bottom-[15px] left-[18px] z-10 flex h-5 items-center rounded-[4px] bg-[#f58c2f] px-[15px] font-display text-[10px] font-bold uppercase leading-none text-white">
+            Best Seller
+          </span>
+        )}
       </div>
 
-      <Flex justify="space-between" align="flex-start" gap="md" mt="lg">
-        <Group gap="sm" align="stretch" wrap="nowrap">
-          <span className="mt-1 w-[3px] shrink-0 rounded-full bg-accent-strong" aria-hidden="true" />
+      <div className="mt-[15px] flex items-start justify-between gap-4">
+        <div className="ml-[17px] flex min-w-0 items-stretch gap-2">
+          <span className="w-[2px] shrink-0 bg-[#f58c2f]" aria-hidden="true" />
 
-          <div>
-            <Text fw={800} className="font-display text-[15px] uppercase leading-tight tracking-[0.06em] text-white">
-              {item.food_name}
-            </Text>
-
-            <Text lineClamp={2} className="mt-1 max-w-[28ch] font-display text-[13px] font-medium text-accent-strong">
+          <div className="min-w-0 pb-[6.5px] pl-[0.5px] pt-[8.5px]">
+            <p className="m-0 font-display text-[20px] font-bold uppercase leading-[22px] text-white">{item.food_name}</p>
+            <p className="m-0 line-clamp-2 font-display text-[15px] font-semibold leading-[18px] text-[#f58c2f]">
               {item.category?.name ?? item.description}
-            </Text>
+            </p>
           </div>
-        </Group>
+        </div>
 
-        <Text fw={900} className="shrink-0 font-display text-[20px] leading-none text-accent-strong">
+        <p className="m-0 mr-[13px] shrink-0 pt-[13.3px] font-display text-[18px] font-bold leading-[24px] text-[#ffb900]">
           {formatPeso(item.price)}
-        </Text>
-      </Flex>
-    </div>
+        </p>
+      </div>
+    </button>
   );
 }
 
@@ -77,9 +67,6 @@ export default function MenuSection() {
 
   const items = useMemo(() => data?.data ?? [], [data]);
 
-  // The rotation's other photos are fetched ahead of their turn, but only once
-  // the section is on screen: a visitor who never scrolls this far never pays
-  // for them.
   const sectionRef = useRef(null);
   const [onScreen, setOnScreen] = useState(false);
 
@@ -133,18 +120,19 @@ export default function MenuSection() {
   );
 
   return (
-    <Box ref={sectionRef} id="menu" data-scroll-section component="section" className="bg-cocoa-700 py-24 text-white md:py-32">
-      <Container size="xl" px={{ base: 'md', sm: 'xl' }}>
-
-        <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} direction={{ base: 'column', md: 'row' }} gap="xl" mb={50}>
+    <section ref={sectionRef} id="menu" data-scroll-section className="bg-[#4c1607] pb-10 pt-16 text-white lg:pb-[29px] lg:pt-[67.5px]">
+      <div className="mx-auto max-w-[1328px] px-6">
+        <div className="flex flex-col items-start justify-between gap-6 md:flex-row">
           <MotionDiv
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.6 }}
           >
-            <h2 className="m-0 max-w-[13ch] font-display text-[38px] font-extrabold leading-[1.08] tracking-[-0.5px] sm:text-[46px] lg:text-[56px]">
-              Our <span className="text-accent">BEST</span> Delivered Categories
+            <h2 className="m-0 w-fit font-display text-[38px] font-bold leading-[1.1] text-[#f0f0f0] sm:text-[50px] lg:ml-px lg:text-center lg:text-[72px] lg:leading-[79px]">
+              Our <span className="text-[#f58c2f]">BEST</span> Delivered
+              <br />
+              Categories
             </h2>
           </MotionDiv>
 
@@ -153,35 +141,34 @@ export default function MenuSection() {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="shrink-0"
+            className="shrink-0 md:mt-[18.5px] lg:mr-[2px]"
           >
-            <Button
-              variant="outline"
-              radius="xl"
-              size="md"
+            <button
+              type="button"
               onClick={() => navigate('/home')}
-              className="border-white/70 px-7 font-display text-[12px] font-semibold tracking-wider text-white transition-colors duration-200 hover:border-white hover:bg-white/10"
+              className="h-[50px] w-[196px] cursor-pointer rounded-full border border-[#e2e8f0] bg-[#460809] text-white transition-colors duration-200 hover:bg-[#5a1410]"
             >
-              EXPLORE FULL MENU
-            </Button>
+              <span className="inline-block font-display text-[14.5px] font-semibold uppercase tracking-[0.6px] lg:translate-x-[5.5px]">Explore Full Menu</span>
+            </button>
           </MotionDiv>
-        </Flex>
+        </div>
 
         {items.length === 0 ? (
           <p className="m-0 py-10 text-center font-display text-[14px] text-white/60">
             Our menu is being prepared. Check back shortly.
           </p>
         ) : (
-        <div
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
-          onFocusCapture={() => setPaused(true)}
-          onBlurCapture={() => setPaused(false)}
-        >
-          <Grid gutter={{ base: 'xl', md: 40 }}>
-            {visibleItems.map((item, slot) => (
-              <Grid.Col key={slot} span={{ base: 12, sm: 6, md: 4 }}>
+          <div
+            className="mx-auto mt-12 max-w-[1216px] lg:mt-[95.5px]"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            onFocusCapture={() => setPaused(true)}
+            onBlurCapture={() => setPaused(false)}
+          >
+            <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-3 lg:gap-[56px]">
+              {visibleItems.map((item, slot) => (
                 <MotionDiv
+                  key={slot}
                   initial={{ opacity: 0, y: 40 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, amount: 0.2 }}
@@ -199,26 +186,24 @@ export default function MenuSection() {
                     </MotionDiv>
                   </AnimatePresence>
                 </MotionDiv>
-              </Grid.Col>
-            ))}
-          </Grid>
+              ))}
+            </div>
 
-          <Group justify="center" gap={10} mt={48}>
-            {items.map((item, index) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-label={`Show ${item.food_name}`}
-                aria-current={index === offset}
-                onClick={() => setOffset(index)}
-                className={`h-2 rounded-full transition-all duration-300 ${index === offset ? 'w-7 bg-accent-strong' : 'w-2 bg-white/25 hover:bg-white/50'}`}
-              />
-            ))}
-          </Group>
-        </div>
+            <div className="mt-[29px] flex h-2 justify-center gap-2.5">
+              {items.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-label={`Show ${item.food_name}`}
+                  aria-current={index === offset}
+                  onClick={() => setOffset(index)}
+                  className={`h-2 cursor-pointer rounded-full transition-all duration-300 ${index === offset ? 'w-7 bg-[#f58c2f]' : 'w-2 bg-white/25 hover:bg-white/50'}`}
+                />
+              ))}
+            </div>
+          </div>
         )}
-
-      </Container>
-    </Box>
+      </div>
+    </section>
   );
 }

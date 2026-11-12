@@ -78,9 +78,15 @@ export function remindAdvanceRequest(id) {
 export const ADVANCE_COLUMNS = [
   { key: "requests", label: "Requests", tone: "orange", statuses: ["submitted"] },
   { key: "payment", label: "Awaiting Payment", tone: "amber", statuses: ["accepted", "awaiting_payment"] },
-  { key: "scheduled", label: "Scheduled", tone: "blue", statuses: ["confirmed", "scheduled"] },
-  { key: "kitchen", label: "Preparing", tone: "green", statuses: ["preparing", "ready_for_pickup"] },
-  { key: "closed", label: "Closed", tone: "slate", statuses: ["completed", "rejected", "cancelled"] },
+  { key: "scheduled", label: "Scheduled", tone: "slate", statuses: ["confirmed", "scheduled"] },
+  { key: "preparing", label: "Preparing", tone: "blue", statuses: ["preparing"] },
+  { key: "ready", label: "Ready", tone: "green", statuses: ["ready_for_pickup"] },
+];
+
+export const ADVANCE_HISTORY_OUTCOMES = [
+  { key: "completed", label: "Fulfilled", title: "Fulfilled Advance Orders", empty: "No advance order has been collected yet." },
+  { key: "rejected", label: "Declined", title: "Declined Advance Requests", empty: "No advance request has been declined." },
+  { key: "cancelled", label: "Cancelled", title: "Cancelled Advance Orders", empty: "No advance order has been cancelled." },
 ];
 
 export function advanceColumnFor(status) {

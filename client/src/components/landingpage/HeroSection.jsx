@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button, Image, Rating, Text } from '@mantine/core';
+import { IconStarFilled } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 
 import chickenHero from '../../assets/chicken-hero.png';
@@ -7,26 +7,22 @@ import chickenHero from '../../assets/chicken-hero.png';
 const MotionDiv = motion.div;
 const MotionH1 = motion.h1;
 
+const ART = { width: '121.37%', left: '-13.10%', top: '-9.93%' };
+
 export default function HeroSection({ onExplore }) {
   return (
-    <Box
-      id="home"
-      data-scroll-section
-      component="section"
-      className="relative w-full overflow-hidden bg-cream pb-16 pt-28 lg:pb-0 lg:pt-[var(--spacing-header)] lg:min-h-screen"
-    >
-      <div className="mx-auto grid w-full max-w-[1500px] grid-cols-1 items-center gap-10 px-6 sm:px-10 lg:min-h-[calc(100vh-var(--spacing-header))] lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] lg:gap-4 lg:px-12">
-
-        <div className="relative z-10 order-2 max-w-[420px] lg:order-1">
-
+    <section id="home" data-scroll-section className="relative w-full overflow-hidden bg-[#fff7ed] pb-16 pt-24 lg:pb-[94px] lg:pt-[165.5px]">
+      <div className="mx-auto grid max-w-[1199px] grid-cols-1 gap-8 px-6 lg:grid-cols-[329px_minmax(0,1fr)] lg:gap-0">
+        {/* Centred below lg, where the column is the full width; the design's left alignment from lg up. */}
+        <div className="relative z-10 order-2 text-center lg:order-1 lg:pl-[5.5px] lg:pt-[65.5px] lg:text-left">
           <MotionH1
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="m-0 font-display text-[44px] font-black leading-[1.03] tracking-[-1.8px] sm:text-[52px] lg:text-[48px] xl:text-[54px]"
+            className="m-0 whitespace-nowrap font-display text-[46px] font-bold leading-[1.2] sm:text-[58px] lg:text-[70px] lg:leading-[88px]"
           >
-            <span className="block text-brand-700">Basta BES</span>
-            <span className="block text-ink">da BEST!</span>
+            <span className="block text-[#ff7e00] lg:pl-[5px] lg:tracking-[-1.2px]">Basta BES</span>
+            <span className="block text-[#2f2f2f] lg:tracking-[1.2px]">da BEST!</span>
           </MotionH1>
 
           <MotionDiv
@@ -34,26 +30,25 @@ export default function HeroSection({ onExplore }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.18, duration: 0.6, ease: 'easeOut' }}
           >
-            <Text className="mt-6 max-w-[300px] font-display text-[14px] font-medium leading-[1.6] text-ink-500">
+            <p className="m-0 mx-auto mt-6 max-w-[340px] lg:mx-0 lg:w-[345px] lg:max-w-none font-display text-[17px] font-normal leading-[28px] text-[#666666] lg:mt-[38.5px] lg:text-[20px] lg:leading-[32px]">
               Freshly prepared and delivered to your doorstep. Why settle for less when you can have the BES?
-            </Text>
+            </p>
           </MotionDiv>
 
           <MotionDiv
             initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.34, duration: 0.5, ease: 'easeOut' }}
-            className="mt-8"
+            className="mt-10 lg:mt-[64.5px]"
           >
-            <Rating value={5} readOnly size="sm" color="#ffad2f" />
+            <div className="flex justify-center gap-[2px] lg:justify-start" role="img" aria-label="Rated 4.9 out of 5">
+              {[0, 1, 2, 3, 4].map((star) => (
+                <IconStarFilled key={star} size={28} className="text-[#febb41]" aria-hidden="true" />
+              ))}
+            </div>
 
-            <Text className="mt-1.5 font-display text-[11px] font-bold text-[#4d4d4d]">
-              4.9 star rating
-            </Text>
-
-            <Text className="font-display text-[10px] text-ink-300">
-              based on 1151 reviews
-            </Text>
+            <p className="m-0 mt-[11px] font-display text-[14px] font-medium leading-[20px] text-[#2f2f2f]">4.9 star rating</p>
+            <p className="m-0 mt-[2px] font-display text-[12px] font-light leading-[17px] text-[#909090]">based on 1151 reviews</p>
           </MotionDiv>
 
           <MotionDiv
@@ -61,44 +56,38 @@ export default function HeroSection({ onExplore }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.48, duration: 0.5, ease: 'easeOut' }}
           >
-            <Button
+            <button
+              type="button"
               onClick={onExplore}
-              radius="xl"
-              className="mt-9 h-[46px] w-[150px] bg-brand-500 font-display text-[14px] font-bold shadow-[0_6px_16px_rgba(255,139,43,0.32)] transition-transform duration-200 hover:-translate-y-1 hover:bg-brand-600"
+              className="mt-10 h-[58px] w-[160px] cursor-pointer rounded-[8px] bg-[#f58c2f] text-[#fdfdfd] shadow-[0_4px_4px_rgba(0,0,0,0.12)] transition-colors duration-200 hover:bg-[#e67d20] lg:mt-[65px] lg:h-[70px] lg:w-[188px]"
             >
-              Explore
-            </Button>
+              <span className="inline-block font-display text-[18px] font-semibold lg:translate-x-[5.75px] lg:translate-y-[2.5px] lg:text-[20px]">Explore</span>
+            </button>
           </MotionDiv>
-
         </div>
 
-        <div className="relative order-1 flex items-center justify-center lg:order-2 lg:justify-end">
+        <div className="order-1 flex justify-center lg:order-2 lg:block">
           <MotionDiv
-            className="relative flex w-full justify-center lg:justify-end"
+            className="w-full max-w-[440px] lg:max-w-[781.5px]"
             initial={{ opacity: 0, scale: 0.86, rotate: -4 }}
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
             transition={{ duration: 0.85, type: 'spring', bounce: 0.35 }}
           >
-            <MotionDiv
-              animate={{ y: [0, -14, 0] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-              className="w-full max-w-[720px]"
-            >
-              <Image
-                src={chickenHero}
-                // The page's largest picture: fetched ahead of everything below it.
-                fetchPriority="high"
-                alt="Mascot chicken riding a scooter with a bucket of fried chicken"
-                w="100%"
-                h="auto"
-                fit="contain"
-                className="pointer-events-none select-none drop-shadow-[0_24px_40px_rgba(65,33,17,0.12)]"
-              />
+            <MotionDiv animate={{ y: [0, -14, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
+              <div className="relative aspect-[781.5/764.5] w-full">
+                <img
+                  src={chickenHero}
+                  // The page's largest picture: fetched ahead of everything below it.
+                  fetchPriority="high"
+                  alt="Mascot chicken riding a scooter with a bucket of fried chicken"
+                  style={ART}
+                  className="pointer-events-none absolute h-auto max-w-none select-none"
+                />
+              </div>
             </MotionDiv>
           </MotionDiv>
         </div>
-
       </div>
-    </Box>
+    </section>
   );
 }

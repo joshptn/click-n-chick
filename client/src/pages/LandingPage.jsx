@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Box } from '@mantine/core';
 
 import SiteHeader from '../components/landingpage/SiteHeader';
 import HeroSection from '../components/landingpage/HeroSection';
@@ -8,6 +7,7 @@ import CtaBanner from '../components/landingpage/CtaBanner';
 import ReviewsSection from '../components/landingpage/ReviewsSection';
 import SiteFooter from '../components/landingpage/SiteFooter';
 import { pages, preloadWhenIdle } from '../lib/pages';
+import './landing.css';
 
 const SECTION_IDS = ['home', 'menu', 'reviews', 'contact'];
 
@@ -54,7 +54,7 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <Box className="min-h-screen overflow-x-hidden bg-cream font-display text-ink">
+    <div className="min-h-screen overflow-x-hidden bg-[#fff7ed] font-display text-ink">
       <SiteHeader active={active} onNavigate={scrollToSection} scrolled={scrolled} />
 
       <main>
@@ -65,6 +65,6 @@ export default function LandingPage() {
       </main>
 
       <SiteFooter />
-    </Box>
+    </div>
   );
 }

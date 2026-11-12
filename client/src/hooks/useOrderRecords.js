@@ -16,12 +16,13 @@ const INTENT_DELAY_MS = 150;
  * read-only, and an order closing elsewhere reaches this list through the
  * admin.orders broadcast, which invalidates every key under "orders".
  */
-export function useOrderRecords(params) {
+export function useOrderRecords(params, { enabled = true } = {}) {
   const query = useQuery({
     queryKey: recordsKey(params),
     queryFn: ({ signal }) => fetchRecords(params, { signal }),
     placeholderData: keepPreviousData,
     staleTime: 15 * 1000,
+    enabled,
   });
 
   return {
