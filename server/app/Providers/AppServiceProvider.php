@@ -75,14 +75,18 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('login', function (Request $request) {
             return [
-                Limit::perMinute(5)->by('account:'.$this->loginKey($request).'|'.$request->ip()),
+                Limit::perMinute(10)->by('account:'.$this->loginKey($request).'|'.$request->ip()),
                 Limit::perMinute(20)->by($request->ip()),
             ];
         });
 
+        // The per-IP allowances on sign-up, codes and password reset are wide on
+        // purpose: a household, a school or mobile data puts many people behind
+        // one address. The per-identifier limits are what protect each person.
         RateLimiter::for('register', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip());
+            return Limit::perMinute(20)->by($request->ip());
         });
+
         RateLimiter::for('user-update', function (Request $request) {
             return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
         });
@@ -101,8 +105,8 @@ class AppServiceProvider extends ServiceProvider
             return [
                 Limit::perMinutes(15, 3)->by('otp-send:id:'.$identifierKey),
                 Limit::perMinutes(1440, 10)->by('otp-send:id-day:'.$identifierKey),
-                Limit::perMinutes(15, 5)->by('otp-send:ip:'.$request->ip()),
-                Limit::perMinutes(1440, 30)->by('otp-send:ip-day:'.$request->ip()),
+                Limit::perMinutes(15, 20)->by('otp-send:ip:'.$request->ip()),
+                Limit::perMinutes(1440, 60)->by('otp-send:ip-day:'.$request->ip()),
             ];
         });
 
@@ -115,14 +119,25 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Keyed on the challenge, not on an identifier: the request carries
+        // none, and a shared key would let one visitor use up everyone's resends.
+        RateLimiter::for('challenge-resend', function (Request $request) {
+            $challenge = hash('sha256', (string) $request->input('challenge_token'));
+
+            return [
+                Limit::perMinutes(15, 3)->by('challenge-resend:token:'.$challenge),
+                Limit::perMinutes(15, 10)->by('challenge-resend:ip:'.$request->ip()),
+            ];
+        });
+
         RateLimiter::for('password-reset', function (Request $request) {
             $identifierKey = $this->otpIdentifierKey($request);
 
             return [
                 Limit::perMinutes(15, 3)->by('pwreset:id:'.$identifierKey),
                 Limit::perMinutes(1440, 8)->by('pwreset:id-day:'.$identifierKey),
-                Limit::perMinutes(15, 5)->by('pwreset:ip:'.$request->ip()),
-                Limit::perMinutes(1440, 20)->by('pwreset:ip-day:'.$request->ip()),
+                Limit::perMinutes(15, 20)->by('pwreset:ip:'.$request->ip()),
+                Limit::perMinutes(1440, 60)->by('pwreset:ip-day:'.$request->ip()),
             ];
         });
 

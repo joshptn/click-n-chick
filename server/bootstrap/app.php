@@ -14,6 +14,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Support\Str;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -47,11 +48,24 @@ return Application::configure(basePath: dirname(__DIR__))
                 return new JsonResponse(['message' => 'Unauthenticated.'], 401);
             }
         });
+        // Says how long to wait, from the limit that actually tripped, so a
+        // person who hit a 15-minute allowance does not keep retrying every few
+        // seconds. Rounded up, so "try again in 2 minutes" is never too early.
         $exceptions->render(function (ThrottleRequestsException $e, $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
+                $headers = $e->getHeaders();
+                $seconds = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                [$count, $unit] = match (true) {
+                    $seconds < 60 => [$seconds, 'second'],
+                    $seconds < 3600 => [(int) ceil($seconds / 60), 'minute'],
+                    default => [(int) ceil($seconds / 3600), 'hour'],
+                };
+
                 return new JsonResponse([
-                    'message' => 'Too many requests. Please slow down and try again shortly.',
-                ], 429, $e->getHeaders());
+                    'message' => "Too many requests. Please try again in {$count} ".Str::plural($unit, $count).'.',
+                    'retry_after' => $seconds,
+                ], 429, $headers);
             }
         });
     })->create();
