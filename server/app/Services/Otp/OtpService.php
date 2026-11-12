@@ -6,8 +6,8 @@ use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\Verification\Channel;
 use App\Services\Verification\ChannelRegistry;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class OtpService
 {
@@ -48,9 +48,7 @@ class OtpService
         return strlen(str_replace('{otp}', str_repeat('0', self::CODE_LENGTH), self::messageTemplate()));
     }
 
-    public function __construct(private ChannelRegistry $channels)
-    {
-    }
+    public function __construct(private ChannelRegistry $channels) {}
 
     /**
      * Issue a code for the given purpose and deliver it over the user's chosen
@@ -70,12 +68,27 @@ class OtpService
             ? $this->channels->forUser($user)
             : $this->channels->for($channel);
 
-        $identifier = $transport->identifierFor($user);
-        $identifierHash = $this->channels->hash($transport->channel(), $identifier);
+        return $this->issue($transport->channel(), $transport->identifierFor($user), $purpose, $ip, $user->id);
+    }
+
+    /**
+     * Issue a code to an identifier that has no account yet: a sign-up being
+     * verified. Same rules as send(); only the owner is missing, which is why
+     * otp_codes.user_id is nullable.
+     */
+    public function sendTo(Channel|string $channel, string $identifier, string $purpose, ?string $ip = null): OtpCode
+    {
+        return $this->issue($this->channels->for($channel)->channel(), $identifier, $purpose, $ip, null);
+    }
+
+    private function issue(Channel $channel, ?string $identifier, string $purpose, ?string $ip, ?int $userId): OtpCode
+    {
+        $transport = $this->channels->for($channel);
+        $identifierHash = $this->channels->hash($channel, $identifier);
 
         $code = $this->generateCode();
 
-        $otp = DB::transaction(function () use ($user, $transport, $identifierHash, $purpose, $ip, $code) {
+        $otp = DB::transaction(function () use ($userId, $transport, $identifierHash, $purpose, $ip, $code) {
             // Supersede outstanding codes: marking them consumed keeps the row for
             // audit while making them unredeemable.
             OtpCode::query()
@@ -85,7 +98,7 @@ class OtpService
                 ->update(['consumed_at' => now()]);
 
             return OtpCode::create([
-                'user_id' => $user->id,
+                'user_id' => $userId,
                 'channel' => $transport->channel()->value,
                 'identifier_hash' => $identifierHash,
                 'code_hash' => Hash::make($code),

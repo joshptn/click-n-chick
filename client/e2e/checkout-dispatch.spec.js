@@ -38,7 +38,7 @@ async function signIn(page, { email, password }) {
   await page.getByPlaceholder("Password").fill(password);
 
   const checked = page.waitForResponse(
-    (response) => response.url().endsWith("/api/user") && response.request().method() === "GET"
+    (response) => response.url().endsWith("/api/login") && response.request().method() === "POST" && response.ok()
   );
 
   await page.getByRole("button", { name: /sign in/i }).click();

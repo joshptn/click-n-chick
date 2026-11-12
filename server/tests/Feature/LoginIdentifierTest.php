@@ -131,50 +131,58 @@ class LoginIdentifierTest extends TestCase
     // Registration keeps the blind index in step
     // -----------------------------------------------------------------
 
-    public function test_registering_populates_the_hash_so_phone_login_works_immediately(): void
+    public function test_signing_up_with_a_phone_number_populates_the_hash_so_phone_login_works_immediately(): void
     {
-        // The signup below omits the channel, which resolves to sms only where
-        // sms can deliver - and this test then verifies the phone and logs in
-        // with it, so it is describing that deployment.
+        // A phone identifier means the sms channel, which only a deployment
+        // with a provider offers.
         $this->enableSmsChannel();
 
         $this->postJson('/api/register', [
             'first_name' => 'New',
             'last_name' => 'Rider',
-            'email' => 'new@example.test',
+            'identifier' => '+639998887777',
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-            'phone_number' => '+639998887777',
         ])->assertStatus(201);
 
-        $user = User::where('email', 'new@example.test')->firstOrFail();
+        // The code itself is covered by PhoneVerificationTest; here it is set
+        // to a known value so the test stays on identifier resolution.
+        \App\Models\OtpCode::query()->latest('id')->firstOrFail()->forceFill(['code_hash' => Hash::make('135790')])->save();
 
-        $this->assertNotNull($user->phone_number_hash);
+        $this->postJson('/api/otp/verify', ['identifier' => '0999 888 7777', 'code' => '135790'])->assertOk();
 
-        // Registration is now the blocking pending_verification step. Phone
-        // verification itself is covered by PhoneVerificationTest, so activate
-        // directly here to keep this test on identifier resolution.
-        $user->forceFill([
-            'account_status' => User::STATUS_ACTIVE,
-            'phone_verified_at' => now(),
-        ])->save();
+        $user = User::where('phone_number_hash', User::hashPhoneNumber('+639998887777'))->firstOrFail();
+
+        $this->assertNull($user->email, 'No email was given, so none is stored.');
+        $this->assertNotNull($user->phone_verified_at);
 
         $this->postJson('/api/login', ['login' => '09998887777', 'password' => 'Password123!'])
             ->assertOk()
-            ->assertJsonPath('user.email', 'new@example.test');
+            ->assertJsonPath('user.first_name', 'New');
     }
 
     public function test_a_duplicate_phone_number_is_a_422_not_a_driver_error(): void
     {
+        $this->enableSmsChannel();
         $this->registeredUser();
 
         $this->postJson('/api/register', [
             'first_name' => 'Copy',
             'last_name' => 'Cat',
-            'email' => 'copy@example.test',
+            'identifier' => '09171234567',
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-            'phone_number' => '09171234567',
-        ])->assertStatus(422)->assertJsonValidationErrors('phone_number');
+        ])->assertStatus(422)->assertJsonValidationErrors('identifier');
+    }
+
+    public function test_the_email_is_matched_without_regard_to_case(): void
+    {
+        $this->registeredUser();
+
+        foreach (['Rider@Example.test', ' RIDER@EXAMPLE.TEST ', 'rider@example.test'] as $typed) {
+            $this->postJson('/api/login', ['login' => $typed, 'password' => 'Password123!'])
+                ->assertOk()
+                ->assertJsonPath('user.email', 'rider@example.test');
+        }
     }
 }

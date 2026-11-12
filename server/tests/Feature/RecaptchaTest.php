@@ -316,6 +316,7 @@ class RecaptchaTest extends TestCase
             // same reason, and so it is not the one unwatched door in the set.
             'POST api/otp/verify' => RecaptchaAction::OTP_VERIFY,
             'POST api/2fa/challenge' => RecaptchaAction::TWO_FACTOR_CHALLENGE,
+            'POST api/2fa/resend' => RecaptchaAction::TWO_FACTOR_RESEND,
             'POST api/2fa/enable' => RecaptchaAction::TWO_FACTOR_ENABLE,
             'POST api/password/forgot' => RecaptchaAction::PASSWORD_FORGOT,
             'POST api/password/reset' => RecaptchaAction::PASSWORD_RESET,

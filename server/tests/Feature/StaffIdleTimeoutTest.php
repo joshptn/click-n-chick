@@ -119,7 +119,7 @@ class StaffIdleTimeoutTest extends TestCase
      * 12 hours from issue and no further - otherwise "12-hour staff session"
      * would quietly become "forever, as long as you keep clicking".
      */
-    public function test_activity_cannot_push_a_staff_session_past_the_twelve_hour_cap(): void
+    public function test_activity_cannot_push_a_staff_session_past_the_fourteen_hour_cap(): void
     {
         $token = $this->signIn($this->user(User::ROLE_SUPER_ADMIN));
 
@@ -128,8 +128,12 @@ class StaffIdleTimeoutTest extends TestCase
         $this->travel(420)->minutes(); // 7h - inside the idle window
         $this->replay($token)->assertOk();
 
-        // 13h after issue: still active, but the absolute cap has passed.
+        // 13h after issue: still inside the 14-hour cap (BR-46).
         $this->travel(360)->minutes();
+        $this->replay($token)->assertOk();
+
+        // 15h after issue: the absolute cap has passed, however active.
+        $this->travel(120)->minutes();
         $this->replay($token)->assertUnauthorized();
     }
 

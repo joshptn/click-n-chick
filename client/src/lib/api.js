@@ -76,6 +76,14 @@ export async function apiFetch(
   // 204 and empty bodies are legitimate; treat an unparseable body as {}.
   const payload = await response.json().catch(() => ({}));
 
+  // Sent as one account, answered after that session ended: signed out, or
+  // another account signed in on this browser meanwhile. The data belongs to
+  // the previous account, so nothing on screen may use it - and its 401 (the
+  // token was just revoked) must not end the session that replaced it.
+  if (token && authToken() !== token) {
+    throw new ApiError("You were signed out before this finished.", 0, { reason: "session_changed" });
+  }
+
   // The session died underneath us - most often because another device signed
   // this one out (FR-01.13), or the token was revoked server-side. Every call
   // through here is already authenticated, so a 401 can only mean the

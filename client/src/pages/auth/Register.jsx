@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { IconAlertCircle, IconCheck, IconLock, IconMail, IconPhone, IconUser } from "@tabler/icons-react";
+import { IconAlertCircle, IconCheck, IconLock, IconUser } from "@tabler/icons-react";
 
 import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
@@ -8,40 +8,35 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import toast from "../../components/app/Toast";
 import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
-import ChannelChoice from "../../components/auth/ChannelChoice";
 import PasswordChecklist from "../../components/auth/PasswordChecklist";
 import { unmetPasswordRules } from "../../lib/passwordRules";
 import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
+
+/** The same shape the server uses to tell a phone number from an email address. */
+function channelFor(identifier) {
+  return identifier.includes("@") ? CHANNELS.EMAIL : CHANNELS.SMS;
+}
 
 function Register() {
   const nav = useNavigate();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [channel, setChannel] = useState(CHANNELS.SMS);
   const [password, setPassword] = useState("");
 
   const RegisterUser = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
-    const phone = e.target.phone_number.value.trim();
-
-    if (!/^\d{10}$/.test(phone)) {
-      setError("Please enter a valid 10-digit phone number (digits only).");
-      setLoading(false);
-      setTimeout(() => setError(""), 4000);
-      return;
-    }
+    const identifier = e.target.identifier.value.trim();
 
     const unmet = unmetPasswordRules(e.target.password.value);
 
     if (unmet.length > 0) {
       setError(`Password must have: ${unmet.map((rule) => rule.label.toLowerCase()).join(", ")}.`);
-      setLoading(false);
-      setTimeout(() => setError(""), 4000);
       return;
     }
+
+    setLoading(true);
 
     const url = import.meta.env.VITE_API_URL;
 
@@ -49,11 +44,9 @@ function Register() {
       const body = {
         first_name: e.target.first_name.value,
         last_name: e.target.last_name.value,
-        email: e.target.email.value,
+        identifier,
         password: e.target.password.value,
         password_confirmation: e.target.password_confirmation.value,
-        phone_number: `+63${phone}`,
-        verification_channel: channel,
       };
 
       const response = await fetch(`${url}/api/register`, {
@@ -67,22 +60,22 @@ function Register() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Registration failed");
+      if (!response.ok) throw new Error(data.errors?.identifier?.[0] ?? data.message ?? "Registration failed");
 
-      nav(routeForChannel(data.verification_channel ?? channel), {
+      const channel = data.verification_channel ?? channelFor(identifier);
+
+      nav(routeForChannel(channel), {
         replace: true,
         state: {
-          identifier: channel === CHANNELS.EMAIL ? body.email : body.phone_number,
+          identifier,
           maskedIdentifier: data.identifier,
           resendAvailableIn: data.resend_available_in,
         },
       });
     } catch (err) {
-      console.error("Registration error:", err);
       setError(err.message);
     } finally {
       setLoading(false);
-      setTimeout(() => setError(""), 4000);
     }
   };
 
@@ -113,29 +106,17 @@ function Register() {
       )}
 
       <form onSubmit={RegisterUser} className="flex flex-col gap-4">
-        <Field label="Enter your email address" required>
-          {(id) => (
-            <Input id={id} type="email" name="email" icon={IconMail} placeholder="Email address" autoComplete="email" required />
-          )}
-        </Field>
-
-        <Field label="Enter your contact number" required>
+        <Field label="Enter your phone number or email address" required>
           {(id) => (
             <Input
               id={id}
               type="text"
-              name="phone_number"
-              icon={IconPhone}
-              prefix="+63"
-              placeholder="Contact number"
-              inputMode="numeric"
-              autoComplete="tel-national"
-              maxLength={10}
-              pattern="\d{10}"
-              onInput={(e) => {
-                e.target.value = e.target.value.replace(/\D/g, "");
-              }}
+              name="identifier"
+              icon={IconUser}
+              placeholder="Phone number or email address"
+              autoComplete="username"
               required
+              disabled={loading}
             />
           )}
         </Field>
@@ -143,13 +124,13 @@ function Register() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="First Name" required>
             {(id) => (
-              <Input id={id} type="text" name="first_name" icon={IconUser} placeholder="John" autoComplete="given-name" required />
+              <Input id={id} type="text" name="first_name" icon={IconUser} placeholder="John" autoComplete="given-name" required disabled={loading} />
             )}
           </Field>
 
           <Field label="Last Name" required>
             {(id) => (
-              <Input id={id} type="text" name="last_name" icon={IconUser} placeholder="Doe" autoComplete="family-name" required />
+              <Input id={id} type="text" name="last_name" icon={IconUser} placeholder="Doe" autoComplete="family-name" required disabled={loading} />
             )}
           </Field>
         </div>
@@ -166,6 +147,7 @@ function Register() {
               aria-describedby="password-requirements"
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={loading}
             />
           )}
         </Field>
@@ -182,16 +164,10 @@ function Register() {
               placeholder="Confirm Password"
               autoComplete="new-password"
               required
+              disabled={loading}
             />
           )}
         </Field>
-
-        <ChannelChoice
-          value={channel}
-          onChange={setChannel}
-          legend="How should we send your verification code?"
-          disabled={loading}
-        />
 
         <div className="mt-1 flex items-start gap-3">
           <span className="relative mt-px flex shrink-0">

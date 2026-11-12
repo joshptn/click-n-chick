@@ -7,15 +7,14 @@ use App\Models\OtpCode;
 use App\Models\User;
 use App\Rules\StrongPassword;
 use App\Services\Auth\DeviceRegistrar;
+use App\Services\Auth\PendingRegistration;
 use App\Services\Otp\OtpService;
 use App\Services\Verification\Channel;
 use App\Services\Verification\ChannelRegistry;
 use App\Services\Verification\VerificationChannel;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 use Throwable;
@@ -25,47 +24,45 @@ class AuthController extends Controller
     private const TOKEN_NAME = 'auth_token';
 
     /**
-     * Step 1 of the blocking registration flow.
-     *
-     * Creates the account as pending_verification and texts an OTP. No token is
-     * issued and no authenticated access is granted here - the caller must clear
-     * OtpController::verify first. There is no skip path.
+     * Compared against when no account matches the identifier, so a sign-in
+     * that fails takes the same time whether or not the account exists. A
+     * bcrypt hash of a random value nobody holds; never a valid credential.
      */
-    public function register(Request $request, OtpService $otp)
+    private const NO_ACCOUNT_HASH = '$2y$12$Qn8s3Yk2W5jE7bRzT1vUe.XlJ0mPqC4hA9rN6dF2sG8kL3wB7yZ1a';
+
+    public const STATUS_PENDING_VERIFICATION = 'pending_verification';
+
+    /**
+     * Step 1 of sign-up (BR-02, FR-01.1 to FR-01.3).
+     *
+     * One identifier, a phone number or an email address, and the code goes
+     * to it. Nothing is written to `users` here: the submission waits in the
+     * cache (PendingRegistration) and OtpController::verify creates the account
+     * once the code comes back. No token is issued and there is no skip path.
+     */
+    public function register(Request $request, OtpService $otp, PendingRegistration $pending)
     {
-        // Uniqueness is resolved by hand below rather than with a `unique` rule:
-        // an unverified row for the same email/phone must be reusable as a resend
-        // instead of being rejected as a duplicate.
         $validated = $request->validate([
-            'email' => 'required|string|email|max:255',
+            'identifier' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'confirmed', new StrongPassword],
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'phone_number' => [
-                'required',
-                'string',
-                'max:20',
-                'regex:/^[0-9+\-\s()]+$/',
-            ],
-            // PRD §6.2: the user picks which channel blocks registration. Both
-            // identifiers are always collected (FR-01.1); only the chosen one is
-            // verified now. Omitting it defaults to sms - see below.
-            'verification_channel' => ['sometimes', 'string', Rule::in(Channel::values())],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
         ]);
 
         $registry = app(ChannelRegistry::class);
+        $typed = trim($validated['identifier']);
+        $channel = Channel::forIdentifier($typed);
+        $transport = $channel === null ? null : $registry->for($channel);
+        $identifier = $transport?->normalize($typed);
 
-        // An omitted channel resolves to sms, or to whatever can deliver when
-        // sms cannot - see ChannelRegistry::defaultChannel().
-        $channel = Channel::tryFromValue($validated['verification_channel'] ?? null)
-            ?? $registry->defaultChannel();
+        if ($identifier === null) {
+            throw ValidationException::withMessages([
+                'identifier' => 'Enter a valid Philippine mobile number or email address.',
+            ]);
+        }
 
-        $transport = $registry->for($channel);
-
-        // A channel the deployment cannot deliver on is refused here rather
-        // than at the send, which would otherwise leave a pending account
-        // waiting on a code nobody receives. Same shape as the 2FA enrolment
-        // and password change guards.
+        // A channel the deployment cannot deliver on is refused here, rather
+        // than at the send, so nobody waits on a code that cannot arrive.
         if (! $transport->isAvailable()) {
             return response()->json([
                 'message' => $transport->unavailableReason(),
@@ -73,99 +70,42 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
-
-        if ($phoneHash === null) {
+        if ($transport->findUser($identifier) !== null) {
             throw ValidationException::withMessages([
-                'phone_number' => 'Enter a valid Philippine mobile number.',
+                'identifier' => $channel === Channel::Email
+                    ? 'This email address is already registered.'
+                    : 'This phone number is already registered.',
             ]);
         }
 
-        $user = DB::transaction(function () use ($validated, $phoneHash, $channel) {
-            $pending = User::query()
-                ->where('account_status', User::STATUS_PENDING_VERIFICATION)
-                ->where(function ($query) use ($validated, $phoneHash) {
-                    $query->where('email', $validated['email'])
-                        ->orWhere('phone_number_hash', $phoneHash);
-                })
-                ->lockForUpdate()
-                ->first();
+        $pending->put([
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'identifier' => $identifier,
+            'channel' => $channel->value,
+            'password' => Hash::make($validated['password']),
+        ]);
 
-            if ($pending !== null) {
-                if ($pending->created_at->gt(now()->subHours(User::PENDING_VERIFICATION_HOURS))) {
-                    // Live pending signup. Refresh the details from this submission
-                    // and fall through to a resend rather than erroring.
-                    return $this->fillRegistration($pending, $validated, $phoneHash, $channel);
-                }
+        // Submitting again inside the cooldown replaces the submission but
+        // does not send another code: the one already sent still works, and
+        // the resend rules are the same here as on the code screen.
+        $wait = $otp->secondsUntilResendAllowed($registry->hash($channel, $identifier), OtpCode::PURPOSE_REGISTRATION);
 
-                // Past the abandonment window: the row is forfeit and this attempt
-                // may take the email/phone over.
-                $pending->delete();
-            }
-
-            // Only accounts that got past verification block a signup.
-            if (User::where('email', $validated['email'])->exists()) {
-                throw ValidationException::withMessages([
-                    'email' => 'This email address is already registered.',
-                ]);
-            }
-
-            if (User::where('phone_number_hash', $phoneHash)->exists()) {
-                throw ValidationException::withMessages([
-                    'phone_number' => 'This phone number is already registered.',
-                ]);
-            }
-
-            return $this->fillRegistration(new User, $validated, $phoneHash, $channel);
-        });
-
-        $otp->send($user, OtpCode::PURPOSE_REGISTRATION, $request->ip(), $channel);
-
-        $identifier = $transport->identifierFor($user);
+        if ($wait === 0) {
+            $otp->sendTo($channel, $identifier, OtpCode::PURPOSE_REGISTRATION, $request->ip());
+            $wait = OtpService::RESEND_COOLDOWN_SECONDS;
+        }
 
         return response()->json([
-            'status' => User::STATUS_PENDING_VERIFICATION,
+            'status' => self::STATUS_PENDING_VERIFICATION,
             'message' => $channel === Channel::Email
                 ? 'We sent a verification code to your email address.'
                 : 'We sent a verification code to your phone.',
             'verification_channel' => $channel->value,
-            // Whichever identifier the code went to, masked. `phone_number` is
-            // kept alongside it so existing callers keep reading what they expect.
             'identifier' => $transport->mask($identifier),
-            'phone_number' => $this->maskPhoneNumber($user->phone_number),
             'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
-            'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
+            'resend_available_in' => $wait,
         ], 201);
-    }
-
-    /** Apply a registration submission to a new or reused pending row. */
-    private function fillRegistration(User $user, array $validated, string $phoneHash, Channel $channel): User
-    {
-        $user->email = $validated['email'];
-        $user->password = Hash::make($validated['password']);
-        $user->first_name = $validated['first_name'];
-        $user->last_name = $validated['last_name'];
-        $user->phone_number = $validated['phone_number'];
-        $user->phone_number_hash = $phoneHash;
-        $user->verification_channel = $channel->value;
-        $user->account_status = User::STATUS_PENDING_VERIFICATION;
-        // Both cleared: a re-used pending row must not carry a stale
-        // verification from an earlier attempt on the other channel.
-        $user->phone_verified_at = null;
-        $user->email_verified_at = null;
-        $user->save();
-
-        return $user->refresh();
-    }
-
-    /** '+639171234567' -> '+639*****567', for echoing back to the UI. */
-    private function maskPhoneNumber(?string $phone): ?string
-    {
-        if ($phone === null || strlen($phone) < 7) {
-            return $phone;
-        }
-
-        return substr($phone, 0, 4).str_repeat('*', strlen($phone) - 7).substr($phone, -3);
     }
 
     public function login(Request $request)
@@ -177,18 +117,15 @@ class AuthController extends Controller
         ]);
 
         $identifier = trim((string) ($validated['login'] ?? $validated['email'] ?? ''));
+        $channel = Channel::forIdentifier($identifier);
+        $registry = app(ChannelRegistry::class);
+        $user = $channel === null ? null : $registry->for($channel)->findUser($identifier);
 
-        if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
-            $user = User::where('email', $identifier)->first();
-        } else {
-            $phoneHash = User::hashPhoneNumber($identifier);
+        // Checked against a fixed hash when there is no account, so the time a
+        // failure takes does not say whether the identifier is registered.
+        $passwordMatches = Hash::check($validated['password'], $user?->password ?? self::NO_ACCOUNT_HASH);
 
-            $user = $phoneHash === null
-                ? null
-                : User::where('phone_number_hash', $phoneHash)->first();
-        }
-
-        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+        if (! $user || ! $passwordMatches) {
             return response()->json(['message' => 'The credentials are wrong'], 401);
         }
 
@@ -197,24 +134,13 @@ class AuthController extends Controller
             return response()->json(DeviceRegistrar::suspendedPayload(), 403);
         }
 
-        $registry = app(ChannelRegistry::class);
-
-        // Gate on the per-channel timestamp, NOT on account_status. That column
-        // is mass-assignable and any path that flipped it to 'active' would
-        // otherwise let an unverified account straight in.
-        if (! $user->hasVerifiedChosenChannel()) {
-            $transport = $registry->forUser($user);
-
-            return response()->json($this->firstSignInCode($user, $transport, $identifier, $request) + [
-                'status' => User::STATUS_PENDING_VERIFICATION,
-                // Always names the specific channel - never "verify your account".
-                'message' => $transport->channel() === Channel::Email
-                    ? 'Verify your email address to finish setting up your account.'
-                    : 'Verify your phone number to finish setting up your account.',
-                'verification_channel' => $transport->channel()->value,
-                'identifier' => $transport->mask($transport->identifierFor($user)),
-                'phone_number' => $this->maskPhoneNumber($user->phone_number),
-            ], 403);
+        /**
+         * Only an identifier this account has verified signs it in. The gate is
+         * the per-channel timestamp, never account_status, which is
+         * mass-assignable.
+         */
+        if (! $user->hasVerifiedChannel($channel)) {
+            return response()->json($this->unverifiedIdentifier($user, $channel, $registry, $request), 403);
         }
 
         // Password checked out and the account is fully active. If 2FA is on,
@@ -260,23 +186,73 @@ class AuthController extends Controller
     }
 
     /**
-     * Code for an account a Store Manager created: `active`, never verified.
-     * They were not sent one at creation, so the first correct password is the
-     * moment. Self-registered accounts got theirs at registration.
+     * The password was right, but the identifier typed is not one this account
+     * has verified. Two cases:
+     *
+     *  - The account has verified its other identifier (it registered with the
+     *    other one, or an older account verified only one of two). It signs in
+     *    with that one, and is told so.
+     *  - Nothing is verified yet: an account a Store Manager created. They were
+     *    not sent a code at creation, so the first correct password on the
+     *    chosen channel is the moment, and they go to the code screen.
      *
      * @return array<string, mixed>
      */
-    private function firstSignInCode(User $user, VerificationChannel $transport, string $identifier, Request $request): array
+    private function unverifiedIdentifier(User $user, Channel $typed, ChannelRegistry $registry, Request $request): array
+    {
+        $chosen = Channel::tryFromValue($user->verification_channel) ?? $typed;
+        $verified = $user->hasVerifiedChosenChannel() ? $chosen : null;
+
+        if ($verified === null) {
+            $other = $typed === Channel::Email ? Channel::Sms : Channel::Email;
+            $verified = $user->hasVerifiedChannel($other) ? $other : null;
+        }
+
+        if ($verified !== null) {
+            return [
+                'status' => self::STATUS_PENDING_VERIFICATION,
+                'sign_in_with_channel' => true,
+                'verification_channel' => $verified->value,
+                'message' => $verified === Channel::Email
+                    ? 'Sign in with your email address, the one this account verified.'
+                    : 'Sign in with your phone number, the one this account verified.',
+            ];
+        }
+
+        $transport = $registry->for($chosen);
+
+        // The code screen needs the identifier the code goes to, and it was not typed.
+        if ($typed !== $chosen) {
+            return [
+                'status' => self::STATUS_PENDING_VERIFICATION,
+                'sign_in_with_channel' => true,
+                'verification_channel' => $chosen->value,
+                'message' => $chosen === Channel::Email
+                    ? 'Sign in with your email address so we can send your verification code.'
+                    : 'Sign in with your phone number so we can send your verification code.',
+            ];
+        }
+
+        return $this->firstSignInCode($user, $transport, $request) + [
+            'status' => self::STATUS_PENDING_VERIFICATION,
+            // Always names the specific channel - never "verify your account".
+            'message' => $chosen === Channel::Email
+                ? 'Verify your email address to finish setting up your account.'
+                : 'Verify your phone number to finish setting up your account.',
+            'verification_channel' => $chosen->value,
+            'identifier' => $transport->mask($transport->identifierFor($user)),
+        ];
+    }
+
+    /**
+     * Code for an account a Store Manager created: `active`, never verified.
+     *
+     * @return array<string, mixed>
+     */
+    private function firstSignInCode(User $user, VerificationChannel $transport, Request $request): array
     {
         if ($user->account_status !== User::STATUS_ACTIVE || $transport->identifierFor($user) === null) {
             return [];
-        }
-
-        $usedEmail = filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false;
-
-        // The code screen needs the identifier the code goes to, and it was not typed.
-        if ($usedEmail !== ($transport->channel() === Channel::Email)) {
-            return ['sign_in_with_channel' => true];
         }
 
         $otp = app(OtpService::class);

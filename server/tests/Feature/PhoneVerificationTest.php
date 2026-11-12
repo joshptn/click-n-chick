@@ -2,12 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\AuthController;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\Otp\OtpService;
 use App\Services\Sms\SmsSender;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class PhoneVerificationTest extends TestCase
@@ -21,7 +22,7 @@ class PhoneVerificationTest extends TestCase
     {
         parent::setUp();
 
-        // Every test here registers and verifies over the phone channel, which
+        // Every test here signs up and verifies over the phone channel, which
         // the app only offers where a provider is configured.
         $this->enableSmsChannel();
 
@@ -51,10 +52,9 @@ class PhoneVerificationTest extends TestCase
         return array_merge([
             'first_name' => 'Juan',
             'last_name' => 'Dela Cruz',
-            'email' => 'juan@example.test',
+            'identifier' => '+639171234567',
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
-            'phone_number' => '+639171234567',
         ], $overrides);
     }
 
@@ -67,23 +67,22 @@ class PhoneVerificationTest extends TestCase
     }
 
     // -----------------------------------------------------------------
-    // Registration is blocking
+    // Registration is blocking, and creates nothing until verified
     // -----------------------------------------------------------------
 
-    public function test_registration_creates_a_pending_row_and_issues_no_token(): void
+    public function test_signing_up_texts_a_code_and_creates_no_account_or_token(): void
     {
         $response = $this->postJson('/api/register', $this->payload())->assertStatus(201);
 
-        $response->assertJsonPath('status', 'pending_verification');
+        $response->assertJsonPath('status', AuthController::STATUS_PENDING_VERIFICATION);
+        $response->assertJsonPath('verification_channel', 'sms');
         $response->assertJsonMissingPath('token');
         $response->assertJsonMissingPath('user');
 
-        $user = User::where('email', 'juan@example.test')->firstOrFail();
-
-        $this->assertSame(User::STATUS_PENDING_VERIFICATION, $user->account_status);
-        $this->assertNull($user->phone_verified_at);
-        $this->assertSame(0, $user->tokens()->count(), 'A pending signup must hold no token.');
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('personal_access_tokens', 0);
         $this->assertCount(1, $this->sent);
+        $this->assertSame('+639171234567', $this->sent[0]['to']);
     }
 
     public function test_the_sms_carries_a_six_digit_code_and_no_link(): void
@@ -123,102 +122,91 @@ class PhoneVerificationTest extends TestCase
         );
     }
 
-    public function test_a_pending_account_cannot_log_in(): void
+    public function test_an_unverified_sign_up_cannot_log_in_because_there_is_no_account(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
 
-        $this->postJson('/api/login', ['login' => 'juan@example.test', 'password' => 'Password123!'])
-            ->assertStatus(403)
-            ->assertJsonPath('status', 'pending_verification')
+        $this->postJson('/api/login', ['login' => '+639171234567', 'password' => 'Password123!'])
+            ->assertStatus(401)
             ->assertJsonMissingPath('token');
     }
 
     // -----------------------------------------------------------------
-    // Duplicate submission resends instead of erroring or duplicating
+    // Repeat submissions follow the resend rules
     // -----------------------------------------------------------------
 
-    public function test_resubmitting_the_same_registration_resends_rather_than_duplicating(): void
+    public function test_resubmitting_inside_the_cooldown_sends_no_second_text(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
         $firstCode = $this->lastCode();
 
-        $this->postJson('/api/register', $this->payload())->assertStatus(201);
+        $this->postJson('/api/register', $this->payload(['first_name' => 'Maria']))
+            ->assertStatus(201)
+            ->assertJsonPath('resend_available_in', fn ($wait) => $wait > 0 && $wait <= OtpService::RESEND_COOLDOWN_SECONDS);
 
-        $this->assertSame(1, User::where('email', 'juan@example.test')->count(), 'No duplicate row.');
-        $this->assertCount(2, $this->sent, 'The second submission must resend.');
-        $this->assertNotSame($firstCode, $this->lastCode(), 'A fresh code must be issued.');
+        $this->assertCount(1, $this->sent, 'A second text inside the cooldown would spend credits for nothing.');
 
-        // The superseded code must no longer work.
-        $this->postJson('/api/otp/verify', ['phone_number' => '+639171234567', 'code' => $firstCode])
-            ->assertStatus(422);
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $firstCode])->assertOk();
+        $this->assertSame('Maria', User::firstOrFail()->first_name, 'The newer details become the account.');
     }
 
-    public function test_a_matching_phone_with_a_different_email_is_also_treated_as_a_resend(): void
+    public function test_resubmitting_after_the_cooldown_sends_a_fresh_code_and_retires_the_old_one(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
+        $firstCode = $this->lastCode();
 
-        $this->postJson('/api/register', $this->payload(['email' => 'different@example.test']))
-            ->assertStatus(201);
+        OtpCode::query()->update(['created_at' => now()->subSeconds(OtpService::RESEND_COOLDOWN_SECONDS + 5)]);
 
-        $this->assertSame(1, User::where('phone_number_hash', User::hashPhoneNumber('+639171234567'))->count());
-        $this->assertSame('different@example.test', User::first()->email, 'Details refresh from the newer attempt.');
+        $this->postJson('/api/register', $this->payload())->assertStatus(201);
+
+        $this->assertCount(2, $this->sent);
+        $this->assertNotSame($firstCode, $this->lastCode());
+
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $firstCode])->assertStatus(422);
+        $this->assertDatabaseCount('users', 0);
     }
 
-    public function test_an_abandoned_pending_row_is_taken_over_by_a_new_attempt(): void
+    public function test_a_verified_account_blocks_a_duplicate_signup(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $this->lastCode()])->assertOk();
 
-        $original = User::firstOrFail();
-        $original->forceFill([
-            'created_at' => now()->subHours(User::PENDING_VERIFICATION_HOURS + 1),
-        ])->save();
+        // Two more attempts: with the original sign-up that is the three the
+        // otp-send limiter allows per identifier.
+        foreach (['09171234567', '0917 123 4567'] as $typed) {
+            $this->postJson('/api/register', $this->payload(['identifier' => $typed]))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('identifier');
+        }
 
-        $this->postJson('/api/register', $this->payload(['first_name' => 'Maria']))->assertStatus(201);
-
-        $this->assertSame(1, User::count());
-        $this->assertNotSame($original->id, User::first()->id, 'The abandoned row is replaced, not reused.');
-        $this->assertSame('Maria', User::first()->first_name);
-    }
-
-    public function test_a_verified_account_still_blocks_a_duplicate_signup(): void
-    {
-        $this->postJson('/api/register', $this->payload())->assertStatus(201);
-        $this->postJson('/api/otp/verify', [
-            'phone_number' => '+639171234567',
-            'code' => $this->lastCode(),
-        ])->assertOk();
-
-        $this->postJson('/api/register', $this->payload(['phone_number' => '+639998887777']))
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('email');
-
-        $this->postJson('/api/register', $this->payload(['email' => 'other@example.test']))
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('phone_number');
+        $this->assertCount(1, $this->sent);
     }
 
     // -----------------------------------------------------------------
     // Verification
     // -----------------------------------------------------------------
 
-    public function test_verifying_activates_the_account_and_returns_a_session(): void
+    public function test_verifying_creates_the_account_and_returns_a_session(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
 
         $response = $this->postJson('/api/otp/verify', [
-            'phone_number' => '+639171234567',
+            'identifier' => '+639171234567',
             'code' => $this->lastCode(),
         ])->assertOk();
 
         // Same shape login returns, so the client needs no follow-up call.
-        $response->assertJsonStructure(['user' => ['id', 'email', 'role'], 'token']);
+        $response->assertJsonStructure(['user' => ['id', 'role'], 'token']);
 
         $user = User::firstOrFail();
         $this->assertSame(User::STATUS_ACTIVE, $user->account_status);
+        $this->assertSame('sms', $user->verification_channel);
         $this->assertNotNull($user->phone_verified_at);
+        $this->assertNull($user->email);
+        $this->assertSame(User::hashPhoneNumber('+639171234567'), $user->phone_number_hash);
 
-        // And the account can now log in normally.
-        $this->postJson('/api/login', ['login' => 'juan@example.test', 'password' => 'Password123!'])
+        // And the account can now log in normally, however the number is typed.
+        $this->postJson('/api/login', ['login' => '0917 123 4567', 'password' => 'Password123!'])
             ->assertOk();
     }
 
@@ -227,8 +215,8 @@ class PhoneVerificationTest extends TestCase
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
         $code = $this->lastCode();
 
-        $this->postJson('/api/otp/verify', ['phone_number' => '+639171234567', 'code' => $code])->assertOk();
-        $this->postJson('/api/otp/verify', ['phone_number' => '+639171234567', 'code' => $code])->assertStatus(422);
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $code])->assertOk();
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $code])->assertStatus(422);
     }
 
     public function test_an_expired_code_is_rejected(): void
@@ -238,11 +226,11 @@ class PhoneVerificationTest extends TestCase
 
         OtpCode::query()->update(['expires_at' => now()->subMinute()]);
 
-        $this->postJson('/api/otp/verify', ['phone_number' => '+639171234567', 'code' => $code])
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $code])
             ->assertStatus(422)
             ->assertJsonPath('reason', 'expired');
 
-        $this->assertSame(User::STATUS_PENDING_VERIFICATION, User::first()->account_status);
+        $this->assertDatabaseCount('users', 0);
     }
 
     public function test_a_code_burns_after_the_attempt_cap(): void
@@ -251,22 +239,22 @@ class PhoneVerificationTest extends TestCase
         $code = $this->lastCode();
 
         for ($i = 0; $i < OtpService::MAX_ATTEMPTS; $i++) {
-            $this->postJson('/api/otp/verify', ['phone_number' => '+639171234567', 'code' => '000000'])
+            $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => '000000'])
                 ->assertStatus(422);
         }
 
         // Even the correct code is now dead.
-        $this->postJson('/api/otp/verify', ['phone_number' => '+639171234567', 'code' => $code])
+        $this->postJson('/api/otp/verify', ['identifier' => '+639171234567', 'code' => $code])
             ->assertStatus(422);
 
-        $this->assertSame(User::STATUS_PENDING_VERIFICATION, User::first()->account_status);
+        $this->assertDatabaseCount('users', 0);
     }
 
     public function test_the_lookup_is_by_hash_so_an_unknown_number_never_matches(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
 
-        $this->postJson('/api/otp/verify', ['phone_number' => '+639998887777', 'code' => $this->lastCode()])
+        $this->postJson('/api/otp/verify', ['identifier' => '+639998887777', 'code' => $this->lastCode()])
             ->assertStatus(422);
     }
 
@@ -278,7 +266,7 @@ class PhoneVerificationTest extends TestCase
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
 
-        $this->postJson('/api/otp/resend', ['phone_number' => '+639171234567'])
+        $this->postJson('/api/otp/resend', ['identifier' => '+639171234567'])
             ->assertStatus(429)
             ->assertJsonStructure(['message', 'resend_available_in']);
 
@@ -302,47 +290,51 @@ class PhoneVerificationTest extends TestCase
 
     public function test_resend_for_an_unknown_number_looks_identical_and_sends_nothing(): void
     {
-        $response = $this->postJson('/api/otp/resend', ['phone_number' => '+639998887777'])->assertOk();
+        $response = $this->postJson('/api/otp/resend', ['identifier' => '+639998887777'])->assertOk();
 
         $response->assertJsonStructure(['message', 'resend_available_in']);
         $this->assertCount(0, $this->sent);
     }
 
     // -----------------------------------------------------------------
-    // Purge command
+    // Spent codes are pruned
     // -----------------------------------------------------------------
 
-    public function test_the_purge_command_only_removes_rows_past_the_window(): void
+    public function test_the_prune_command_removes_spent_codes_older_than_a_day_and_nothing_else(): void
     {
         $this->postJson('/api/register', $this->payload())->assertStatus(201);
-        $fresh = User::firstOrFail();
+        $fresh = OtpCode::firstOrFail();
 
-        $stale = User::factory()->create([
-            'email' => 'stale@example.test',
-            'account_status' => User::STATUS_PENDING_VERIFICATION,
-        ]);
-        $stale->forceFill(['created_at' => now()->subHours(User::PENDING_VERIFICATION_HOURS + 1)])->save();
+        $old = now()->subDays(2);
+        $usedOld = OtpCode::create(['channel' => 'email', 'identifier_hash' => 'a', 'code_hash' => 'x', 'purpose' => 'registration', 'expires_at' => $old->copy()->addMinutes(10), 'consumed_at' => $old]);
+        $expiredOld = OtpCode::create(['channel' => 'email', 'identifier_hash' => 'b', 'code_hash' => 'x', 'purpose' => 'registration', 'expires_at' => $old]);
+        $liveOld = OtpCode::create(['channel' => 'email', 'identifier_hash' => 'c', 'code_hash' => 'x', 'purpose' => 'registration', 'expires_at' => now()->addDay()]);
+        $usedRecent = OtpCode::create(['channel' => 'email', 'identifier_hash' => 'd', 'code_hash' => 'x', 'purpose' => 'registration', 'expires_at' => now()->addMinutes(10), 'consumed_at' => now()]);
 
-        $active = User::factory()->create([
-            'email' => 'active@example.test',
-            'account_status' => User::STATUS_ACTIVE,
-        ]);
-        $active->forceFill(['created_at' => now()->subYear()])->save();
+        OtpCode::whereIn('id', [$usedOld->id, $expiredOld->id, $liveOld->id])->update(['created_at' => $old]);
 
-        $this->artisan('registrations:purge-abandoned')->assertSuccessful();
+        $this->artisan('otp:prune')->expectsOutputToContain('2 code(s) deleted')->assertSuccessful();
 
-        $this->assertNotNull($fresh->fresh(), 'A pending row inside the window survives.');
-        $this->assertNull($stale->fresh(), 'A pending row past the window is deleted.');
-        $this->assertNotNull($active->fresh(), 'An active account is never touched.');
+        $this->assertNotNull($fresh->fresh(), 'A code still in play survives.');
+        $this->assertNull($usedOld->fresh());
+        $this->assertNull($expiredOld->fresh());
+        $this->assertNotNull($liveOld->fresh(), 'An old code that has not expired is left alone.');
+        $this->assertNotNull($usedRecent->fresh(), 'A recently used code stays, because the resend cooldown reads it.');
     }
 
-    public function test_the_purge_dry_run_deletes_nothing(): void
+    public function test_the_prune_dry_run_deletes_nothing_and_the_command_runs_daily(): void
     {
-        $stale = User::factory()->create(['account_status' => User::STATUS_PENDING_VERIFICATION]);
-        $stale->forceFill(['created_at' => now()->subHours(User::PENDING_VERIFICATION_HOURS + 1)])->save();
+        $old = now()->subDays(2);
+        $spent = OtpCode::create(['channel' => 'email', 'identifier_hash' => 'a', 'code_hash' => 'x', 'purpose' => 'registration', 'expires_at' => $old]);
+        OtpCode::whereKey($spent->id)->update(['created_at' => $old]);
 
-        $this->artisan('registrations:purge-abandoned --dry-run')->assertSuccessful();
+        $this->artisan('otp:prune --dry-run')->expectsOutputToContain('1 code(s) would be deleted')->assertSuccessful();
+        $this->assertNotNull($spent->fresh());
 
-        $this->assertNotNull($stale->fresh());
+        $event = collect(app(Schedule::class)->events())
+            ->first(fn ($event) => str_contains((string) $event->command, 'otp:prune'));
+
+        $this->assertNotNull($event);
+        $this->assertSame('0 0 * * *', $event->expression);
     }
 }

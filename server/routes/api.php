@@ -43,6 +43,7 @@ Route::post('/login', [AuthController::class, 'login'])->name('login')->middlewa
 Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware(['throttle:password-reset', 'recaptcha:'.RecaptchaAction::PASSWORD_FORGOT]);
 Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_RESET]);
 Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_CHALLENGE]);
+Route::post('/2fa/resend', [TwoFactorController::class, 'resend'])->middleware(['throttle:challenge-resend', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_RESEND]);
 Route::get('/verification/channels', [VerificationChannelController::class, 'index']);
 Route::get('/config/recaptcha', [RecaptchaConfigController::class, 'show']);
 

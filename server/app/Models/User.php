@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Services\Verification\Channel;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -84,10 +85,6 @@ class User extends Authenticatable
         return in_array($this->role, $roles, true);
     }
 
-    public const STATUS_PENDING_VERIFICATION = 'pending_verification';
-
-    public const PENDING_VERIFICATION_HOURS = 12;
-
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_SUSPENDED = 'suspended';
@@ -97,11 +94,6 @@ class User extends Authenticatable
 
     /** The channel timestamp login gates on, in SQL (hasVerifiedChosenChannel). */
     private const CHOSEN_CHANNEL_VERIFIED_AT = "(CASE WHEN verification_channel = 'email' THEN email_verified_at ELSE phone_verified_at END)";
-
-    public function isPendingVerification(): bool
-    {
-        return $this->account_status === self::STATUS_PENDING_VERIFICATION;
-    }
 
     public function isSuspended(): bool
     {
@@ -151,13 +143,16 @@ class User extends Authenticatable
             ->whereRaw(self::CHOSEN_CHANNEL_VERIFIED_AT.' IS NOT NULL');
     }
 
+    /**
+     * Accounts a Store Manager created that have not yet verified at first
+     * sign-in. Self-registered accounts never appear here: they are created
+     * only once their identifier is verified.
+     */
     public function scopeAwaitingVerification(Builder $query): Builder
     {
-        return $query->where(fn (Builder $where) => $where
-            ->where('account_status', self::STATUS_PENDING_VERIFICATION)
-            ->orWhere(fn (Builder $active) => $active
-                ->where('account_status', self::STATUS_ACTIVE)
-                ->whereRaw(self::CHOSEN_CHANNEL_VERIFIED_AT.' IS NULL')));
+        return $query
+            ->where('account_status', self::STATUS_ACTIVE)
+            ->whereRaw(self::CHOSEN_CHANNEL_VERIFIED_AT.' IS NULL');
     }
 
     public function hasVerifiedChannel(Channel|string|null $channel): bool
@@ -183,6 +178,29 @@ class User extends Authenticatable
     public function hasGivenPrivacyConsent(): bool
     {
         return $this->privacy_consent_at !== null;
+    }
+
+    /**
+     * Lower-cased and trimmed, so one address is one account however it is
+     * typed. Anything that is not an address is null, never a wildcard.
+     */
+    public static function normalizeEmail(?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $trimmed = mb_strtolower(trim($raw));
+
+        return filter_var($trimmed, FILTER_VALIDATE_EMAIL) ? $trimmed : null;
+    }
+
+    /** Every write goes through the same normalisation as every lookup. */
+    protected function email(): Attribute
+    {
+        return Attribute::make(
+            set: fn (?string $value) => $value === null ? null : (self::normalizeEmail($value) ?? mb_strtolower(trim($value))),
+        );
     }
 
     public static function normalizePhoneNumber(?string $raw): ?string

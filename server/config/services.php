@@ -84,8 +84,4 @@ return [
         'lock_wait' => (int) env('ROUTING_LOCK_WAIT', 3),
     ],
 
-    'session_security' => [
-        'revoke_on_device_mismatch' => (bool) env('SESSION_REVOKE_ON_DEVICE_MISMATCH', false),
-    ],
-
 ];

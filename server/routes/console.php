@@ -10,6 +10,8 @@ Artisan::command('inspire', function () {
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
 
+Schedule::command('otp:prune')->daily();
+
 Schedule::command('advance:expire-unpaid')->everyFiveMinutes()->withoutOverlapping(10);
 
 Schedule::command('advance:notify-due')->hourly();

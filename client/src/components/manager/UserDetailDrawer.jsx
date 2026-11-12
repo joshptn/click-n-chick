@@ -176,7 +176,7 @@ function UserDetailDrawer({ opened, onClose, user, isLoading, isError, error, on
           <div className="px-5 py-4">
             <div className="flex items-center gap-3">
               <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-500 font-display text-[15px] font-bold text-white">
-                {initialsOf(user.name ?? user.email)}
+                {initialsOf(user.name ?? user.email ?? user.phone_masked ?? "")}
               </span>
               <div className="min-w-0">
                 <p className="m-0 truncate font-display text-[15px] font-bold text-ink">{user.name ?? "No name"}</p>
@@ -196,7 +196,7 @@ function UserDetailDrawer({ opened, onClose, user, isLoading, isError, error, on
 
           <Section title="Contact">
             <div className="flex flex-col gap-2">
-              <Line icon={IconMail}>{user.email}</Line>
+              {user.email && <Line icon={IconMail}>{user.email}</Line>}
               {user.phone_masked && <Line icon={IconPhone}>{user.phone_masked}</Line>}
             </div>
           </Section>

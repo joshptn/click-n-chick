@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Events\NotificationBroadcast;
+use App\Jobs\SendNewDeviceAlert;
 use App\Events\SessionRevoked;
 use App\Mail\NewDeviceAlertMail;
 use App\Models\AuthEvent;
@@ -11,6 +12,7 @@ use App\Models\Notification;
 use App\Models\User;
 use App\Services\Auth\DeviceRegistrar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -820,6 +822,22 @@ class DeviceSessionTest extends TestCase
             ->count());
     }
 
+    public function test_the_new_device_alert_is_sent_from_the_queue_not_the_sign_in(): void
+    {
+        Bus::fake([SendNewDeviceAlert::class]);
+
+        $user = $this->verifiedUser('alert5@example.test');
+        $this->signInFrom($user, 'laptop');
+
+        Bus::assertNotDispatched(SendNewDeviceAlert::class);
+
+        $this->signInFrom($user, 'phone', 'Mozilla/5.0 (Linux; Android 14) Chrome/120.0');
+
+        Bus::assertDispatched(SendNewDeviceAlert::class, fn (SendNewDeviceAlert $job) => $job->userId === $user->id);
+        // Nothing but the event row is written inside the sign-in itself.
+        $this->assertSame(0, Notification::where('user_id', $user->id)->count());
+    }
+
     public function test_a_failing_alert_never_breaks_the_login(): void
     {
         $user = $this->verifiedUser('alert4@example.test');
@@ -1028,29 +1046,26 @@ class DeviceSessionTest extends TestCase
             'User-Agent' => 'Mozilla/5.0 (X11; Linux) Firefox/121.0',
         ];
 
-        // Refused every time. Revocation is off in this test (the phpunit
-        // baseline), so the token survives and the attempt can repeat - which
-        // is precisely the case the alert cooldown exists for.
+        // The first mismatch ends the session (BR-46), so a repeat from the
+        // same place is a plain unauthenticated request: no second event and
+        // no second alert, however many times it is tried.
         foreach (range(1, 4) as $ignored) {
             $this->actingAsDevice($token, $headers)->getJson('/api/user')->assertUnauthorized();
         }
 
-        // Every occurrence is recorded - the audit trail must be complete...
-        $this->assertSame(4, AuthEvent::where('user_id', $user->id)
+        $this->assertSame(1, AuthEvent::where('user_id', $user->id)
             ->where('event_type', DeviceRegistrar::EVENT_DEVICE_MISMATCH)
             ->count());
 
-        // ...but an alert delivered four times is an alert nobody reads.
         $this->assertSame(1, Notification::where('user_id', $user->id)
             ->where('title', 'Session used from a new device')
             ->count());
         Mail::assertSentCount(1);
     }
 
-    public function test_mismatch_can_be_configured_to_kill_the_session(): void
+    public function test_a_mismatch_ends_the_session(): void
     {
         Mail::fake();
-        config(['services.session_security.revoke_on_device_mismatch' => true]);
 
         $user = $this->verifiedUser('mismatch5@example.test');
         $token = $this->signInFrom($user, 'the-real-laptop');
@@ -1062,9 +1077,10 @@ class DeviceSessionTest extends TestCase
 
         $this->actingAsDevice($token, $stolen)->getJson('/api/user')->assertUnauthorized();
 
-        // Off by default, but when armed the token is genuinely destroyed -
-        // the real device loses it too, which is the intended trade.
+        // The token is destroyed, so the real device loses it too (BR-46,
+        // FR-01.17): a session is bound to the device it began on.
         $this->actingAsDevice($token)->getJson('/api/user')->assertUnauthorized();
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     /**
@@ -1112,11 +1128,10 @@ class DeviceSessionTest extends TestCase
         $this->actingAsDevice($token)->getJson('/api/user')->assertOk();
     }
 
-    /** Even with revocation armed, a missing header must not destroy a session. */
+    /** A missing header must not destroy a session: absent evidence is not a mismatch. */
     public function test_a_missing_device_hint_never_destroys_the_session(): void
     {
         Mail::fake();
-        config()->set('services.session_security.revoke_on_device_mismatch', true);
 
         $user = $this->verifiedUser('mismatch8@example.test');
         $token = $this->signInFrom($user, 'the-real-laptop');

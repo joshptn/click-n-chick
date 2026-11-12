@@ -85,10 +85,9 @@ class UserManagementController extends Controller
     /**
      * POST /api/admin/users
      *
-     * `active` with no channel verified: login still demands verification, on
-     * the timestamp rather than the status. Deliberately not
-     * pending_verification, which public registration may overwrite (taking the
-     * role with it) and the purge job deletes.
+     * One identifier, a phone number or an email address, as at public sign-up;
+     * the code at first sign-in goes to it. `active` with nothing verified:
+     * login demands verification on the timestamp, not the status.
      *
      * The new password is `new_password` because `password` is the Manager's own
      * step-up field.
@@ -100,28 +99,29 @@ class UserManagementController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')],
-            'phone_number' => ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'],
+            'identifier' => ['required', 'string', 'max:255'],
             'new_password' => ['required', 'string', 'confirmed', new StrongPassword],
             'role' => ['required', 'string', Rule::in(User::ROLES)],
-            'verification_channel' => ['sometimes', 'string', Rule::in(Channel::values())],
         ]);
 
-        $phoneHash = User::hashPhoneNumber($validated['phone_number']);
+        $channel = Channel::forIdentifier($validated['identifier']);
+        $transport = $channel === null ? null : $channels->for($channel);
+        $identifier = $transport?->normalize($validated['identifier']);
 
-        if ($phoneHash === null) {
-            throw ValidationException::withMessages(['phone_number' => 'Enter a valid Philippine mobile number.']);
+        if ($identifier === null) {
+            throw ValidationException::withMessages(['identifier' => 'Enter a valid Philippine mobile number or email address.']);
         }
-
-        if (User::where('phone_number_hash', $phoneHash)->exists()) {
-            throw ValidationException::withMessages(['phone_number' => 'This phone number is already registered.']);
-        }
-
-        $channel = Channel::tryFromValue($validated['verification_channel'] ?? null) ?? $channels->defaultChannel();
-        $transport = $channels->for($channel);
 
         if (! $transport->isAvailable()) {
-            throw ValidationException::withMessages(['verification_channel' => $transport->unavailableReason()]);
+            throw ValidationException::withMessages(['identifier' => $transport->unavailableReason()]);
+        }
+
+        if ($transport->findUser($identifier) !== null) {
+            throw ValidationException::withMessages([
+                'identifier' => $channel === Channel::Email
+                    ? 'This email address is already registered.'
+                    : 'This phone number is already registered.',
+            ]);
         }
 
         // Set one by one: role and status are what this endpoint exists to
@@ -129,13 +129,18 @@ class UserManagementController extends Controller
         $user = new User;
         $user->first_name = $validated['first_name'];
         $user->last_name = $validated['last_name'];
-        $user->email = $validated['email'];
-        $user->phone_number = $validated['phone_number'];
-        $user->phone_number_hash = $phoneHash;
         $user->password = $validated['new_password'];
         $user->role = $validated['role'];
         $user->verification_channel = $channel->value;
         $user->account_status = User::STATUS_ACTIVE;
+
+        if ($channel === Channel::Email) {
+            $user->email = $identifier;
+        } else {
+            $user->phone_number = $identifier;
+            $user->phone_number_hash = User::hashPhoneNumber($identifier);
+        }
+
         $user->save();
 
         return response()->json([
@@ -154,10 +159,6 @@ class UserManagementController extends Controller
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
         ]);
-
-        if ($user->isPendingVerification()) {
-            return $this->refuse('This registration has not been completed yet.', 'ACCOUNT_PENDING');
-        }
 
         $user->first_name = $validated['first_name'];
         $user->last_name = $validated['last_name'];
@@ -181,11 +182,6 @@ class UserManagementController extends Controller
 
         $result = DB::transaction(function () use ($user, $validated) {
             $target = $this->locked($user);
-
-            if ($target->isPendingVerification()) {
-                // Registration can still rewrite this row, so it must not gain a role.
-                return $this->refuse('This registration has not been completed yet.', 'ACCOUNT_PENDING');
-            }
 
             if ($target->isSuspended()) {
                 return $this->refuse('Reactivate this account before changing its role.', 'ACCOUNT_SUSPENDED');
@@ -230,10 +226,6 @@ class UserManagementController extends Controller
 
         $result = DB::transaction(function () use ($user) {
             $target = $this->locked($user);
-
-            if ($target->isPendingVerification()) {
-                return $this->refuse('This registration has not been completed yet.', 'ACCOUNT_PENDING');
-            }
 
             if ($target->isSuspended()) {
                 return $this->refuse('This account is already suspended.', 'ALREADY_SUSPENDED');

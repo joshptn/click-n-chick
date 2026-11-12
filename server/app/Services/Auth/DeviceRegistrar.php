@@ -2,19 +2,15 @@
 
 namespace App\Services\Auth;
 
-use Illuminate\Http\Exceptions\HttpResponseException;
-use App\Events\NotificationBroadcast;
-use App\Mail\NewDeviceAlertMail;
+use App\Jobs\SendNewDeviceAlert;
 use App\Models\AuthEvent;
 use App\Models\KnownDevice;
-use App\Models\Notification;
 use App\Models\User;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\NewAccessToken;
 use Throwable;
-
 
 class DeviceRegistrar
 {
@@ -26,7 +22,7 @@ class DeviceRegistrar
 
     public const CUSTOMER_SESSION_MINUTES = 20160; // 14 days
 
-    public const STAFF_SESSION_MINUTES = 720; // 12 hours
+    public const STAFF_SESSION_MINUTES = 840; // 14 hours (BR-46)
 
     public function register(User $user, Request $request): KnownDevice
     {
@@ -53,6 +49,12 @@ class DeviceRegistrar
 
         return $device;
     }
+
+    /**
+     * The event row is written here, inside the sign-in. The notification and
+     * the email go through the queue (SendNewDeviceAlert), so the sign-in does
+     * not wait on Reverb or the mail provider.
+     */
     private function recordUnrecognisedLogin(User $user, KnownDevice $device, Request $request, bool $alert): void
     {
         try {
@@ -71,28 +73,9 @@ class DeviceRegistrar
         }
 
         try {
-            $notification = Notification::create([
-                'user_id' => $user->getKey(),
-                'title' => 'New sign-in detected',
-                'body' => sprintf(
-                    'Your account was just signed in to from %s (%s). If this was not you, sign that device out and change your password.',
-                    $device->device_name ?? 'an unrecognised device',
-                    $device->last_ip_address ?? 'unknown IP'
-                ),
-                'is_read' => false,
-            ]);
-
-            NotificationBroadcast::dispatch($notification, (int) $user->getKey());
+            SendNewDeviceAlert::dispatch((int) $user->getKey(), (int) $device->getKey(), $request->ip());
         } catch (Throwable $e) {
-            Log::warning('Could not raise a new-device notification.', ['error' => $e->getMessage()]);
-        }
-
-        try {
-            if (filled($user->email)) {
-                Mail::to($user->email)->send(new NewDeviceAlertMail($device, $user->first_name));
-            }
-        } catch (Throwable $e) {
-            Log::warning('Could not email a new-device alert.', ['error' => $e->getMessage()]);
+            Log::warning('Could not queue a new-device alert.', ['error' => $e->getMessage()]);
         }
     }
 

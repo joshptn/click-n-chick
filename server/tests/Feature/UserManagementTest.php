@@ -8,6 +8,7 @@ use App\Models\Discount;
 use App\Models\Order;
 use App\Models\OtpCode;
 use App\Models\Payment;
+use App\Http\Controllers\AuthController;
 use App\Models\User;
 use App\Services\Auth\DeviceRegistrar;
 use App\Services\Media\CloudinaryService;
@@ -56,12 +57,10 @@ class UserManagementTest extends TestCase
         return $overrides + [
             'first_name' => 'Ana',
             'last_name' => 'Reyes',
-            'email' => 'ana@example.test',
-            'phone_number' => '09171234567',
+            'identifier' => 'ana@example.test',
             'new_password' => 'Brand-New-1',
             'new_password_confirmation' => 'Brand-New-1',
             'role' => User::ROLE_ADMIN,
-            'verification_channel' => 'email',
         ] + self::CONFIRM;
     }
 
@@ -216,7 +215,7 @@ class UserManagementTest extends TestCase
 
         $this->postJson('/api/login', ['login' => 'ana@example.test', 'password' => 'Brand-New-1'])
             ->assertForbidden()
-            ->assertJsonPath('status', User::STATUS_PENDING_VERIFICATION)
+            ->assertJsonPath('status', AuthController::STATUS_PENDING_VERIFICATION)
             ->assertJsonMissingPath('token');
     }
 
@@ -235,7 +234,7 @@ class UserManagementTest extends TestCase
 
         $this->postJson('/api/login', $login)
             ->assertForbidden()
-            ->assertJsonPath('status', User::STATUS_PENDING_VERIFICATION)
+            ->assertJsonPath('status', AuthController::STATUS_PENDING_VERIFICATION)
             ->assertJsonPath('resend_available_in', OtpService::RESEND_COOLDOWN_SECONDS);
         Mail::assertSent(VerificationCodeMail::class, 1);
 
@@ -244,16 +243,39 @@ class UserManagementTest extends TestCase
         Mail::assertSent(VerificationCodeMail::class, 1);
     }
 
-    public function test_signing_in_with_the_other_identifier_sends_nothing(): void
+    public function test_an_account_created_with_a_phone_number_has_no_email_to_sign_in_with(): void
+    {
+        Mail::fake();
+        $this->enableSmsChannel();
+
+        $this->as($this->manager(), 'postJson', '/api/admin/users', $this->payload(['identifier' => '09171234567']))
+            ->assertCreated()
+            ->assertJsonPath('data.email', null)
+            ->assertJsonPath('data.verification.channel', 'sms');
+        $this->app['auth']->forgetGuards();
+
+        // No email was ever given, so there is nothing to sign in with there
+        // and nothing to send a code to.
+        $this->postJson('/api/login', ['login' => 'ana@example.test', 'password' => 'Brand-New-1'])->assertUnauthorized();
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_created_account_cannot_sign_in_with_an_identifier_it_has_not_verified(): void
     {
         Mail::fake();
 
         $this->as($this->manager(), 'postJson', '/api/admin/users', $this->payload())->assertCreated();
         $this->app['auth']->forgetGuards();
 
+        // A phone number added to the row later but never verified.
+        $created = User::where('email', 'ana@example.test')->firstOrFail();
+        $created->forceFill(['phone_number' => '+639171234567', 'phone_number_hash' => User::hashPhoneNumber('+639171234567')])->save();
+
         $this->postJson('/api/login', ['login' => '09171234567', 'password' => 'Brand-New-1'])
             ->assertForbidden()
-            ->assertJsonPath('sign_in_with_channel', true);
+            ->assertJsonPath('sign_in_with_channel', true)
+            ->assertJsonPath('verification_channel', 'email');
 
         Mail::assertNothingSent();
     }
@@ -264,9 +286,9 @@ class UserManagementTest extends TestCase
         $this->app['auth']->forgetGuards();
 
         $this->postJson('/api/register', [
-            'first_name' => 'Evil', 'last_name' => 'Twin', 'email' => 'ana@example.test',
-            'password' => 'Takeover-1', 'password_confirmation' => 'Takeover-1', 'phone_number' => '09179999999',
-        ])->assertUnprocessable();
+            'first_name' => 'Evil', 'last_name' => 'Twin', 'identifier' => 'ana@example.test',
+            'password' => 'Takeover-1', 'password_confirmation' => 'Takeover-1',
+        ])->assertUnprocessable()->assertJsonValidationErrors('identifier');
 
         $this->assertTrue(Hash::check('Brand-New-1', User::where('email', 'ana@example.test')->value('password')));
     }
@@ -276,8 +298,10 @@ class UserManagementTest extends TestCase
         $manager = $this->manager();
         $this->user(attributes: ['email' => 'taken@example.test', 'phone_number_hash' => User::hashPhoneNumber('09170000000')]);
 
-        $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['email' => 'taken@example.test']))->assertJsonValidationErrors('email');
-        $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['phone_number' => '0917-000-0000']))->assertJsonValidationErrors('phone_number');
+        $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['identifier' => 'taken@example.test']))->assertJsonValidationErrors('identifier');
+        $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['identifier' => 'TAKEN@Example.test']))->assertJsonValidationErrors('identifier');
+        $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['identifier' => '0917-000-0000']))->assertJsonValidationErrors('identifier');
+        $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['identifier' => 'not-an-identifier']))->assertJsonValidationErrors('identifier');
         $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['new_password' => 'weak', 'new_password_confirmation' => 'weak']))->assertJsonValidationErrors('new_password');
         $this->as($manager, 'postJson', '/api/admin/users', $this->payload(['role' => 'wizard']))->assertJsonValidationErrors('role');
 
@@ -354,16 +378,22 @@ class UserManagementTest extends TestCase
         $this->assertSame(User::STATUS_ACTIVE, $actor->fresh()->account_status);
     }
 
-    public function test_a_pending_or_suspended_account_cannot_be_given_a_role(): void
+    public function test_a_suspended_account_cannot_be_given_a_role(): void
     {
         $manager = $this->manager();
+        $target = $this->user(attributes: ['account_status' => User::STATUS_SUSPENDED]);
 
-        foreach ([User::STATUS_PENDING_VERIFICATION, User::STATUS_SUSPENDED] as $status) {
-            $target = $this->user(attributes: ['account_status' => $status]);
+        $this->as($manager, 'patchJson', "/api/admin/users/{$target->id}", ['role' => User::ROLE_SUPER_ADMIN] + self::CONFIRM)->assertStatus(422);
+        $this->assertSame(User::ROLE_CUSTOMER, $target->fresh()->role);
+    }
 
-            $this->as($manager, 'patchJson', "/api/admin/users/{$target->id}", ['role' => User::ROLE_SUPER_ADMIN] + self::CONFIRM)->assertStatus(422);
-            $this->assertSame(User::ROLE_CUSTOMER, $target->fresh()->role);
-        }
+    public function test_a_created_email_is_stored_lower_case_whatever_was_typed(): void
+    {
+        $this->as($this->manager(), 'postJson', '/api/admin/users', $this->payload(['identifier' => ' Ana.Reyes@Example.TEST ']))
+            ->assertCreated()
+            ->assertJsonPath('data.email', 'ana.reyes@example.test');
+
+        $this->assertDatabaseHas('users', ['email' => 'ana.reyes@example.test']);
     }
 
     // -----------------------------------------------------------------

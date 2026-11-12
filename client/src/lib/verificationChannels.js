@@ -11,8 +11,6 @@ export const CHANNEL_COPY = {
     heading: "Verify your phone",
     eyebrow: "One last step for",
     sentTo: "a 6-digit code to",
-    // The request field the API expects the identifier under.
-    field: "phone_number",
     autoComplete: "one-time-code",
   },
   [CHANNELS.EMAIL]: {
@@ -20,7 +18,6 @@ export const CHANNEL_COPY = {
     heading: "Verify your email",
     eyebrow: "One last step for",
     sentTo: "a 6-digit code to",
-    field: "email",
     autoComplete: "one-time-code",
   },
 };

@@ -26,7 +26,7 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
 
   const copy = CHANNEL_COPY[channel] ?? CHANNEL_COPY[CHANNELS.SMS];
 
-  const { identifier, maskedIdentifier, resendAvailableIn } = location.state ?? {};
+  const { identifier, maskedIdentifier, resendAvailableIn, from } = location.state ?? {};
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -62,7 +62,7 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
         body: JSON.stringify(
           await withRecaptcha(
-            { [copy.field]: identifier, code: e.target.code.value.trim() },
+            { identifier, code: e.target.code.value.trim() },
             RECAPTCHA_ACTIONS.OTP_VERIFY
           )
         ),
@@ -71,11 +71,21 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
 
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.message || "That code is not correct.");
+      if (!response.ok) {
+        // The sign-up details waited in the cache for a limited time and are
+        // gone; the only way forward is to sign up again.
+        if (data.reason === "registration_expired") {
+          toast.warning(data.message, "Start again");
+          nav("/register", { replace: true });
+          return;
+        }
+
+        throw new Error(data.message || "That code is not correct.");
+      }
 
       adoptSession(data);
       toast.success("Your account is verified.", "Welcome to Click n Chick");
-      nav(ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
+      nav(from ?? ROLE_DESTINATIONS[data?.user?.role] ?? "/home", { replace: true });
     } catch (err) {
       setError(err.message);
       if (codeRef.current) codeRef.current.value = "";
@@ -92,7 +102,7 @@ function VerifyCode({ channel = CHANNELS.SMS }) {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
         body: JSON.stringify(
-          await withRecaptcha({ [copy.field]: identifier }, RECAPTCHA_ACTIONS.OTP_RESEND)
+          await withRecaptcha({ identifier }, RECAPTCHA_ACTIONS.OTP_RESEND)
         ),
         credentials: "include",
       });

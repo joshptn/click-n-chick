@@ -2,18 +2,16 @@
 
 namespace App\Http\Middleware;
 
-use App\Events\NotificationBroadcast;
+use App\Jobs\SendNewDeviceAlert;
 use App\Mail\NewDeviceAlertMail;
 use App\Models\AuthEvent;
 use App\Models\KnownDevice;
-use App\Models\Notification;
 use App\Models\User;
 use App\Services\Auth\DeviceRegistrar;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -85,9 +83,9 @@ class DetectDeviceMismatch
 
         $this->raise($user, $device, $request, (int) $token->getKey());
 
-        if (config('services.session_security.revoke_on_device_mismatch', false)) {
-            $token->delete();
-        }
+        // BR-46 / FR-01.17: a session is bound to the device it began on, so one
+        // presented from another device is ended, for the real device too.
+        $token->delete();
 
         return self::FAILURE_MISMATCH;
     }
@@ -109,32 +107,14 @@ class DetectDeviceMismatch
         }
 
         try {
-            $notification = Notification::create([
-                'user_id' => $user->getKey(),
-                'title' => 'Session used from a new device',
-                'body' => sprintf(
-                    'A sign-in created on %s was just used from somewhere else (%s). If this was not you, sign that device out and change your password.',
-                    $device->device_name ?? 'another device',
-                    $request->ip() ?? 'unknown IP'
-                ),
-                'is_read' => false,
-            ]);
-
-            NotificationBroadcast::dispatch($notification, (int) $user->getKey());
+            SendNewDeviceAlert::dispatch(
+                (int) $user->getKey(),
+                (int) $device->getKey(),
+                $request->ip(),
+                NewDeviceAlertMail::CONTEXT_SESSION_MOVED,
+            );
         } catch (Throwable $e) {
-            Log::warning('Could not raise a device-mismatch notification.', ['error' => $e->getMessage()]);
-        }
-
-        try {
-            if (filled($user->email)) {
-                Mail::to($user->email)->send(new NewDeviceAlertMail(
-                    $device,
-                    $user->first_name,
-                    NewDeviceAlertMail::CONTEXT_SESSION_MOVED,
-                ));
-            }
-        } catch (Throwable $e) {
-            Log::warning('Could not email a device-mismatch alert.', ['error' => $e->getMessage()]);
+            Log::warning('Could not queue a device-mismatch alert.', ['error' => $e->getMessage()]);
         }
     }
 }

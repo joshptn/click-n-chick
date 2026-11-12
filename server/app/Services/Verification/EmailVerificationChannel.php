@@ -83,9 +83,9 @@ class EmailVerificationChannel implements VerificationChannel
 
     public function send(string $identifier, string $code): void
     {
-        // Sent synchronously: registration blocks on this code arriving, so a
-        // queue would add a failure mode with nothing watching it. There is no
-        // queue worker configured for this app yet.
+        // Sent inside the request on purpose: sign-up reports a failed send on
+        // the spot, and the resend button covers the rest. By stakeholder
+        // decision (2026-11-12) this is not queued.
         Mail::to($identifier)->send(new VerificationCodeMail($code));
     }
 }

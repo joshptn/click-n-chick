@@ -30,7 +30,10 @@ Object.assign(process.env, {
   QUEUE_CONNECTION: "sync",
   // Nothing leaves the machine.
   MAIL_MAILER: "array",
+  SMS_DRIVER: "log",
   RECAPTCHA_ENABLED: "false",
+  // A site key in client/.env would otherwise load Google's script into every test.
+  VITE_RECAPTCHA_SITE_KEY: "",
   // Open around the clock, so the suite can run at any hour.
   STORE_OPENS_AT: "00:00",
   STORE_CLOSES_AT: "23:59",
