@@ -8,9 +8,7 @@ use App\Services\Sms\SmsSender;
 
 class SmsVerificationChannel implements VerificationChannel
 {
-    public function __construct(private SmsSender $sms)
-    {
-    }
+    public function __construct(private SmsSender $sms) {}
 
     public function channel(): Channel
     {
@@ -54,17 +52,24 @@ class SmsVerificationChannel implements VerificationChannel
     }
 
     /**
-     * Available only when a real provider is configured.
+     * Available when a real provider is configured, or on a local machine.
      *
      * SMS_DRIVER=log writes the code to the application log and dispatches
-     * nothing, so offering it to a user would be a dead end. Setting
-     * SMS_DRIVER=semaphore with a key present turns this - and the phone option
-     * in every channel picker - back on with no code or UI change.
+     * nothing. Anywhere else that would be a dead end for the user, but locally
+     * the developer reads the code from storage/logs/laravel.log, so phone
+     * sign-up and 2FA work there without spending Semaphore credits. Tests run
+     * as 'testing' and production as 'production', so neither is affected.
+     * SMS_DRIVER=semaphore with a key present turns it on everywhere.
      */
     public function isAvailable(): bool
     {
-        return config('services.sms.driver') === 'semaphore'
-            && filled(config('services.semaphore.key'));
+        $driver = config('services.sms.driver');
+
+        if ($driver === 'semaphore') {
+            return filled(config('services.semaphore.key'));
+        }
+
+        return $driver === 'log' && app()->environment('local');
     }
 
     public function unavailableReason(): ?string
