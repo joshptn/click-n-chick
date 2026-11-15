@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\NotificationBroadcast;
 use App\Models\Notification;
+use App\Models\PushToken;
 use App\Models\User;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -48,5 +49,10 @@ class NotifyEveryAccount implements ShouldQueue
                     NotificationBroadcast::dispatch($notification, (int) $user->id);
                 }
             });
+
+        // Only when some customer has a device to receive it.
+        if (PushToken::query()->forCustomers()->exists()) {
+            PushToEveryCustomer::dispatch($this->title, $this->body);
+        }
     }
 }
