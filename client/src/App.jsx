@@ -7,6 +7,7 @@ import AdminRoutes from './providers/AdminRoutes'
 import PageFallback from './components/app/PageFallback'
 import OfflineNotice from './components/app/OfflineNotice'
 import InstalledStaffGate from './components/app/InstalledStaffGate'
+import PushRegistration from './components/app/PushRegistration'
 import { pages } from './lib/pages'
 
 const {
@@ -126,6 +127,7 @@ function App() {
         </Suspense>
       </InstalledStaffGate>
       <OfflineNotice />
+      <PushRegistration />
     </>
   )
 }
