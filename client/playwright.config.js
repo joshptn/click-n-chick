@@ -34,6 +34,10 @@ Object.assign(process.env, {
   RECAPTCHA_ENABLED: "false",
   // A site key in client/.env would otherwise load Google's script into every test.
   VITE_RECAPTCHA_SITE_KEY: "",
+  // Likewise Firebase: 
+  VITE_FIREBASE_API_KEY: "",
+  VITE_FIREBASE_VAPID_KEY: "",
+  FIREBASE_CREDENTIALS: "",
   // Open around the clock, so the suite can run at any hour.
   STORE_OPENS_AT: "00:00",
   STORE_CLOSES_AT: "23:59",
