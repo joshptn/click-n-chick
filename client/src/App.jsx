@@ -5,6 +5,8 @@ import PrivateRoutes from './providers/PrivateRoutes'
 import { ROLES } from './lib/roles'
 import AdminRoutes from './providers/AdminRoutes'
 import PageFallback from './components/app/PageFallback'
+import OfflineNotice from './components/app/OfflineNotice'
+import InstalledStaffGate from './components/app/InstalledStaffGate'
 import { pages } from './lib/pages'
 
 const {
@@ -117,9 +119,14 @@ function App() {
   // Navigations run as transitions (React Router), so moving between pages
   // keeps the current one on screen while the next one's code arrives.
   return (
-    <Suspense fallback={<PageFallback />}>
-      <Routes>{routes}</Routes>
-    </Suspense>
+    <>
+      <InstalledStaffGate>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>{routes}</Routes>
+        </Suspense>
+      </InstalledStaffGate>
+      <OfflineNotice />
+    </>
   )
 }
 
