@@ -14,6 +14,10 @@ export function markAllNotificationsRead() {
   return api.post("/api/notifications/read-all");
 }
 
+/** Where a notification opens. A tapped push opens the same (public/push-sw.js). */
 export function notificationTarget(notification) {
-  return notification?.order_id ? `/orders/${notification.order_id}` : null;
+  if (notification?.order_id) return `/orders/${notification.order_id}`;
+  if (notification?.notification_type === "security") return "/account/security";
+
+  return null;
 }

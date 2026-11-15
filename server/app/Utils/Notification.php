@@ -3,6 +3,7 @@
 namespace App\Utils;
 
 use App\Events\NotificationBroadcast;
+use App\Jobs\SendPushNotification;
 use App\Models\Notification as ModelsNotification;
 use App\Models\Order;
 use App\Services\Orders\OrderNotice;
@@ -26,6 +27,7 @@ class Notification
         ]);
 
         NotificationBroadcast::dispatch($notification, $userId);
+        SendPushNotification::forNotification($notification);
 
         return $notification;
     }

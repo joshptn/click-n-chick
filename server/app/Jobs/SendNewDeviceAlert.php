@@ -61,10 +61,13 @@ class SendNewDeviceAlert implements ShouldQueue
                         $device->device_name ?? 'an unrecognised device',
                         $device->last_ip_address ?? 'unknown IP'
                     ),
+                // Opens the Security page when tapped, in the bell and as a push.
+                'notification_type' => 'security',
                 'is_read' => false,
             ]);
 
             NotificationBroadcast::dispatch($notification, (int) $user->getKey());
+            SendPushNotification::forNotification($notification);
         } catch (Throwable $e) {
             Log::warning('Could not raise a new-device notification.', ['error' => $e->getMessage()]);
         }

@@ -6,6 +6,7 @@ use App\Services\Geo\OpenRouteServiceClient;
 use App\Services\Geo\RoutingProvider;
 use App\Services\Mail\GmailOAuth;
 use App\Services\Mail\GmailTransport;
+use App\Services\Push\FcmClient;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SemaphoreClient;
 use App\Services\Sms\SmsSender;
@@ -48,6 +49,9 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
+        // Read when first used, so a test can set the Firebase config before it.
+        $this->app->bind(FcmClient::class, fn () => FcmClient::fromConfig());
+
         $this->app->singleton(ChannelRegistry::class, function ($app) {
             return new ChannelRegistry([
                 Channel::Sms->value => new SmsVerificationChannel($app->make(SmsSender::class)),
@@ -89,6 +93,12 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('user-update', function (Request $request) {
             return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // The apps register their push token each time they open, so this has
+        // its own allowance rather than spending the account's update budget.
+        RateLimiter::for('push-token', function (Request $request) {
+            return Limit::perMinute(20)->by('push-token:'.($request->user()?->id ?: $request->ip()));
         });
 
         RateLimiter::for('device-trust', function (Request $request) {

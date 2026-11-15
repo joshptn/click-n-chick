@@ -50,6 +50,18 @@ return [
         'timeout' => (int) env('GMAIL_TIMEOUT', 10),
     ],
 
+    /*
+     * Push through Firebase Cloud Messaging (HTTP v1). FIREBASE_CREDENTIALS is
+     * the service account key: its JSON, or that JSON base64-encoded (easier to
+     * paste into Render). A secret: never commit it. Unset, pushes are skipped
+     * and the in-app notifications still go out.
+     */
+    'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+        'project_id' => env('FIREBASE_PROJECT_ID'),
+        'timeout' => (int) env('FIREBASE_TIMEOUT', 10),
+    ],
+
     'nominatim' => [
         'endpoint' => env('NOMINATIM_ENDPOINT', 'https://nominatim.openstreetmap.org'),
 

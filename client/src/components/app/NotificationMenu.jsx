@@ -6,6 +6,7 @@ import { IconBell } from "@tabler/icons-react";
 import { useNotifications } from "../../context/useNotifications";
 import { useRealtime } from "../../context/useRealtime";
 import { notificationTarget } from "../../lib/notifications";
+import PushToggle from "./PushToggle";
 
 /**
  * The bell and its inbox.
@@ -75,6 +76,9 @@ function NotificationMenu({
             )}
           </span>
         </Menu.Label>
+
+        {/* Mounted with the dropdown, so it reads the permission fresh each time. */}
+        <PushToggle />
 
         {items.length === 0 ? (
           <div className="px-3 py-6 text-center">

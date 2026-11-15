@@ -52,6 +52,9 @@ export function buildPolicy(env, { dev = false } = {}) {
       ...(api ? [api] : []),
       ...sockets,
       "https://www.google.com",
+      // Firebase Cloud Messaging, when a customer turns push on (lib/push.js).
+      "https://firebaseinstallations.googleapis.com",
+      "https://fcmregistrations.googleapis.com",
       ...(dev ? ["ws:", "wss:"] : []),
     ],
     "frame-src": ["https://www.google.com/recaptcha/", "https://recaptcha.google.com/recaptcha/"],

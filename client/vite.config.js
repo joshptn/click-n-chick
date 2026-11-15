@@ -54,6 +54,8 @@ export default defineConfig(({ mode }) => {
           globIgnores: ['**/apple-splash-*', 'pwa-source.png', 'vite.svg'],
           navigateFallback: '/index.html',
           cleanupOutdatedCaches: true,
+          // Shows pushes and opens the right page when one is tapped (PRD §9).
+          importScripts: ['push-sw.js'],
         },
       }),
     ],
