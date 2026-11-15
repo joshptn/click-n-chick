@@ -23,6 +23,7 @@ use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PushTokenController;
 use App\Http\Controllers\RecaptchaConfigController;
 use App\Http\Controllers\SalesReportController;
 use App\Http\Controllers\StockController;
@@ -128,6 +129,12 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::put('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
+
+    // Push to the installed PWA and the native app: customer accounts only.
+    Route::middleware(['role:customer', 'throttle:push-token'])->group(function () {
+        Route::post('/push-tokens', [PushTokenController::class, 'store']);
+        Route::delete('/push-tokens', [PushTokenController::class, 'destroy']);
+    });
 
     Route::get('/cart', [CartController::class, 'index']);
     Route::post('/cart/items', [CartController::class, 'store']);
