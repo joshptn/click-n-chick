@@ -35,6 +35,8 @@
         <env name="RECAPTCHA_ENABLED" value="false"/>
         <env name="RECAPTCHA_SITE_KEY" value=""/>
         <env name="RECAPTCHA_SECRET_KEY" value=""/>
+        <!-- Never the real Firebase key: push tests set a throwaway one and fake Google. -->
+        <env name="FIREBASE_CREDENTIALS" value=""/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
