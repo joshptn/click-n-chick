@@ -10,9 +10,11 @@ import { BrandSplash } from "../components/BrandSplash";
 import { OfflineNotice } from "../components/OfflineNotice";
 import { ToastHost } from "../components/ToastHost";
 import { CartProvider } from "../hooks/useCart";
+import { useRealtimeConnection } from "../hooks/useRealtime";
 import { useSession } from "../hooks/useSession";
 import { queryClient } from "../lib/queryClient";
 import { loadGuestToken } from "../lib/guestCart";
+import { loadGuestOrders } from "../lib/guestOrders";
 import { loadSession } from "../lib/session";
 import { colors } from "../theme/colors";
 import { fontFiles } from "../theme/fonts";
@@ -36,6 +38,8 @@ export const unstable_settings = {
  * - (tabs)    Home, Cart, and while signed in Notif and Profile: customers
  *             and guests alike (the tabs guard their own signed-in screens);
  * - food/[id] a dish, open to everyone;
+ * - track/[token] a guest's order from its tracking link, open to everyone;
+ * - orders/[id] a customer's order, only while signed in;
  * - (auth)    sign-in screens, only while signed out.
  * Customer module only: there are no staff routes (PRD §9).
  */
@@ -46,7 +50,7 @@ export default function RootLayout() {
   // The guest's cart key first, so the cart knows whether there is one to
   // load by the time the session is ready.
   useEffect(() => {
-    loadGuestToken().finally(loadSession);
+    Promise.all([loadGuestToken(), loadGuestOrders()]).finally(loadSession);
   }, []);
 
   // A font that fails to load falls back to the system face rather than
@@ -72,11 +76,17 @@ export default function RootLayout() {
             <Stack.Screen name="(public)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="food/[id]" />
+            <Stack.Screen name="track/[token]" />
+
+            <Stack.Protected guard={session.signedIn}>
+              <Stack.Screen name="orders/[id]" />
+            </Stack.Protected>
 
             <Stack.Protected guard={!session.signedIn}>
               <Stack.Screen name="(auth)" />
             </Stack.Protected>
           </Stack>
+          <Realtime />
           <ToastHost />
           <OfflineNotice />
           {!splashDone && <BrandSplash onDone={finishSplash} />}
@@ -84,4 +94,10 @@ export default function RootLayout() {
       </QueryClientProvider>
     </SafeAreaProvider>
   );
+}
+
+/** Live updates for the whole app (hooks/useRealtime.ts); draws nothing. */
+function Realtime() {
+  useRealtimeConnection();
+  return null;
 }
