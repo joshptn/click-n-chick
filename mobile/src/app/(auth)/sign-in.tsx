@@ -147,7 +147,7 @@ export default function SignIn() {
           <PromptRow prompt="Don't have an account?">
             <TextLink label="Sign up" onPress={() => router.replace("/sign-up")} testID="go-sign-up" />
           </PromptRow>
-          <QuietLink label="Continue without an account" onPress={() => router.push("/menu")} testID="continue-as-guest" />
+          <QuietLink label="Continue without an account" onPress={() => router.dismissTo("/home")} testID="continue-as-guest" />
         </View>
       </View>
     </AuthCard>

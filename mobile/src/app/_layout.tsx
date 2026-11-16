@@ -8,8 +8,11 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { BrandSplash } from "../components/BrandSplash";
 import { OfflineNotice } from "../components/OfflineNotice";
+import { ToastHost } from "../components/ToastHost";
+import { CartProvider } from "../hooks/useCart";
 import { useSession } from "../hooks/useSession";
 import { queryClient } from "../lib/queryClient";
+import { loadGuestToken } from "../lib/guestCart";
 import { loadSession } from "../lib/session";
 import { colors } from "../theme/colors";
 import { fontFiles } from "../theme/fonts";
@@ -28,19 +31,22 @@ export const unstable_settings = {
 };
 
 /**
- * Three route groups, guarded by the session (Expo Router protected routes):
- * - (public)  open to everyone;
- * - (auth)    sign-in screens, only while signed out;
- * - (account) only while signed in. When a session ends, the app leaves these
- *   by itself.
+ * The route groups, guarded by the session (Expo Router protected routes):
+ * - (public)  the landing page, for signed-out visitors;
+ * - (tabs)    Home, Cart, and while signed in Notif and Profile: customers
+ *             and guests alike (the tabs guard their own signed-in screens);
+ * - food/[id] a dish, open to everyone;
+ * - (auth)    sign-in screens, only while signed out.
  * Customer module only: there are no staff routes (PRD §9).
  */
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontFiles);
   const session = useSession();
 
+  // The guest's cart key first, so the cart knows whether there is one to
+  // load by the time the session is ready.
   useEffect(() => {
-    loadSession();
+    loadGuestToken().finally(loadSession);
   }, []);
 
   // A font that fails to load falls back to the system face rather than
@@ -61,19 +67,20 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
-          <Stack.Screen name="(public)" />
+        <CartProvider>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
+            <Stack.Screen name="(public)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="food/[id]" />
 
-          <Stack.Protected guard={!session.signedIn}>
-            <Stack.Screen name="(auth)" />
-          </Stack.Protected>
-
-          <Stack.Protected guard={session.signedIn}>
-            <Stack.Screen name="(account)" />
-          </Stack.Protected>
-        </Stack>
-        <OfflineNotice />
-        {!splashDone && <BrandSplash onDone={finishSplash} />}
+            <Stack.Protected guard={!session.signedIn}>
+              <Stack.Screen name="(auth)" />
+            </Stack.Protected>
+          </Stack>
+          <ToastHost />
+          <OfflineNotice />
+          {!splashDone && <BrandSplash onDone={finishSplash} />}
+        </CartProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );
