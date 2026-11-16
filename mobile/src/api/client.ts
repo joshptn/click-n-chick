@@ -1,5 +1,26 @@
+import { Platform } from "react-native";
+import Constants from "expo-constants";
+
 import { getDeviceId } from "../lib/deviceId";
 import { currentToken, endSession } from "../lib/session";
+
+/**
+ * Marks every request as the native app's (the API's App\Support\NativeApp):
+ * the API then skips reCAPTCHA, which an app cannot run (FR-01.8, O-06).
+ */
+const CLIENT_HEADER = { "X-Client-App": "click-n-chick-android" };
+
+/**
+ * "ClickNChickApp/1.0.0 (Android 15; Pixel 8)": the API names the device from
+ * this, so the account's device list says "Click n Chick app on Android".
+ */
+const USER_AGENT = (() => {
+  const constants = Platform.constants as { Release?: string; Model?: string; osVersion?: string };
+  const os = Platform.OS === "android" ? `Android ${constants.Release ?? Platform.Version}` : `iOS ${constants.osVersion ?? Platform.Version}`;
+  const model = constants.Model ? `; ${constants.Model}` : "";
+
+  return `ClickNChickApp/${Constants.expoConfig?.version ?? "1.0.0"} (${os}${model})`;
+})();
 
 /**
  * One place that talks to the Laravel API, as client/src/lib/api.js does on
@@ -73,6 +94,8 @@ export async function apiFetch<T = unknown>(
       method,
       headers: {
         Accept: "application/json",
+        "User-Agent": USER_AGENT,
+        ...CLIENT_HEADER,
         ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(deviceId ? { "X-Device-Id": deviceId } : {}),
