@@ -33,6 +33,16 @@ export const colors = {
 
   /** The offline notice, as on the web. */
   notice: "#2f2f2f",
+  /** The splash background, the landing's orange headline and main button. */
+  orange: "#ff8904",
+  /** The landing page background. */
+  landing: "#fffaf6",
+  /** The landing headline. */
+  espresso: "#2a1d19",
+  /** The landing's dark "Order now" button. */
+  espressoButton: "#30211d",
+  /** The landing's body copy. */
+  mocha: "#8a7a72",
 } as const;
 
 export default colors;
