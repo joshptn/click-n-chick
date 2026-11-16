@@ -5,6 +5,7 @@ import type { BottomTabBarProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useCart } from "../hooks/useCart";
+import { useNotifications } from "../hooks/useNotifications";
 import { useSession } from "../hooks/useSession";
 import { colors } from "../theme/colors";
 import { AppText } from "./AppText";
@@ -30,6 +31,7 @@ export const TAB_BAR_SPACE = 104;
 export function TabBar({ state, navigateToTab, emitter }: BottomTabBarProps) {
   const { signedIn } = useSession();
   const { item_count: itemCount } = useCart();
+  const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const items: Item[] = [
@@ -37,7 +39,7 @@ export function TabBar({ state, navigateToTab, emitter }: BottomTabBarProps) {
     { route: "cart", label: "Cart", Icon: IconShoppingCart, badge: itemCount },
     ...(signedIn
       ? [
-          { route: "notifications", label: "Notif", Icon: IconBell },
+          { route: "notifications", label: "Notif", Icon: IconBell, badge: unreadCount },
           { route: "profile", label: "Profile", Icon: IconUser },
         ]
       : [{ route: null, label: "Sign in", Icon: IconLogin2 }]),
@@ -70,7 +72,7 @@ export function TabBar({ state, navigateToTab, emitter }: BottomTabBarProps) {
             key={label}
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
-            accessibilityLabel={badge ? `${label}, ${badge} item${badge === 1 ? "" : "s"}` : label}
+            accessibilityLabel={badge ? `${label}, ${badge} ${name === "cart" ? "item" : "unread"}${name === "cart" && badge !== 1 ? "s" : ""}` : label}
             onPress={onPress}
             style={styles.item}
             testID={`tab-${label.toLowerCase().replace(" ", "-")}`}
