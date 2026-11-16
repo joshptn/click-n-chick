@@ -12,6 +12,7 @@ import { AppHeader } from "../../components/menu/AppHeader";
 import { CategoryChips } from "../../components/menu/CategoryChips";
 import { FoodCard } from "../../components/menu/FoodCard";
 import { PosterBanner } from "../../components/menu/PosterBanner";
+import { ActiveOrderCard } from "../../components/orders/ActiveOrderCard";
 import { useCart } from "../../hooks/useCart";
 import { useMenuSearch } from "../../lib/menuSearch";
 import { colors } from "../../theme/colors";
@@ -77,6 +78,7 @@ export default function Home() {
     void queryClient.invalidateQueries({ queryKey: ["posters"] });
     void queryClient.invalidateQueries({ queryKey: ["categories"] });
     void queryClient.invalidateQueries({ queryKey: ["store", "status"] });
+    void queryClient.invalidateQueries({ queryKey: ["orders", "active"] });
   };
 
   const grid = (list: Food[]) => (
@@ -111,6 +113,8 @@ export default function Home() {
         </AppText>
 
         <CategoryChips value={category} onChange={setCategory} />
+
+        <ActiveOrderCard />
 
         {isError && (
           <View style={[styles.message, styles.error]}>
