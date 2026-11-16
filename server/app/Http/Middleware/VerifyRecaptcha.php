@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Services\Recaptcha\RecaptchaResult;
 use App\Services\Recaptcha\RecaptchaService;
+use App\Support\NativeApp;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -27,6 +28,16 @@ class VerifyRecaptcha
 
     public function handle(Request $request, Closure $next, string $action, ?string $mode = null): Response
     {
+        // Same reason as below: never let a client pre-seed the attribute.
+        $request->attributes->remove(self::LOW_SCORE_ATTRIBUTE);
+
+        // The native app cannot run reCAPTCHA; its requests go through without
+        // a token, and the rate limits on these routes are their protection.
+        // The header is spoofable by design (FR-01.8, O-06).
+        if (NativeApp::isNative($request)) {
+            return $next($request);
+        }
+
         $token = $request->input('recaptcha_token')
             ?? $request->header('X-Recaptcha-Token');
 
