@@ -33,6 +33,23 @@ export const colors = {
 
   /** The offline notice, as on the web. */
   notice: "#2f2f2f",
+  // From the auth screen designs (2026-11-16).
+  /** Auth headings and code digits. */
+  authInk: "#111827",
+  /** Field labels. */
+  authLabel: "#4b5563",
+  /** Sub-headings and quiet links. */
+  authMuted: "#6b7280",
+  /** Placeholders and the faintest copy. */
+  authHint: "#9ca3af",
+  /** Field borders. */
+  fieldBorder: "#e5e7eb",
+  /** The single code field's fill. */
+  fieldFill: "#f9fafb",
+  /** The main button while it cannot be pressed, and the code boxes' border. */
+  orangeSoft: "#ffc481",
+  /** Behind the success tick and the shield. */
+  orangeTint: "#fff7ed",
   /** The splash background, the landing's orange headline and main button. */
   orange: "#ff8904",
   /** The landing page background. */
