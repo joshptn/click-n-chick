@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -6,6 +6,7 @@ import { useFonts } from "expo-font";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { BrandSplash } from "../components/BrandSplash";
 import { OfflineNotice } from "../components/OfflineNotice";
 import { useSession } from "../hooks/useSession";
 import { queryClient } from "../lib/queryClient";
@@ -46,6 +47,10 @@ export default function RootLayout() {
   // holding the app on its splash screen.
   const ready = (fontsLoaded || Boolean(fontError)) && session.ready;
 
+  // The branded splash stays over the app until its bar has filled.
+  const [splashDone, setSplashDone] = useState(false);
+  const finishSplash = useCallback(() => setSplashDone(true), []);
+
   useEffect(() => {
     if (ready) SplashScreen.hide();
   }, [ready]);
@@ -68,6 +73,7 @@ export default function RootLayout() {
           </Stack.Protected>
         </Stack>
         <OfflineNotice />
+        {!splashDone && <BrandSplash onDone={finishSplash} />}
       </QueryClientProvider>
     </SafeAreaProvider>
   );

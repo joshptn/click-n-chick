@@ -13,7 +13,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.joshptn.clicknchick"
     },
     "plugins": [
       "expo-router",
@@ -22,9 +23,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#fff7ed",
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 200
+          "backgroundColor": "#ff8904",
+          "image": "./assets/images/splash-logo.png",
+          "imageWidth": 80
         }
       ],
       "expo-image"

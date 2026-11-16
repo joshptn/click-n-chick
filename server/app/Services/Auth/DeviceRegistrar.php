@@ -6,6 +6,7 @@ use App\Jobs\SendNewDeviceAlert;
 use App\Models\AuthEvent;
 use App\Models\KnownDevice;
 use App\Models\User;
+use App\Support\NativeApp;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -158,6 +159,8 @@ class DeviceRegistrar
         $agent = (string) $request->userAgent();
 
         $browser = match (true) {
+            // The native app names itself in its user agent (mobile/src/api/client.ts).
+            str_contains($agent, NativeApp::USER_AGENT_TOKEN) => 'Click n Chick app',
             str_contains($agent, 'Edg/') => 'Edge',
             str_contains($agent, 'OPR/'), str_contains($agent, 'Opera') => 'Opera',
             str_contains($agent, 'Chrome/') => 'Chrome',
