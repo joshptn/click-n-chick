@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\Recaptcha\RecaptchaAction;
+use App\Support\NativeApp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Hash;
@@ -146,6 +147,79 @@ class RecaptchaTest extends TestCase
 
         // Rejected before Google is consulted - a missing token needs no call.
         Http::assertNothingSent();
+    }
+
+    // -----------------------------------------------------------------
+    // The native app (FR-01.8, O-06)
+    // -----------------------------------------------------------------
+
+    public function test_the_native_app_signs_in_without_a_token_and_google_is_not_asked(): void
+    {
+        $this->enableRecaptcha();
+        Http::fake();
+
+        $this->withHeader(NativeApp::HEADER, NativeApp::ANDROID)
+            ->login()
+            ->assertOk()
+            ->assertJsonStructure(['user', 'token']);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_the_native_marker_covers_every_guarded_flow(): void
+    {
+        $this->enableRecaptcha();
+        Http::fake();
+
+        // Each reaches its controller (any answer but the reCAPTCHA refusal).
+        foreach ([
+            ['/api/register', ['identifier' => 'native@example.test', 'first_name' => 'A', 'last_name' => 'B', 'password' => self::PASSWORD, 'password_confirmation' => self::PASSWORD]],
+            ['/api/password/forgot', ['identifier' => $this->user->email]],
+            ['/api/otp/resend', ['identifier' => 'native@example.test']],
+        ] as [$uri, $body]) {
+            $response = $this->withHeader(NativeApp::HEADER, NativeApp::ANDROID)->postJson($uri, $body);
+
+            $this->assertNotSame('RECAPTCHA_FAILED', $response->json('error_code'), $uri);
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_a_wrong_marker_value_is_still_refused(): void
+    {
+        $this->enableRecaptcha();
+        Http::fake();
+
+        $this->withHeader(NativeApp::HEADER, 'something-else')
+            ->login()
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'RECAPTCHA_FAILED');
+    }
+
+    public function test_the_native_app_is_never_stepped_up_and_cannot_seed_a_low_score(): void
+    {
+        $this->enableRecaptcha();
+        Http::fake();
+
+        // A client-sent attribute name must not survive into the controller.
+        $this->withHeader(NativeApp::HEADER, NativeApp::ANDROID)
+            ->login(['recaptcha.low_score' => true])
+            ->assertOk()
+            ->assertJsonMissingPath('two_factor_required')
+            ->assertJsonStructure(['token']);
+    }
+
+    public function test_the_native_app_shows_by_name_in_the_device_list(): void
+    {
+        $this->withHeaders([
+            NativeApp::HEADER => NativeApp::ANDROID,
+            'User-Agent' => 'ClickNChickApp/1.0 (Android 15; Pixel 8)',
+        ])->login()->assertOk();
+
+        $device = $this->user->knownDevices()->sole();
+
+        $this->assertSame('Click n Chick app on Android', $device->device_name);
+        $this->assertSame('Android', $device->platform);
     }
 
     public function test_a_valid_token_lets_the_request_through(): void
