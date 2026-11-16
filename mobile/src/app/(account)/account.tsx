@@ -4,19 +4,27 @@ import { StyleSheet, View } from "react-native";
 import { AppText } from "../../components/AppText";
 import { Button } from "../../components/Button";
 import { Screen } from "../../components/Screen";
-import { endSession } from "../../lib/session";
+import { authApi } from "../../api/auth";
+import { currentToken, endSession } from "../../lib/session";
 import { colors } from "../../theme/colors";
 
 /**
- * Signed-in only. The account pages arrive in phase 8; sign-out tells the API
- * in phase 5. Ending the session here already clears the cache and the stored
- * token, and the protected routes leave this screen by themselves.
+ * Signed-in only. The account pages arrive in phase 8. Ending the session
+ * clears the cache and the stored token, and the protected routes leave this
+ * screen by themselves.
  */
 export default function Account() {
   const [signingOut, setSigningOut] = useState(false);
 
   const signOut = async () => {
     setSigningOut(true);
+
+    const token = currentToken();
+
+    // Ends this sign-in on the server too (which also drops its push token).
+    // The phone signs out either way: a failed request must not keep it in.
+    if (token) await authApi.logout(token).catch(() => undefined);
+
     await endSession();
   };
 
