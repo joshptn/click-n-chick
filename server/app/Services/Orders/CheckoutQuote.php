@@ -17,7 +17,6 @@ class CheckoutQuote
     public function __construct(
         private DeliveryQuote $delivery,
         private StoreAvailability $store,
-        private CancellationPolicy $cancellation,
         private DiscountUsage $discountUsage,
     ) {}
 
@@ -133,21 +132,9 @@ class CheckoutQuote
             'delivery_fee' => round($deliveryFee, 2),
             'pickup' => $pickup,
             'discount' => $discount,
-            'cancellation' => $this->cancellationTerms(),
             'total' => round(max(0, $subtotal - (float) $discount['amount']) + $deliveryFee, 2),
             'blockers' => $blockers,
             'can_place' => $blockers === [],
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function cancellationTerms(): array
-    {
-        $through = $this->cancellation->fullRefundThrough();
-
-        return [
-            'full_refund_through' => $through,
-            'full_refund_through_label' => OrderStatus::label($through),
         ];
     }
 
@@ -330,8 +317,8 @@ class CheckoutQuote
         $typedPhone = trim((string) ($input['contact_phone'] ?? ''));
 
         $phone = $typedPhone !== ''
-            ? ($this->normalizePhone($typedPhone) ?? '')
-            : ($this->normalizePhone($user?->phone_number) ?? '');
+            ? (self::normalizePhone($typedPhone) ?? '')
+            : (self::normalizePhone($user?->phone_number) ?? '');
 
         $typedEmail = trim((string) ($input['contact_email'] ?? ''));
         $email = $typedEmail !== '' ? $typedEmail : trim((string) ($user->email ?? ''));
@@ -365,7 +352,8 @@ class CheckoutQuote
         return ['name' => trim($name), 'phone' => $phone, 'email' => $email, 'blocker' => $blocker];
     }
 
-    private function normalizePhone(mixed $raw): ?string
+    /** A Philippine mobile number as 09XXXXXXXXX, or null if it is not one. */
+    public static function normalizePhone(mixed $raw): ?string
     {
         $digits = preg_replace('/[\s\-()]/', '', (string) $raw);
 

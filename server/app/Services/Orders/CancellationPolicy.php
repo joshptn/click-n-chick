@@ -3,32 +3,33 @@
 namespace App\Services\Orders;
 
 use App\Models\Order;
-use App\Models\Setting;
 
+/**
+ * When a customer may cancel, and what they get back (decided 2026-11-17).
+ *
+ *   immediate  only while `placed`, before a Store Agent confirms it; paid
+ *              before it is placed, so refunded in full (BR-19, BR-20)
+ *   advance    only while unpaid (`submitted`, `accepted`, `awaiting_payment`);
+ *              nothing was charged, so nothing is refunded. Once paid, the
+ *              customer cannot cancel it (BR-21)
+ *
+ * There is no configurable refund threshold any more. A cancellation the shop
+ * makes is not decided here: the Store Agent chooses refund or no refund
+ * (BR-21a, OrderQueueController::cancel).
+ */
 class CancellationPolicy
 {
-    public const DEFAULT_FULL_REFUND_THROUGH = OrderStatus::CONFIRMED;
-
     public const ALREADY_CLOSED = 'ORDER_ALREADY_CLOSED';
-
-    public const KITCHEN_STARTED = 'KITCHEN_STARTED';
 
     public const NOTHING_PAID = 'NOTHING_PAID';
 
     public const AWAITING_PAYMENT = 'AWAITING_PAYMENT';
 
-    /** @return array<int, string> */
-    public static function thresholds(): array
-    {
-        return [OrderStatus::PLACED, OrderStatus::CONFIRMED, OrderStatus::PREPARING];
-    }
+    /** An immediate order the store has confirmed. */
+    public const STORE_CONFIRMED = 'STORE_CONFIRMED';
 
-    public function fullRefundThrough(): string
-    {
-        $value = Setting::get(Setting::CANCELLATION_FULL_REFUND_THROUGH);
-
-        return in_array($value, self::thresholds(), true) ? $value : self::DEFAULT_FULL_REFUND_THROUGH;
-    }
+    /** An advance order that has been paid for. */
+    public const ADVANCE_PAID = 'ADVANCE_PAID';
 
     /** @return array<string, mixed> */
     public function for(Order $order): array
@@ -36,104 +37,89 @@ class CancellationPolicy
         $status = (string) $order->status;
 
         if (OrderStatus::isTerminal($status)) {
-            return [
-                'can_cancel' => false,
-                'refundable' => false,
-                'refund_amount' => 0.0,
-                'code' => self::ALREADY_CLOSED,
-                'message' => 'This order is already '.strtolower(OrderStatus::label($status)).'.',
-                'refundable_through' => null,
-            ];
+            return $this->refused(self::ALREADY_CLOSED, 'This order is already '.strtolower(OrderStatus::label($status)).'.');
         }
 
-        // Decided 2026-11-17: not cancellable while being paid for. It ends by
-        // itself 10 minutes after checkout if unpaid (FR-04.5).
-        if (! $order->isAdvance() && $status === OrderStatus::AWAITING_PAYMENT) {
-            return [
-                'can_cancel' => false,
-                'refundable' => false,
-                'refund_amount' => 0.0,
-                'code' => self::AWAITING_PAYMENT,
-                'message' => 'This order is waiting for payment. If it is not paid within 10 minutes of checkout it is cancelled by itself, and nothing is charged.',
-                'refundable_through' => null,
-            ];
+        if ($order->isAdvance()) {
+            return $this->forAdvance($order, $status);
         }
 
-        $code = match (true) {
-            ! $order->isPaid() => self::NOTHING_PAID,
-            ! $this->statusAllowsRefund($order) => self::KITCHEN_STARTED,
-            default => null,
-        };
+        // Not cancellable while being paid for: it ends by itself 10 minutes
+        // after checkout if unpaid (FR-04.5).
+        if ($status === OrderStatus::AWAITING_PAYMENT) {
+            return $this->refused(
+                self::AWAITING_PAYMENT,
+                'This order is waiting for payment. If it is not paid within 10 minutes of checkout it is cancelled by itself, and nothing is charged.'
+            );
+        }
 
-        $refundable = $code === null;
+        if ($status !== OrderStatus::PLACED) {
+            return $this->refused(
+                self::STORE_CONFIRMED,
+                'The store has already confirmed this order, so it can no longer be cancelled. Please call the store if something is wrong.'
+            );
+        }
 
-        return [
-            'can_cancel' => true,
-            'refundable' => $refundable,
-            'refund_amount' => $refundable
-                ? round((float) ($order->total_amount ?? $order->total_price), 2)
-                : 0.0,
-            'code' => $code,
-            'message' => $this->message($code),
-            'refundable_through' => $this->refundableThrough($order),
-        ];
+        // Paid before it was placed, so the whole amount goes back. An order
+        // from before payment existed may be unpaid; it then has nothing to refund.
+        return $order->isPaid()
+            ? $this->allowed(true, $order, null, 'You can cancel this order while the store has not confirmed it yet. Your payment will be refunded in full.')
+            : $this->allowed(false, $order, self::NOTHING_PAID, 'You can cancel this order. You have not paid for it, so there is nothing to refund.');
     }
 
     public function canCancel(Order $order): bool
     {
-        return ! OrderStatus::isTerminal((string) $order->status);
-    }
-
-    public function isRefundable(Order $order): bool
-    {
-        return $this->for($order)['refundable'];
-    }
-
-    public function refundOwed(Order $order): float
-    {
-        return (float) $this->for($order)['refund_amount'];
+        return $this->for($order)['can_cancel'];
     }
 
     public function outcomeMessage(array $decision): string
     {
-        if ($decision['refundable']) {
-            return 'Your order has been cancelled and your payment will be refunded.';
+        return $decision['refundable']
+            ? 'Your order has been cancelled and your payment will be refunded in full.'
+            : 'Your order has been cancelled. You had not paid for it, so there is nothing to refund.';
+    }
+
+    /** @return array<string, mixed> */
+    private function forAdvance(Order $order, string $status): array
+    {
+        if ($order->isPaid() || ! in_array($status, AdvanceExpiry::UNPAID_STATUSES, true)) {
+            return $this->refused(
+                self::ADVANCE_PAID,
+                'This advance order is paid, so it can no longer be cancelled. Please call the store if something is wrong.'
+            );
         }
 
-        return $decision['code'] === self::NOTHING_PAID
-            ? 'Your order has been cancelled. You had not paid for it, so there is nothing to refund.'
-            : 'Your order has been cancelled. As the kitchen had already started, this one is not refunded.';
+        return $this->allowed(
+            false,
+            $order,
+            self::NOTHING_PAID,
+            $status === OrderStatus::SUBMITTED
+                ? 'You can withdraw this request. Nothing has been charged.'
+                : 'You can cancel this order until you pay for it. Nothing has been charged, so there is nothing to refund.'
+        );
     }
 
-    private function commitPoint(Order $order): ?string
+    /** @return array<string, mixed> */
+    private function allowed(bool $refundable, Order $order, ?string $code, string $message): array
     {
-        return OrderStatus::next($this->fullRefundThrough(), $order->order_type);
+        return [
+            'can_cancel' => true,
+            'refundable' => $refundable,
+            'refund_amount' => $refundable ? round((float) ($order->total_amount ?? $order->total_price), 2) : 0.0,
+            'code' => $code,
+            'message' => $message,
+        ];
     }
 
-    private function statusAllowsRefund(Order $order): bool
+    /** @return array<string, mixed> */
+    private function refused(string $code, string $message): array
     {
-        $chain = $order->statusChain();
-
-        $at = array_search((string) $order->status, $chain, true);
-        $commit = array_search($this->commitPoint($order), $chain, true);
-
-        return $at !== false && $commit !== false && $at < $commit;
-    }
-
-    private function refundableThrough(Order $order): ?string
-    {
-        $chain = $order->statusChain();
-        $commit = array_search($this->commitPoint($order), $chain, true);
-
-        return $commit === false || $commit === 0 ? null : $chain[$commit - 1];
-    }
-
-    private function message(?string $code): string
-    {
-        return match ($code) {
-            null => 'You can cancel this order and your payment will be refunded in full.',
-            self::NOTHING_PAID => 'You can cancel this order. You have not paid for it, so there is nothing to refund.',
-            default => 'You can still cancel, but the kitchen has already started, so this order can no longer be refunded.',
-        };
+        return [
+            'can_cancel' => false,
+            'refundable' => false,
+            'refund_amount' => 0.0,
+            'code' => $code,
+            'message' => $message,
+        ];
     }
 }

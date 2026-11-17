@@ -72,10 +72,8 @@ class OrderTrackingResource extends JsonResource
             ]),
 
             'contact' => [
-                'name' => $this->user
-                    ? trim(($this->user->first_name ?? '').' '.($this->user->last_name ?? ''))
-                    : $this->guest_name,
-                'phone' => $this->user?->phone_number ?? $this->guest_phone,
+                'name' => $this->contactName(),
+                'phone' => $this->contactPhone(),
             ],
 
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($item) => [
