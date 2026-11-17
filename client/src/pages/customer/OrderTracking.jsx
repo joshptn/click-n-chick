@@ -10,7 +10,9 @@ import OrderProgress from "../../components/orders/OrderProgress";
 import OrderReceipt from "../../components/orders/OrderReceipt";
 import EditOrderModal from "../../components/orders/EditOrderModal";
 import OrderStatusPanel from "../../components/orders/OrderStatusPanel";
+import PaymentPanel from "../../components/orders/PaymentPanel";
 import toast from "../../components/app/Toast";
+import { checkPayment, goToPayment, payOrder } from "../../lib/payments";
 import {
   ORDERS_KEY,
   amendOrder,
@@ -30,6 +32,11 @@ import {
 import { useOrderChannel, usePublicOrderChannel } from "../../context/useRealtime";
 
 const IN_LINE_POLL_MS = 30 * 1000;
+
+// While an immediate order waits on its payment, the server is asked to check
+// with Xendit every few seconds: the webhook usually gets there first, but this
+// keeps the page honest when it is slow (and locally, where none arrives).
+const PAYMENT_POLL_MS = 5 * 1000;
 
 function TrackingSkeleton() {
   return (
@@ -88,6 +95,47 @@ function OrderTracking({ guest = false }) {
 
     return () => window.clearInterval(timer);
   }, [inLine, queryKey, queryClient]);
+
+  const payTarget = guest ? { token } : { orderId };
+  const awaitingPayment = Boolean(order?.awaiting_payment);
+  const advanceOrder = Boolean(order?.is_advance);
+
+  const paymentCheck = useQuery({
+    queryKey: [...queryKey, "payment"],
+    queryFn: async ({ signal }) => {
+      const payload = await checkPayment(payTarget, { signal });
+
+      if (payload?.order) {
+        queryClient.setQueryData(queryKey, (prev) => ({ ...prev, order: payload.order }));
+
+        if (payload.paid) queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      }
+
+      return payload;
+    },
+    enabled: awaitingPayment,
+    // An advance order has a day to pay: asked once when the page opens.
+    refetchInterval: awaitingPayment && !advanceOrder ? PAYMENT_POLL_MS : false,
+    retry: false,
+  });
+
+  const paying = useMutation({
+    mutationFn: () => payOrder(payTarget),
+    onSuccess: (payload) => {
+      if (payload?.payment?.url) {
+        goToPayment(payload.payment.url, payTarget);
+
+        return;
+      }
+
+      settle(payload);
+      toast.success("Your payment has already gone through.", "Paid");
+    },
+    onError: (err) => {
+      toast.error(err?.message ?? "Payment could not be started. Please try again.", "Payment unavailable");
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
 
   // Both hooks always run, one of them with a null subject.
   const privateEvent = useOrderChannel(!guest && order ? orderId : null);
@@ -227,6 +275,15 @@ function OrderTracking({ guest = false }) {
                 stepCount={order.step_count}
                 isCancelled={order.is_cancelled}
               />
+
+              {awaitingPayment && (
+                <PaymentPanel
+                  order={order}
+                  onPay={() => paying.mutate()}
+                  isOpening={paying.isPending || paying.isSuccess}
+                  isChecking={paymentCheck.isFetching && !paymentCheck.data}
+                />
+              )}
 
               <OrderStatusPanel
                 order={order}

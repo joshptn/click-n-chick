@@ -22,6 +22,11 @@ import { formatCollection } from "../../lib/advance";
 const MotionSpan = motion.span;
 
 const HERO = {
+  awaiting_payment: {
+    icon: IconCreditCard,
+    title: "Waiting for payment",
+    body: "Your order reaches the store as soon as your payment goes through.",
+  },
   placed: {
     icon: IconReceipt,
     title: "Order placed!",
@@ -250,7 +255,8 @@ function OrderStatusPanel({
         </section>
       )}
 
-      {!order.is_terminal && (
+      {/* Not while an immediate order is being paid for: it cancels itself. */}
+      {!order.is_terminal && order.can_cancel !== false && (
         <section
           className={`rounded-[16px] border px-5 py-4 ${
             refundable ? "border-[#f0e9df] bg-white" : "border-[#ffe6a8] bg-[#fff9e8]"
