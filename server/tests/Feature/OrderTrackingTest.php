@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
+use App\Services\Payments\PaymentGateway;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -406,6 +407,10 @@ class OrderTrackingTest extends TestCase
         // The price already folded the add-on in; what was missing was any
         // record of WHICH add-on, which the receipt and the kitchen both need.
         $this->assertDatabaseHas('order_item_addons', ['addon_id' => $addon->id]);
+
+        // Paid, so it is an order the customer can open (decided 2026-11-17).
+        app(PaymentGateway::class)->pay(Order::findOrFail($placed)->payments()->value('provider_reference_id'));
+        $this->actingAs($customer, 'sanctum')->getJson("/api/orders/{$placed}/payment")->assertJsonPath('paid', true);
 
         $this->actingAs($customer, 'sanctum')
             ->getJson("/api/orders/{$placed}")

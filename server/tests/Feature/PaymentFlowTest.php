@@ -185,6 +185,15 @@ class PaymentFlowTest extends TestCase
         Event::assertNotDispatched(OrderBroadcast::class);
         $this->assertSame(0, Notification::count());
         $this->assertFalse($this->staffSees($order));
+
+        // Not an order to the customer either, until it is paid (decided 2026-11-17).
+        $this->actingAs($customer, 'sanctum')->getJson('/api/orders')->assertJsonCount(0, 'data')->assertJsonPath('counts.active', 0);
+        $this->actingAs($customer, 'sanctum')->getJson("/api/orders/{$order->id}")->assertNotFound();
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}/payment")
+            ->assertOk()
+            ->assertJsonPath('paid', false)
+            ->assertJsonPath('order.awaiting_payment', true);
     }
 
     public function test_when_the_payment_page_cannot_open_nothing_is_kept(): void
@@ -346,9 +355,11 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(Payment::STATUS_CLOSED, $order->payments()->value('payment_status'));
         $this->assertSame(10, $food->fresh()->available_quantity);
 
-        // The customer is told and still sees it; the shop never does.
-        $this->assertSame(1, Notification::query()->where('user_id', $customer->id)->count());
-        $this->actingAs($customer, 'sanctum')->getJson('/api/orders')->assertJsonPath('data.0.id', $order->id);
+        // Nobody is told and nobody sees it: it never became an order.
+        $this->assertSame(0, Notification::count());
+        Event::assertNotDispatched(OrderBroadcast::class);
+        $this->actingAs($customer, 'sanctum')->getJson('/api/orders')->assertJsonCount(0, 'data');
+        $this->actingAs($customer, 'sanctum')->getJson("/api/orders/{$order->id}")->assertNotFound();
         $this->assertFalse($this->staffSees($order));
     }
 
@@ -449,29 +460,31 @@ class PaymentFlowTest extends TestCase
         );
     }
 
-    public function test_only_a_paid_order_uses_the_days_discount(): void
+    /**
+     * Decided 2026-11-17: the same rule as advance orders. A discounted order
+     * uses the day's discount from the moment it exists, so a second checkout
+     * cannot take it while the first is being paid for.
+     */
+    public function test_a_checkout_uses_the_days_discount_paid_or_not(): void
     {
         $customer = $this->user();
         $order = Order::create([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
-            'status' => OrderStatus::CANCELLED,
-            'payment_status' => Order::PAYMENT_EXPIRED,
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'payment_status' => Order::PAYMENT_UNPAID,
             'subtotal' => 350,
             'discount_amount' => 70,
             'total_amount' => 280,
             'total_price' => 280,
         ]);
 
-        $this->assertFalse(app(\App\Services\Orders\DiscountUsage::class)->usedToday($customer));
+        $usage = app(\App\Services\Orders\DiscountUsage::class);
 
-        // Still being paid for: not used yet (decided 2026-11-17).
-        $order->forceFill(['status' => OrderStatus::AWAITING_PAYMENT, 'payment_status' => Order::PAYMENT_UNPAID])->save();
-        $this->assertFalse(app(\App\Services\Orders\DiscountUsage::class)->usedToday($customer));
+        $this->assertTrue($usage->usedToday($customer));
 
-        // Paid and placed: used.
-        $order->forceFill(['status' => OrderStatus::PLACED, 'payment_status' => Order::PAYMENT_PAID])->save();
-        $this->assertTrue(app(\App\Services\Orders\DiscountUsage::class)->usedToday($customer));
+        $order->forceFill(['status' => OrderStatus::CANCELLED, 'payment_status' => Order::PAYMENT_EXPIRED])->save();
+        $this->assertTrue($usage->usedToday($customer));
     }
 
     // -----------------------------------------------------------------
@@ -492,6 +505,8 @@ class PaymentFlowTest extends TestCase
         $order = Order::firstOrFail();
         $this->assertSame($this->gateway->latest()->url, $response->json('payment.url'));
         $this->assertStringNotContainsString($token, (string) config('services.xendit.return_url'));
+
+        $this->withHeader(ResolveGuestOrder::HEADER, $token)->getJson('/api/guest/order')->assertNotFound();
 
         $this->withHeader(ResolveGuestOrder::HEADER, $token)
             ->postJson('/api/guest/order/pay')
