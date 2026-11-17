@@ -3,6 +3,7 @@
 namespace App\Services\Orders;
 
 use App\Models\Order;
+use App\Services\Payments\PaymentCheckout;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -36,7 +37,10 @@ final class AdvanceExpiry
 {
     public const ERROR_CODE = 'ADVANCE_EXPIRED';
 
-    public function __construct(private OrderAnnouncer $announcer) {}
+    public function __construct(
+        private OrderAnnouncer $announcer,
+        private PaymentCheckout $checkout,
+    ) {}
 
     public const PAYMENT_DEADLINE = 'Payment was not received within 24 hours of the store accepting this request.';
 
@@ -105,6 +109,12 @@ final class AdvanceExpiry
     public function expire(Order $order, ?CarbonImmutable $now = null): ?Order
     {
         $now ??= CarbonImmutable::now();
+
+        // An open checkout is closed first, so it cannot take money for an order
+        // about to go; one paid at the last moment confirms the order instead.
+        if ($this->reasonFor($order, $now) !== null && $this->checkout->closeOpen($order)) {
+            return null;
+        }
 
         return DB::transaction(function () use ($order, $now) {
             $locked = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();

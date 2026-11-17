@@ -6,6 +6,7 @@ use App\Services\Orders\OrderStatus;
 use App\Services\Stock\StockReservation;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
@@ -16,6 +17,16 @@ class Order extends Model
     private const QUEUE_ATTEMPTS = 3;
 
     public const ADVANCE_PAYMENT_HOURS = 24;
+
+    /** An immediate order not paid this long after checkout is cancelled (FR-04.5). */
+    public const PAYMENT_WINDOW_MINUTES = StockReservation::PAYMENT_HOLD_MINUTES;
+
+    public const PAYMENT_UNPAID = 'unpaid';
+
+    public const PAYMENT_PAID = 'paid';
+
+    /** An immediate checkout nobody paid for: cancelled by the system, hidden from staff. */
+    public const PAYMENT_EXPIRED = 'expired';
 
     /** Stands in for the customer on the orders of a deleted account. */
     public const ANONYMIZED_CUSTOMER = 'Deleted customer';
@@ -198,11 +209,44 @@ class Order extends Model
 
     public function isPaid(): bool
     {
-        return $this->payment_status === 'paid';
+        return $this->payment_status === self::PAYMENT_PAID;
     }
 
+    /**
+     * An immediate order still being paid for, or one whose payment window
+     * closed unpaid. Staff never see these (decided 2026-11-17): they were
+     * never orders the shop received.
+     */
+    public function isUnpaidCheckout(): bool
+    {
+        return ! $this->isAdvance()
+            && ($this->status === OrderStatus::AWAITING_PAYMENT || $this->payment_status === self::PAYMENT_EXPIRED);
+    }
+
+    /** Everything staff may see: every order except an unpaid immediate checkout. */
+    public function scopeSeenByStaff(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $seen) => $seen
+            ->whereNotNull('orders.scheduled_for')
+            ->orWhere(fn (Builder $immediate) => $immediate
+                ->where('orders.status', '!=', OrderStatus::AWAITING_PAYMENT)
+                ->where(fn (Builder $payment) => $payment
+                    ->whereNull('orders.payment_status')
+                    ->orWhere('orders.payment_status', '!=', self::PAYMENT_EXPIRED))));
+    }
+
+    /**
+     * When the customer must have paid by. An advance order has 24 hours from
+     * acceptance (BR-16f); an immediate one 10 minutes from checkout (FR-04.5).
+     */
     public function paymentDueAt(): ?CarbonImmutable
     {
+        if (! $this->isAdvance()) {
+            return $this->status === OrderStatus::AWAITING_PAYMENT && $this->created_at !== null
+                ? CarbonImmutable::parse($this->created_at)->addMinutes(self::PAYMENT_WINDOW_MINUTES)
+                : null;
+        }
+
         if ($this->accepted_at === null) {
             return null;
         }
