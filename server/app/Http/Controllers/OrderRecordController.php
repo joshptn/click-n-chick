@@ -111,6 +111,9 @@ class OrderRecordController extends Controller
     {
         $this->authorize('view', $order);
 
+        // A checkout nobody paid for was never an order the shop received.
+        abort_if($order->isUnpaidCheckout(), 404);
+
         if (! $order->isTerminal()) {
             return response()->json([
                 'message' => 'This order is still open, so it is not a record yet. Find it on All Orders or Advance Order Requests.',
@@ -131,6 +134,7 @@ class OrderRecordController extends Controller
         $timezone = $this->store->timezone();
 
         $query = Order::query()
+            ->seenByStaff()
             ->whereIn('status', OrderStatus::terminal())
             ->when(
                 ($filters['order_type'] ?? 'all') !== 'all',
