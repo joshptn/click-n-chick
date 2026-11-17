@@ -14,6 +14,7 @@ use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
 use App\Services\Orders\OrderStatus;
+use App\Services\Payments\CheckoutResponder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -95,12 +96,8 @@ class OrderController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Failed to place order'], 500);
         }
 
-        $this->announcer->announce($order, 'create', 'create');
-
-        return response()->json([
-            'message' => 'Order Placed',
-            'order' => $order,
-        ], 201);
+        // Not announced yet: the shop hears of it when it is paid (PaymentSettlement).
+        return app(CheckoutResponder::class)->respond($order, $cart, $quote);
     }
 
     public function cancelOrder(Request $request, $orderId)
@@ -233,7 +230,8 @@ class OrderController extends Controller implements HasMiddleware
         $status = $validated['status'] ?? null;
         $category = $validated['category'] ?? null;
 
-        $query = Order::with(['items.food.category', 'user']);
+        // An unpaid checkout is not an order the shop has received (FR-04.5).
+        $query = Order::with(['items.food.category', 'user'])->seenByStaff();
 
         if ($status && $status !== 'all') {
             $query->where('status', $status);

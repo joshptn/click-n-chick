@@ -15,6 +15,8 @@ class CancellationPolicy
 
     public const NOTHING_PAID = 'NOTHING_PAID';
 
+    public const AWAITING_PAYMENT = 'AWAITING_PAYMENT';
+
     /** @return array<int, string> */
     public static function thresholds(): array
     {
@@ -40,6 +42,19 @@ class CancellationPolicy
                 'refund_amount' => 0.0,
                 'code' => self::ALREADY_CLOSED,
                 'message' => 'This order is already '.strtolower(OrderStatus::label($status)).'.',
+                'refundable_through' => null,
+            ];
+        }
+
+        // Decided 2026-11-17: not cancellable while being paid for. It ends by
+        // itself 10 minutes after checkout if unpaid (FR-04.5).
+        if (! $order->isAdvance() && $status === OrderStatus::AWAITING_PAYMENT) {
+            return [
+                'can_cancel' => false,
+                'refundable' => false,
+                'refund_amount' => 0.0,
+                'code' => self::AWAITING_PAYMENT,
+                'message' => 'This order is waiting for payment. If it is not paid within 10 minutes of checkout it is cancelled by itself, and nothing is charged.',
                 'refundable_through' => null,
             ];
         }
