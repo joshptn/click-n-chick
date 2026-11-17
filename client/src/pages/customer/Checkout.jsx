@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { IconLock } from "@tabler/icons-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { IconLock, IconQrcode, IconWallet } from "@tabler/icons-react";
 
 import AppHeader from "../../components/app/AppHeader";
 import AuthContext from "../../context/AuthContext";
@@ -20,6 +20,7 @@ import {
   toLocalMobile,
 } from "../../lib/checkout";
 import { formatPeso } from "../../lib/menu";
+import { goToPayment, placeOrder } from "../../lib/payments";
 import { useCartState } from "../../context/useCart";
 import { useStoreStatus } from "../../lib/store";
 
@@ -38,11 +39,11 @@ const QUOTE_DEBOUNCE_MS = 400;
 const PIN_DEBOUNCE_MS = 900;
 const QUOTE_STALE_MS = 30 * 1000;
 
-const PAYMENT_AVAILABLE = false;
-
 function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const [placing, setPlacing] = useState(false);
   const { user, token } = useContext(AuthContext);
   const signedIn = Boolean(token);
   const steps = signedIn ? STEPS : GUEST_STEPS;
@@ -175,12 +176,12 @@ function Checkout() {
   });
 
   useEffect(() => {
-    if (cartLoading) return;
+    if (cartLoading || placing) return;
     if (cartCount === 0) {
       toast.info("Add something to your order first.", "Your cart is empty");
       navigate("/home", { replace: true });
     }
-  }, [cartCount, cartLoading, navigate]);
+  }, [cartCount, cartLoading, navigate, placing]);
 
   const handleContinue = () => {
     setAttemptedContinue(true);
@@ -207,6 +208,38 @@ function Checkout() {
 
     setCompleted((prev) => (prev.includes("discount") ? prev : [...prev, "discount"]));
     setStep("payment");
+  };
+
+  // The order is created waiting for payment and the browser goes to Xendit's
+  // page. Nothing reaches the shop until it is paid (FR-04.5).
+  const handlePlaceOrder = async () => {
+    if (placing || step !== "payment" || !acknowledgedTerms || !quote?.can_place) return;
+
+    setPlacing(true);
+
+    try {
+      const result = await placeOrder({
+        ...quoteInput,
+        full_address: dispatchState.destination?.full_address ?? null,
+        location: dispatchState.destination?.locality ?? null,
+      });
+
+      // The cart is not refetched here: it is now empty, and the empty-cart
+      // redirect would race the browser leaving for the payment page. The app
+      // loads afresh on the way back.
+      goToPayment(
+        result.payment.url,
+        result.tracking_token ? { token: result.tracking_token } : { orderId: result.order.id }
+      );
+    } catch (err) {
+      setPlacing(false);
+      queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+
+      toast.error(
+        err?.message ?? "Your order could not be placed. Please try again.",
+        err?.status === 502 ? "Payment unavailable" : "Order not placed"
+      );
+    }
   };
 
   const discountSummary = useMemo(() => {
@@ -302,10 +335,35 @@ function Checkout() {
             )}
 
             <StepCard index={stepNumber("payment")} title="Secure Payment" state={stateFor("payment")}>
-              <p className="m-0 flex items-center gap-2 font-display text-[13px] text-[#8d8884]">
-                <IconLock size={15} stroke={2} aria-hidden="true" />
-                Payment is coming next.
-              </p>
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div className="flex items-center gap-3 rounded-[12px] border border-[#f0e9df] bg-[#faf7f3] px-4 py-3">
+                    <IconQrcode size={22} stroke={1.8} aria-hidden="true" className="shrink-0 text-brand-600" />
+                    <span className="min-w-0">
+                      <span className="block font-display text-[13.5px] font-bold text-ink">QR Ph</span>
+                      <span className="block font-display text-[12px] leading-snug text-[#6f6b68]">
+                        Scan with any bank or e-wallet app
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-[12px] border border-[#f0e9df] bg-[#faf7f3] px-4 py-3">
+                    <IconWallet size={22} stroke={1.8} aria-hidden="true" className="shrink-0 text-brand-600" />
+                    <span className="min-w-0">
+                      <span className="block font-display text-[13.5px] font-bold text-ink">GCash</span>
+                      <span className="block font-display text-[12px] leading-snug text-[#6f6b68]">
+                        Pay from your GCash account
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                <p className="m-0 flex items-start gap-2 font-display text-[12.5px] leading-snug text-[#6f6b68]">
+                  <IconLock size={15} stroke={2} aria-hidden="true" className="mt-px shrink-0" />
+                  You choose how to pay on Xendit&rsquo;s secure page. Your order is held for 10 minutes while
+                  you pay, and reaches the store once payment goes through.
+                </p>
+              </div>
             </StepCard>
           </div>
 
@@ -313,8 +371,11 @@ function Checkout() {
             <OrderSummary
               quote={quote}
               isLoading={quoteLoading}
-              canPlaceOrder={PAYMENT_AVAILABLE && acknowledgedTerms && Boolean(quote?.can_place)}
-              placeOrderLabel="Place Order"
+              canPlaceOrder={
+                step === "payment" && acknowledgedTerms && Boolean(quote?.can_place) && !placing
+              }
+              onPlaceOrder={handlePlaceOrder}
+              placeOrderLabel={placing ? "Opening payment…" : "Place Order & Pay"}
               acknowledged={acknowledgedTerms}
               onAcknowledge={setAcknowledgedTerms}
             />
