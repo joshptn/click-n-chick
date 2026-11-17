@@ -155,6 +155,16 @@ class OrderController extends Controller implements HasMiddleware
 
         $target = $validated['status'];
 
+        // A cancellation needs the customer's reason and, when paid, the refund
+        // choice (BR-21a); only the cancel action asks for both.
+        if ($target === OrderStatus::CANCELLED) {
+            return response()->json([
+                'message' => 'Cancel an order with its Cancel action, which asks for the reason and the refund choice.',
+                'error_code' => 'USE_CANCEL_ACTION',
+                'status' => $order->status,
+            ], 422);
+        }
+
         if ($order->status === $target) {
             return response()->json(['message' => 'Order status updated', 'order' => $order], 200);
         }
