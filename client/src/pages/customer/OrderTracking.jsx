@@ -15,6 +15,7 @@ import toast from "../../components/app/Toast";
 import { checkPayment, goToPayment, payOrder } from "../../lib/payments";
 import {
   ORDERS_KEY,
+  amendGuestOrder,
   amendOrder,
   cancelGuestOrder,
   cancelOrder,
@@ -171,12 +172,12 @@ function OrderTracking({ guest = false }) {
   });
 
   const amending = useMutation({
-    mutationFn: (changes) => amendOrder(orderId, changes),
+    mutationFn: (changes) => (guest ? amendGuestOrder(token, changes) : amendOrder(orderId, changes)),
     onSuccess: (payload) => {
       settle(payload);
       setEditing(false);
       setEditError(null);
-      toast.success("Your order has been updated.", "Saved");
+      toast.success("The contact details for this order were updated.", "Saved");
     },
 
     onError: (err) => setEditError(err?.message ?? "That change could not be saved."),

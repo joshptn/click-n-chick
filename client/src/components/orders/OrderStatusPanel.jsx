@@ -115,22 +115,11 @@ function OrderStatusPanel({
   const queue = queueMessage(order.queue);
 
   const cancellation = order.cancellation ?? null;
-  const refundable = cancellation?.refundable ?? false;
   const prompt = cancelPrompt(order);
   const collectAt = isAdvance ? formatCollection(order.scheduled_for) : null;
 
-  const editable = order.editable ?? {};
-  const openFields = [
-    editable.address && "the address",
-    editable.note && "the note for the rider",
-    editable.pickup_at && "your collection time",
-  ].filter(Boolean);
-
-  const anythingEditable = openFields.length > 0;
-  const editableLabel =
-    openFields.length === 1
-      ? openFields[0]
-      : `${openFields.slice(0, -1).join(", ")} or ${openFields[openFields.length - 1]}`;
+  // BR-21b (decided 2026-11-17): only the contact name and number, until it closes.
+  const contactEditable = Boolean(order.editable?.contact_name || order.editable?.contact_phone);
 
   const tone = isRefused(order)
     ? { ring: "bg-[#fdecec]", dot: "bg-[#c92a2a]" }
@@ -233,39 +222,26 @@ function OrderStatusPanel({
         </p>
       )}
 
-      {anythingEditable && (
+      {contactEditable && (
         <section className="rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="m-0 min-w-0 font-display text-[12.5px] leading-snug text-[#6f6b68]">
-              Typed something wrong? You can still fix
-              {" "}{editableLabel}{" "}
-              while the kitchen has your order.
+              Someone else collecting or receiving it, or a new number? You can change the contact name and
+              mobile number until your order is completed.
             </p>
 
             <Button variant="outline" size="sm" onClick={onEdit} className="shrink-0">
               <IconPencil size={15} stroke={2.2} aria-hidden="true" />
-              Correct my order
+              Change contact
             </Button>
           </div>
         </section>
       )}
 
-      {/* Not while an immediate order is being paid for: it cancels itself. */}
-      {!order.is_terminal && order.can_cancel !== false && (
-        <section
-          className={`rounded-[16px] border px-5 py-4 ${
-            refundable ? "border-[#f0e9df] bg-white" : "border-[#ffe6a8] bg-[#fff9e8]"
-          }`}
-        >
+      {!order.is_terminal && order.can_cancel && (
+        <section className="rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p
-              className={`m-0 flex min-w-0 items-start gap-2 font-display text-[12.5px] leading-snug ${
-                refundable ? "text-[#6f6b68]" : "text-[#8a6206]"
-              }`}
-            >
-              {!refundable && (
-                <IconInfoCircle size={15} stroke={2} aria-hidden="true" className="mt-px shrink-0" />
-              )}
+            <p className="m-0 min-w-0 font-display text-[12.5px] leading-snug text-[#6f6b68]">
               {cancellation?.message ?? "You can still cancel this order."}
             </p>
 
@@ -281,6 +257,14 @@ function OrderStatusPanel({
             </Button>
           </div>
         </section>
+      )}
+
+      {/* Confirmed (or paid, for an advance order): no button, just why. */}
+      {!order.is_terminal && !order.can_cancel && cancellation?.code !== "AWAITING_PAYMENT" && cancellation?.message && (
+        <p className="m-0 flex items-start gap-2 rounded-[12px] bg-[#faf7f3] px-4 py-3 font-display text-[12px] leading-snug text-[#6f6b68]">
+          <IconInfoCircle size={15} stroke={2} aria-hidden="true" className="mt-px shrink-0" />
+          {cancellation.message}
+        </p>
       )}
 
       {order.estimated_time_of_completion && !order.is_terminal && (

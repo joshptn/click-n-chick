@@ -50,6 +50,11 @@ export function cancelGuestOrder(token) {
   return api.post("/api/guest/order/cancel", undefined, holding(token));
 }
 
+/** A guest changes the contact name or number from their tracking link (BR-21b). */
+export function amendGuestOrder(token, changes) {
+  return api.patch("/api/guest/order", changes, holding(token));
+}
+
 export function confirmGuestReceipt(token) {
   return api.post("/api/guest/order/received", undefined, holding(token));
 }
@@ -148,11 +153,8 @@ export function cancelPrompt(order) {
       return `You will be refunded ${formatPeso(terms.refund_amount)} in full.`;
     }
 
-    if (terms?.code === "NOTHING_PAID") {
-      return "You have not paid for this, so there is nothing to refund.";
-    }
-
-    return "The kitchen has already started on this, so it cannot be refunded.";
+    // The only other answer a customer can cancel with (decided 2026-11-17).
+    return "You have not paid for this, so there is nothing to refund.";
   })();
 
   const consequence = withdrawing
