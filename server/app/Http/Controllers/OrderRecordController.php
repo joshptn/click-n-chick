@@ -134,7 +134,7 @@ class OrderRecordController extends Controller
         $timezone = $this->store->timezone();
 
         $query = Order::query()
-            ->seenByStaff()
+            ->withoutUnpaidCheckouts()
             ->whereIn('status', OrderStatus::terminal())
             ->when(
                 ($filters['order_type'] ?? 'all') !== 'all',

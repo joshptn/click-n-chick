@@ -231,7 +231,7 @@ class OrderController extends Controller implements HasMiddleware
         $category = $validated['category'] ?? null;
 
         // An unpaid checkout is not an order the shop has received (FR-04.5).
-        $query = Order::with(['items.food.category', 'user'])->seenByStaff();
+        $query = Order::with(['items.food.category', 'user'])->withoutUnpaidCheckouts();
 
         if ($status && $status !== 'all') {
             $query->where('status', $status);

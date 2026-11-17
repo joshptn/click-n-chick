@@ -214,8 +214,9 @@ class Order extends Model
 
     /**
      * An immediate order still being paid for, or one whose payment window
-     * closed unpaid. Staff never see these (decided 2026-11-17): they were
-     * never orders the shop received.
+     * closed unpaid. Nobody sees these, staff or customer (decided
+     * 2026-11-17): it is not a real order until it is paid. The row exists so
+     * the stock hold knows which checkout it is holding for.
      */
     public function isUnpaidCheckout(): bool
     {
@@ -223,8 +224,8 @@ class Order extends Model
             && ($this->status === OrderStatus::AWAITING_PAYMENT || $this->payment_status === self::PAYMENT_EXPIRED);
     }
 
-    /** Everything staff may see: every order except an unpaid immediate checkout. */
-    public function scopeSeenByStaff(Builder $query): Builder
+    /** Real orders only: every order except an unpaid immediate checkout. */
+    public function scopeWithoutUnpaidCheckouts(Builder $query): Builder
     {
         return $query->where(fn (Builder $seen) => $seen
             ->whereNotNull('orders.scheduled_for')

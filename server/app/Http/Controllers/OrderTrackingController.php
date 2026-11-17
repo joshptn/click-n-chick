@@ -30,7 +30,9 @@ class OrderTrackingController extends Controller
 
         $filter = $validated['filter'] ?? 'all';
 
+        // An unpaid checkout is not an order yet, for the customer either.
         $query = $request->user()->orders()
+            ->withoutUnpaidCheckouts()
             ->with(self::WITH)
             ->latest('created_at');
 
@@ -52,6 +54,7 @@ class OrderTrackingController extends Controller
                 ],
                 'counts' => [
                     'active' => $request->user()->orders()
+                        ->withoutUnpaidCheckouts()
                         ->whereNotIn('status', OrderStatus::terminal())->count(),
                 ],
             ]);
@@ -60,6 +63,10 @@ class OrderTrackingController extends Controller
     public function show(Request $request, Order $order)
     {
         $this->authorize('view', $order);
+
+        // Not an order until it is paid; the payment screen reads it through
+        // /orders/{order}/payment instead.
+        abort_if($order->isUnpaidCheckout(), 404);
 
         return response()->json([
             'order' => new OrderTrackingResource($order->load(self::WITH)),

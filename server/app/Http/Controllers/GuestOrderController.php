@@ -90,6 +90,9 @@ class GuestOrderController extends Controller
     {
         $order = $this->order($request);
 
+        // Not an order until it is paid; see OrderTrackingController::show.
+        abort_if($order->isUnpaidCheckout(), 404);
+
         return response()->json([
             'order' => new OrderTrackingResource($order->load(self::WITH)),
             'channel' => $order->guestChannel(),

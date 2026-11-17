@@ -147,7 +147,7 @@ class DailySalesReport
         $kind = $filters['kind'] ?? 'all';
 
         return $query
-            ->seenByStaff()
+            ->withoutUnpaidCheckouts()
             ->when($type !== 'all', fn (Builder $query) => $query->where('order_type', $type))
             ->when($kind === 'advance', fn (Builder $query) => $query->whereNotNull('scheduled_for'))
             ->when($kind === 'regular', fn (Builder $query) => $query->whereNull('scheduled_for'));
