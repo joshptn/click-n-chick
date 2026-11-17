@@ -279,9 +279,6 @@ function AdvanceOrders() {
         loading={advance.isCancelling}
         reasons={ADVANCE_CANCEL_REASONS}
         description={cancelDescription(cancelling)}
-        // BR-20: refundable while it rests in scheduled whoever asks; once the
-        // kitchen has started, a customer's own cancellation is not refunded.
-        allowWaiver={cancelling ? advanceStage(cancelling) === "kitchen" : false}
       />
     </StaffLayout>
   );

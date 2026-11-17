@@ -22,6 +22,7 @@ const {
   Home,
   Checkout,
   OrderTracking,
+  PaymentReturn,
   AdvanceOrder,
   AdvanceCheckout,
   AdvanceSubmitted,
@@ -56,6 +57,7 @@ const routes = (
     <Route path="/home" element={<Home />} />
     <Route path="/checkout" element={<Checkout />} />
     <Route path="/track/:token" element={<OrderTracking guest />} />
+    <Route path="/payment/return" element={<PaymentReturn />} />
 
     <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
       <Route path="/advance-order" element={<AdvanceOrder />} />

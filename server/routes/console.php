@@ -18,6 +18,10 @@ Schedule::command('advance:notify-due')->hourly();
 
 Schedule::command('stock:expire-holds')->everyFiveMinutes()->withoutOverlapping(10);
 
+// The 10-minute payment window (FR-04.5) is enforced to the minute here, and at
+// once whenever the customer checks on the order.
+Schedule::command('payments:expire-checkouts')->everyMinute()->withoutOverlapping(5);
+
 Schedule::command('guest:prune-tokens')->daily();
 
 Schedule::command('guest:prune-carts')->daily();

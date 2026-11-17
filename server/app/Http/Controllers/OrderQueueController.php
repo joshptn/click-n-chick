@@ -236,9 +236,14 @@ class OrderQueueController extends Controller
     {
         $this->authorize('cancel', $order);
 
+        // BR-21a (decided 2026-11-17): the reason is the customer's only
+        // explanation, so it is required; for a paid order the agent must choose
+        // refund or no refund outright - nothing is assumed.
         $validated = $request->validate([
-            'reason' => ['nullable', 'string', 'max:255'],
+            'reason' => ['required', 'string', 'max:255'],
             'refund' => ['sometimes', 'boolean'],
+        ], [
+            'reason.required' => 'Give the customer a reason for the cancellation.',
         ]);
 
         if ($refusal = $this->expiry->enforce($order)) {
@@ -253,25 +258,34 @@ class OrderQueueController extends Controller
             ], 422);
         }
 
-        $reason = trim((string) ($validated['reason'] ?? ''));
+        $reason = trim((string) $validated['reason']);
+
+        if ($reason === '') {
+            return response()->json([
+                'message' => 'Give the customer a reason for the cancellation.',
+                'error_code' => 'REASON_REQUIRED',
+            ], 422);
+        }
+
+        if ($order->isPaid() && ! array_key_exists('refund', $validated)) {
+            return response()->json([
+                'message' => 'This order is paid. Choose whether to refund it in full or not at all.',
+                'error_code' => 'REFUND_CHOICE_REQUIRED',
+            ], 422);
+        }
 
         /**
-         * BR-21a: a shop-initiated cancellation refunds regardless of the
-         * window, because that is not the customer's fault. The agent may waive
-         * it for a cancellation the customer phoned in.
-         *
-         * Clamped to what was actually paid either way. An advance request the
-         * shop turns down has usually never been paid, and recording a refund
-         * against a charge that never happened would hand the payment provider
-         * something it cannot settle.
+         * BR-21a: a full refund or none, as the agent chose. Clamped to what was
+         * actually paid: an unpaid order (an advance request the shop turns
+         * down, usually) has nothing to give back, whatever was chosen.
          */
-        $refund = ($validated['refund'] ?? true) && $order->isPaid()
+        $refund = ($validated['refund'] ?? false) && $order->isPaid()
             ? round((float) ($order->total_amount ?? $order->total_price), 2)
             : 0.0;
 
         $order->forceFill([
             'status' => OrderStatus::CANCELLED,
-            'cancellation_reason' => $reason === '' ? null : $reason,
+            'cancellation_reason' => $reason,
             'cancelled_by' => $request->user()->getKey(),
             'refund_owed' => $refund,
         ])->save();

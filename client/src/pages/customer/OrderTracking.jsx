@@ -10,9 +10,12 @@ import OrderProgress from "../../components/orders/OrderProgress";
 import OrderReceipt from "../../components/orders/OrderReceipt";
 import EditOrderModal from "../../components/orders/EditOrderModal";
 import OrderStatusPanel from "../../components/orders/OrderStatusPanel";
+import PaymentPanel from "../../components/orders/PaymentPanel";
 import toast from "../../components/app/Toast";
+import { checkPayment, goToPayment, payOrder } from "../../lib/payments";
 import {
   ORDERS_KEY,
+  amendGuestOrder,
   amendOrder,
   cancelGuestOrder,
   cancelOrder,
@@ -30,6 +33,7 @@ import {
 import { useOrderChannel, usePublicOrderChannel } from "../../context/useRealtime";
 
 const IN_LINE_POLL_MS = 30 * 1000;
+
 
 function TrackingSkeleton() {
   return (
@@ -89,6 +93,48 @@ function OrderTracking({ guest = false }) {
     return () => window.clearInterval(timer);
   }, [inLine, queryKey, queryClient]);
 
+  const payTarget = guest ? { token } : { orderId };
+  // Only an advance order is waiting for payment here: an unpaid immediate
+  // checkout is not an order, and the server does not show it on this page.
+  const awaitingPayment = Boolean(order?.awaiting_payment) && Boolean(order?.is_advance);
+
+  const paymentCheck = useQuery({
+    queryKey: [...queryKey, "payment"],
+    queryFn: async ({ signal }) => {
+      const payload = await checkPayment(payTarget, { signal });
+
+      if (payload?.order) {
+        queryClient.setQueryData(queryKey, (prev) => ({ ...prev, order: payload.order }));
+
+        if (payload.paid) queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
+      }
+
+      return payload;
+    },
+    // A day to pay: asked once when the page opens, which is also when the
+    // customer comes back from Xendit.
+    enabled: awaitingPayment,
+    retry: false,
+  });
+
+  const paying = useMutation({
+    mutationFn: () => payOrder(payTarget),
+    onSuccess: (payload) => {
+      if (payload?.payment?.url) {
+        goToPayment(payload.payment.url, payTarget);
+
+        return;
+      }
+
+      settle(payload);
+      toast.success("Your payment has already gone through.", "Paid");
+    },
+    onError: (err) => {
+      toast.error(err?.message ?? "Payment could not be started. Please try again.", "Payment unavailable");
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+
   // Both hooks always run, one of them with a null subject.
   const privateEvent = useOrderChannel(!guest && order ? orderId : null);
   const publicEvent = usePublicOrderChannel(guest ? (data?.channel ?? null) : null);
@@ -126,12 +172,12 @@ function OrderTracking({ guest = false }) {
   });
 
   const amending = useMutation({
-    mutationFn: (changes) => amendOrder(orderId, changes),
+    mutationFn: (changes) => (guest ? amendGuestOrder(token, changes) : amendOrder(orderId, changes)),
     onSuccess: (payload) => {
       settle(payload);
       setEditing(false);
       setEditError(null);
-      toast.success("Your order has been updated.", "Saved");
+      toast.success("The contact details for this order were updated.", "Saved");
     },
 
     onError: (err) => setEditError(err?.message ?? "That change could not be saved."),
@@ -227,6 +273,15 @@ function OrderTracking({ guest = false }) {
                 stepCount={order.step_count}
                 isCancelled={order.is_cancelled}
               />
+
+              {awaitingPayment && (
+                <PaymentPanel
+                  order={order}
+                  onPay={() => paying.mutate()}
+                  isOpening={paying.isPending || paying.isSuccess}
+                  isChecking={paymentCheck.isFetching && !paymentCheck.data}
+                />
+              )}
 
               <OrderStatusPanel
                 order={order}

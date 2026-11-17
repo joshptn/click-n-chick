@@ -13,6 +13,7 @@ use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
 use App\Services\Orders\OrderStatus;
+use App\Services\Payments\CheckoutResponder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -74,22 +75,23 @@ class GuestOrderController extends Controller
             return response()->json(['message' => 'Failed to place order'], 500);
         }
 
-        $this->announcer->announce($order, 'create', 'create');
-
-        return response()->json([
-            'message' => 'Order Placed',
-            'order' => $order,
+        // Not announced yet: the shop hears of it when it is paid (PaymentSettlement).
+        return app(CheckoutResponder::class)->respond($order, $cart, $quote, [
             // The only copy. Nothing stores it in plaintext and nothing can
-            // recover it, so the browser keeps it and the link carries it. Minted
-            // before payment on purpose: it is where a payment provider has to
-            // send the customer back to.
+            // recover it, so the browser keeps it and the link carries it. It
+            // is not given to Xendit: the payment page returns to a fixed
+            // address, and the browser takes the guest back from there.
             'tracking_token' => $token,
-        ], 201);
+            'channel' => $order->guestChannel(),
+        ]);
     }
 
     public function show(Request $request)
     {
         $order = $this->order($request);
+
+        // Not an order until it is paid; see OrderTrackingController::show.
+        abort_if($order->isUnpaidCheckout(), 404);
 
         return response()->json([
             'order' => new OrderTrackingResource($order->load(self::WITH)),

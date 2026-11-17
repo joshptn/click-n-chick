@@ -74,16 +74,12 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
                     </a>
                   </Line>
                 )}
-                {order.details_confirmed_at ? (
+                {/* "Details are correct" is hidden for now (2026-11-17); only
+                    the contact can change, which does not hold up the kitchen. */}
+                {order.details_confirmed_at && (
                   <Line icon={IconCircleCheck}>
                     <span className="text-[#2f9e44]">Customer confirmed their details</span>
                   </Line>
-                ) : (
-                  !finished && (
-                    <Line icon={IconClock}>
-                      <span className="text-[#8d8884]">The customer may still edit their details</span>
-                    </Line>
-                  )
                 )}
               </div>
             </Section>

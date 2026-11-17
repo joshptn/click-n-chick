@@ -142,6 +142,7 @@ class OperationsSnapshot
         [$start, $end] = $this->day($now);
 
         $row = Order::query()
+            ->withoutUnpaidCheckouts()
             ->where('created_at', '>=', $start)
             ->where('created_at', '<', $end)
             ->toBase()

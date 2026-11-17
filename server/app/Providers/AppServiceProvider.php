@@ -6,6 +6,9 @@ use App\Services\Geo\OpenRouteServiceClient;
 use App\Services\Geo\RoutingProvider;
 use App\Services\Mail\GmailOAuth;
 use App\Services\Mail\GmailTransport;
+use App\Services\Payments\FakePaymentGateway;
+use App\Services\Payments\PaymentGateway;
+use App\Services\Payments\XenditGateway;
 use App\Services\Push\FcmClient;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SemaphoreClient;
@@ -51,6 +54,12 @@ class AppServiceProvider extends ServiceProvider
 
         // Read when first used, so a test can set the Firebase config before it.
         $this->app->bind(FcmClient::class, fn () => FcmClient::fromConfig());
+
+        // Never the real provider under test, as with SMS above. One instance per
+        // test, so a test can pay a session the code under test opened.
+        $this->app->singleton(PaymentGateway::class, fn ($app) => $app->runningUnitTests()
+            ? new FakePaymentGateway
+            : XenditGateway::fromConfig());
 
         $this->app->singleton(ChannelRegistry::class, function ($app) {
             return new ChannelRegistry([
@@ -157,6 +166,20 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('place-order', function (Request $request) {
             return Limit::perMinute(8)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Opening a checkout is a call to Xendit; checking on one may be too.
+        RateLimiter::for('payment-start', function (Request $request) {
+            return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
+        });
+
+        RateLimiter::for('payment-status', function (Request $request) {
+            return Limit::perMinute(30)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Xendit's own notifications; generous, as a busy hour sends several a minute.
+        RateLimiter::for('payment-webhook', function (Request $request) {
+            return Limit::perMinute(120)->by($request->ip());
         });
 
         RateLimiter::for('checkout-quote', function (Request $request) {

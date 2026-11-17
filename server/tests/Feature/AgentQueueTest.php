@@ -424,7 +424,7 @@ class AgentQueueTest extends TestCase
         $order->forceFill(['payment_status' => 'paid'])->save();
 
         $this->actingAs($this->staff(), 'sanctum')
-            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'We ran out of chicken.'])
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'We ran out of chicken.', 'refund' => true])
             ->assertOk();
 
         $this->assertStringContainsString(
@@ -433,14 +433,17 @@ class AgentQueueTest extends TestCase
         );
     }
 
-    public function test_a_reason_is_optional(): void
+    /** Decided 2026-11-17: the reason is the customer's only explanation (BR-21a). */
+    public function test_a_reason_is_required(): void
     {
         $order = $this->queued();
 
         $this->actingAs($this->staff(), 'sanctum')
             ->postJson("/api/agent/orders/{$order->id}/cancel")
-            ->assertOk()
-            ->assertJsonPath('order.cancellation_reason', null);
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('reason');
+
+        $this->assertNotSame(OrderStatus::CANCELLED, $order->fresh()->status);
     }
 
     public function test_a_finished_order_cannot_be_cancelled(): void
@@ -448,7 +451,7 @@ class AgentQueueTest extends TestCase
         $order = $this->queued('pickup', OrderStatus::COMPLETED);
 
         $this->actingAs($this->staff(), 'sanctum')
-            ->postJson("/api/agent/orders/{$order->id}/cancel")
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Too late.', 'refund' => false])
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'ORDER_ALREADY_CLOSED');
 

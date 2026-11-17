@@ -114,7 +114,7 @@ class OrderLifecycleTest extends TestCase
     {
         $order = $this->order('pickup', OrderStatus::COMPLETED);
 
-        $this->advance($order, OrderStatus::CANCELLED)
+        $this->advance($order, OrderStatus::PREPARING)
             ->assertStatus(422)
             ->assertJsonPath('allowed', []);
     }
@@ -142,9 +142,17 @@ class OrderLifecycleTest extends TestCase
         foreach ([OrderStatus::PLACED, OrderStatus::CONFIRMED, OrderStatus::PREPARING, OrderStatus::ON_THE_WAY] as $from) {
             $order = $this->order('delivery', $from);
 
-            $this->advance($order, OrderStatus::CANCELLED)->assertOk();
+            // Through the cancel action, which takes the reason and refund
+            // choice (BR-21a); the status route refuses a cancellation.
+            $this->actingAs($this->agent(), 'sanctum')
+                ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Kitchen closed early.', 'refund' => true])
+                ->assertOk();
             $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status, "cancelling from {$from}");
         }
+
+        $this->advance($this->order('delivery', OrderStatus::CONFIRMED), OrderStatus::CANCELLED)
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'USE_CANCEL_ACTION');
     }
 
     public function test_a_customer_may_cancel_their_own_order(): void
@@ -159,18 +167,17 @@ class OrderLifecycleTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
     }
 
-    public function test_a_customer_may_still_cancel_after_confirmation(): void
+    public function test_a_customer_cannot_cancel_after_confirmation(): void
     {
         $order = $this->order('pickup', OrderStatus::CONFIRMED);
 
-        // BR-19/BR-20: blocking this would not save the food, it would only stop
-        // the kitchen finding out. Whether they are refunded is the separate
-        // question CancellationPolicyTest covers.
+        // BR-19 (decided 2026-11-17): once a Store Agent confirms it, no longer.
         $this->actingAs($order->user, 'sanctum')
             ->postJson("/api/order/{$order->id}/cancel")
-            ->assertOk();
+            ->assertStatus(400)
+            ->assertJsonPath('error_code', 'STORE_CONFIRMED');
 
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+        $this->assertSame(OrderStatus::CONFIRMED, $order->fresh()->status);
     }
 
     public function test_a_closed_order_can_no_longer_be_cancelled(): void

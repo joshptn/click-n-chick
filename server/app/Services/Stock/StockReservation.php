@@ -24,9 +24,8 @@ use Illuminate\Support\Facades\DB;
  *   release()  gives units back: an unpaid hold lapses, or a sale is cancelled
  *              before the kitchen starts and its units return to the count.
  *
- * Until payment exists (GATE-6) a placed order is a sale, so placement holds and
- * confirms in one step. Payment will move confirm() to its success callback and
- * let expireStale() lapse the holds nobody paid for.
+ * Checkout holds; the payment confirms (PaymentSettlement); expireStale() lapses
+ * the holds nobody paid for.
  *
  * Advance orders never come through here (BR-16d). Untracked items (a null
  * count, made to order) are never held.

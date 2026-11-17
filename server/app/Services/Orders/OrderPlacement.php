@@ -27,7 +27,6 @@ class OrderPlacement
      */
     public function place(?User $user, Cart $cart, array $quote): Order
     {
-        $selectedIds = collect($quote['items'])->pluck('id')->all();
         $isDelivery = $quote['fulfilment_type'] === StoreAvailability::TYPE_DELIVERY;
         $destination = $quote['destination'];
         $contact = $quote['contact'];
@@ -35,9 +34,7 @@ class OrderPlacement
 
         return DB::transaction(function () use (
             $user,
-            $cart,
             $quote,
-            $selectedIds,
             $isDelivery,
             $destination,
             $contact,
@@ -55,7 +52,9 @@ class OrderPlacement
                 'user_id' => $user?->getKey(),
                 'order_type' => $quote['fulfilment_type'],
                 'address_id' => $isDelivery ? ($destination['address_id'] ?? null) : null,
-                'status' => OrderStatus::PLACED,
+                // Paid before it is placed (FR-04.5): it waits here, unseen by
+                // staff, until the payment arrives (PaymentSettlement).
+                'status' => OrderStatus::AWAITING_PAYMENT,
                 'subtotal' => $quote['subtotal'],
                 'discount_amount' => $quote['discount']['amount'],
                 'delivery_fee' => $quote['delivery_fee'],
@@ -68,12 +67,9 @@ class OrderPlacement
                 'longitude' => $isDelivery ? ($destination['longitude'] ?? null) : null,
                 'location' => $isDelivery ? ($destination['locality'] ?? null) : null,
                 'delivery_note' => $isDelivery ? ($destination['delivery_note'] ?? null) : null,
-                'payment_status' => 'unpaid',
-                // Only a guest order carries its contact on the row. An account
-                // order reads it back off the user, so copying it here as well
-                // would be a second version free to drift from the first.
-                'guest_name' => $isGuest ? $contact['name'] : null,
-                'guest_phone' => $isGuest ? $contact['phone'] : null,
+                'payment_status' => Order::PAYMENT_UNPAID,
+                'contact_name' => $contact['name'],
+                'contact_phone' => $contact['phone'],
                 'guest_email' => $isGuest ? ($contact['email'] ?: null) : null,
             ]);
 
@@ -97,16 +93,23 @@ class OrderPlacement
             }
 
             // Under the food rows' lock, so the last units go to one customer
-            // (FR-08.3); a shortage rolls the whole order back. Until payment
-            // exists (GATE-6) placing is the sale, so the hold is confirmed at
-            // once. Payment will confirm it on success instead and let an
-            // unpaid one lapse (FR-04.5).
+            // (FR-08.3); a shortage rolls the whole order back. Only held: the
+            // sale is the payment, which confirms the hold, and an unpaid hold
+            // lapses with the payment window (FR-04.5).
             $this->stock->hold($order, $quote['items']);
-            $this->stock->confirm($order);
-
-            $cart->items()->whereIn('id', $selectedIds)->delete();
 
             return $order;
         });
+    }
+
+    /**
+     * Take the ordered lines out of the cart, once the checkout is open.
+     *
+     * Separate from place() so that a checkout the payment provider could not
+     * open leaves the cart as it was, for the customer to try again.
+     */
+    public function clearCart(Cart $cart, array $quote): void
+    {
+        $cart->items()->whereIn('id', collect($quote['items'])->pluck('id')->all())->delete();
     }
 }

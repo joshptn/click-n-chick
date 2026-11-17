@@ -56,6 +56,7 @@ export const pages = {
   Home: lazyPage(() => import("../pages/customer/Home")),
   Checkout: lazyPage(() => import("../pages/customer/Checkout")),
   OrderTracking: lazyPage(() => import("../pages/customer/OrderTracking")),
+  PaymentReturn: lazyPage(() => import("../pages/customer/PaymentReturn")),
   AdvanceOrder: lazyPage(() => import("../pages/customer/AdvanceOrder")),
   AdvanceCheckout: lazyPage(() => import("../pages/customer/AdvanceCheckout")),
   AdvanceSubmitted: lazyPage(() => import("../pages/customer/AdvanceSubmitted")),

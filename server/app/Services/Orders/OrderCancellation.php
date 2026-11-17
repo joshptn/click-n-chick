@@ -31,7 +31,6 @@ class OrderCancellation
                 'refund_amount' => 0.0,
                 'code' => $refusal['error_code'],
                 'message' => $refusal['message'],
-                'refundable_through' => null,
             ];
         }
 

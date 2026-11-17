@@ -2,49 +2,35 @@
 
 namespace Tests\Feature;
 
-use App\Models\Address;
+use App\Events\OrderBroadcast;
+use App\Http\Middleware\ResolveGuestOrder;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 /**
- * Correcting a placed order instead of cancelling it.
+ * Changing an order's contact name and mobile number (BR-21b, UC-ORD-008,
+ * decided 2026-11-17).
  *
- * Most people who reach for "cancel" have typed something wrong, and the whole
- * point of this surface is that a typo should not cost the shop an order. What
- * it must never do is let a correction quietly change what the customer owes -
- * so the delivery fee is the gate, and anything that moves it is refused.
+ * The only details that can change, by the customer or a guest from their
+ * tracking link, until the order closes, on every kind of order. The order's
+ * own copy changes, never the profile. A Store Agent changes nothing, and the
+ * address, note and collection time are not changeable at all.
  */
 class OrderModificationTest extends TestCase
 {
     use RefreshDatabase;
-
-    /** Roughly 2.5 km away: comfortably inside the base delivery band. */
-    private const NEAR = ['latitude' => 14.9700, 'longitude' => 120.7600];
-
-    /** What the routing engine will say next, in km. */
-    private float $drivingKm = 2.5;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-08-26 10:00', 'Asia/Manila')->utc());
-        Cache::flush();
-
-        config()->set('services.routing.openrouteservice.api_key', 'test-key');
-
-        // A closure, not a stub map. Http::fake() MERGES stubs rather than
-        // replacing them, so a second fake() would never override the first -
-        // every re-route would silently keep answering 2.5 km.
-        Http::fake(fn () => Http::response([
-            'routes' => [['summary' => ['distance' => $this->drivingKm, 'duration' => 600]]],
-        ]));
+        Event::fake([OrderBroadcast::class]);
     }
 
     protected function tearDown(): void
@@ -54,42 +40,40 @@ class OrderModificationTest extends TestCase
         parent::tearDown();
     }
 
-    /** Pin what the routing engine reports back, in km. */
-    private function route(float $km): void
-    {
-        $this->drivingKm = $km;
-
-        // Routes are cached per destination, so a changed answer for the same
-        // pin would otherwise never be asked for.
-        Cache::flush();
-    }
-
     private function customer(): User
     {
-        return User::factory()->create(['role' => User::ROLE_CUSTOMER]);
+        return User::factory()->create([
+            'role' => User::ROLE_CUSTOMER,
+            'first_name' => 'Julia',
+            'last_name' => 'Veneese',
+            'phone_number' => '+639171112222',
+        ]);
     }
 
     private function order(
-        User $owner,
+        ?User $owner,
         string $type = 'delivery',
         string $status = OrderStatus::PLACED,
-        float $fee = 55.0,
+        bool $advance = false,
+        string $paymentStatus = 'paid',
     ): Order {
         $order = Order::create([
-            'user_id' => $owner->id,
+            'user_id' => $owner?->id,
             'order_type' => $type,
             'status' => OrderStatus::PLACED,
             'subtotal' => 410,
-            'delivery_fee' => $type === 'delivery' ? $fee : 0,
-            'delivery_distance_km' => $type === 'delivery' ? 2.5 : null,
-            'total_amount' => 410 + ($type === 'delivery' ? $fee : 0),
-            'total_price' => 410 + ($type === 'delivery' ? $fee : 0),
+            'delivery_fee' => $type === 'delivery' ? 55 : 0,
+            'total_amount' => 465,
+            'total_price' => 465,
             'full_address' => $type === 'delivery' ? 'Old Street, Apalit' : null,
-            'latitude' => $type === 'delivery' ? self::NEAR['latitude'] : null,
-            'longitude' => $type === 'delivery' ? self::NEAR['longitude'] : null,
-            'pickup_at' => $type === 'pickup'
-                ? CarbonImmutable::now('Asia/Manila')->setTime(14, 0)
-                : null,
+            'latitude' => $type === 'delivery' ? 14.97 : null,
+            'longitude' => $type === 'delivery' ? 120.76 : null,
+            'delivery_note' => $type === 'delivery' ? 'Blue gate' : null,
+            'pickup_at' => $type === 'pickup' ? CarbonImmutable::now('Asia/Manila')->setTime(14, 0) : null,
+            'scheduled_for' => $advance ? CarbonImmutable::now()->addDays(3) : null,
+            'payment_status' => $paymentStatus,
+            'contact_name' => 'Julia Veneese',
+            'contact_phone' => '09171112222',
         ]);
 
         if ($status !== OrderStatus::PLACED) {
@@ -99,465 +83,179 @@ class OrderModificationTest extends TestCase
         return $order->fresh();
     }
 
-    // -----------------------------------------------------------------
-    // The address
-    // -----------------------------------------------------------------
-
-    public function test_a_customer_can_correct_the_delivery_address(): void
-    {
-        $order = $this->order($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'latitude' => 14.9710,
-                'longitude' => 120.7610,
-                'full_address' => '14 New Street, Apalit',
-            ])
-            ->assertOk()
-            ->assertJsonPath('order.delivery.full_address', '14 New Street, Apalit');
-
-        $this->assertSame('14 New Street, Apalit', $order->fresh()->full_address);
-    }
-
-    public function test_a_saved_address_can_be_chosen_instead(): void
+    public function test_a_customer_changes_the_contact_on_the_order_only(): void
     {
         $customer = $this->customer();
         $order = $this->order($customer);
 
-        $address = Address::create([
-            'user_id' => $customer->id,
-            'label' => 'Home',
-            'full_address' => '7 Rizal Street, Apalit',
-            'latitude' => 14.9705,
-            'longitude' => 120.7605,
-            'location' => 'Apalit',
-        ]);
-
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['address_id' => $address->id])
+            ->patchJson("/api/orders/{$order->id}", ['contact_name' => 'Marco Veneese', 'contact_phone' => '+63 917 333 4444'])
             ->assertOk()
-            ->assertJsonPath('order.delivery.full_address', '7 Rizal Street, Apalit');
+            ->assertJsonPath('order.contact.name', 'Marco Veneese')
+            ->assertJsonPath('order.contact.phone', '09173334444');
 
-        $this->assertSame($address->id, $order->fresh()->address_id);
+        $this->assertSame('Marco Veneese', $order->fresh()->contact_name);
+        $this->assertSame('09173334444', $order->fresh()->contact_phone);
+
+        // The profile is untouched.
+        $this->assertSame('Julia', $customer->fresh()->first_name);
+        $this->assertSame('+639171112222', $customer->fresh()->phone_number);
+
+        // The staff boards hear of it.
+        Event::assertDispatched(OrderBroadcast::class);
     }
 
-    public function test_an_address_that_would_change_the_fee_is_refused(): void
+    public function test_either_field_can_change_alone(): void
     {
-        $order = $this->order($customer = $this->customer());
-
-        // Same order, much longer drive: a different fee band.
-        $this->route(18.0);
+        $customer = $this->customer();
+        $order = $this->order($customer);
 
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'latitude' => 15.0500,
-                'longitude' => 120.8500,
-                'full_address' => 'Far Away, Pampanga',
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'FEE_WOULD_CHANGE');
-
-        $this->assertSame('Old Street, Apalit', $order->fresh()->full_address, 'nothing may be written on a refusal');
-    }
-
-    public function test_an_address_outside_the_service_area_is_refused(): void
-    {
-        $order = $this->order($customer = $this->customer());
-
-        $this->route(80.0);
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'latitude' => 15.2000,
-                'longitude' => 121.0000,
-                'full_address' => 'Well outside, Nueva Ecija',
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'OUTSIDE_SERVICE_AREA');
-    }
-
-    public function test_the_recorded_distance_follows_the_new_address(): void
-    {
-        $order = $this->order($customer = $this->customer());
-
-        $this->route(2.9);
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'latitude' => 14.9720,
-                'longitude' => 120.7620,
-                'full_address' => '99 Another Street, Apalit',
-            ])
+            ->patchJson("/api/orders/{$order->id}", ['contact_phone' => '09175556666'])
             ->assertOk();
 
-        $this->assertSame('2.90', $order->fresh()->delivery_distance_km);
+        $this->assertSame('Julia Veneese', $order->fresh()->contact_name);
+        $this->assertSame('09175556666', $order->fresh()->contact_phone);
     }
 
-    public function test_the_address_locks_once_the_order_leaves_the_shop(): void
+    public function test_it_stays_changeable_until_the_order_closes(): void
     {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::ON_THE_WAY);
+        $customer = $this->customer();
+
+        foreach ([OrderStatus::CONFIRMED, OrderStatus::PREPARING, OrderStatus::ON_THE_WAY] as $status) {
+            $order = $this->order($customer, 'delivery', $status);
+
+            $this->actingAs($customer, 'sanctum')
+                ->patchJson("/api/orders/{$order->id}", ['contact_name' => 'Marco'])
+                ->assertOk();
+        }
+
+        $advance = $this->order($customer, 'pickup', OrderStatus::SCHEDULED, advance: true);
 
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'latitude' => 14.9710,
-                'longitude' => 120.7610,
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'ADDRESS_LOCKED');
-    }
-
-    public function test_a_pickup_order_has_no_address_to_change(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'pickup');
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['latitude' => 14.97, 'longitude' => 120.76])
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'ADDRESS_LOCKED');
-    }
-
-    // -----------------------------------------------------------------
-    // The note
-    // -----------------------------------------------------------------
-
-    public function test_the_delivery_note_can_be_corrected(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::PREPARING);
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Blue gate, ring twice'])
+            ->patchJson("/api/orders/{$advance->id}", ['contact_phone' => '09175556666'])
             ->assertOk()
-            ->assertJsonPath('order.delivery.note', 'Blue gate, ring twice');
+            ->assertJsonPath('order.editable.contact_phone', true);
     }
 
-    public function test_an_emptied_note_is_stored_as_nothing(): void
+    public function test_a_closed_order_cannot_be_changed(): void
     {
-        $order = $this->order($customer = $this->customer());
-        $order->forceFill(['delivery_note' => 'Old note'])->save();
+        $customer = $this->customer();
+        $order = $this->order($customer, 'pickup', OrderStatus::COMPLETED);
 
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => '   '])
-            ->assertOk();
+            ->patchJson("/api/orders/{$order->id}", ['contact_name' => 'Marco'])
+            ->assertForbidden();
 
-        $this->assertNull($order->fresh()->delivery_note);
+        $this->assertSame('Julia Veneese', $order->fresh()->contact_name);
     }
 
-    public function test_the_note_locks_with_the_address(): void
+    public function test_the_address_note_and_collection_time_cannot_be_changed(): void
     {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::ON_THE_WAY);
+        $customer = $this->customer();
+        $delivery = $this->order($customer, 'delivery');
+        $pickup = $this->order($customer, 'pickup');
+
+        foreach ([
+            [$delivery, ['latitude' => 14.98, 'longitude' => 120.77, 'full_address' => 'New Street']],
+            [$delivery, ['delivery_note' => 'Red gate']],
+            [$pickup, ['pickup_at' => CarbonImmutable::now('Asia/Manila')->setTime(15, 0)->toIso8601String()]],
+            [$delivery, ['contact_name' => 'Marco', 'delivery_note' => 'Red gate']],
+        ] as [$order, $body]) {
+            $this->actingAs($customer, 'sanctum')
+                ->patchJson("/api/orders/{$order->id}", $body)
+                ->assertStatus(422)
+                ->assertJsonPath('error_code', 'NOT_CHANGEABLE');
+        }
+
+        $this->assertSame('Old Street, Apalit', $delivery->fresh()->full_address);
+        $this->assertSame('Blue gate', $delivery->fresh()->delivery_note);
+        $this->assertSame('Julia Veneese', $delivery->fresh()->contact_name);
+    }
+
+    public function test_the_contact_is_checked_like_at_checkout(): void
+    {
+        $customer = $this->customer();
+        $order = $this->order($customer);
 
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Too late'])
+            ->patchJson("/api/orders/{$order->id}", ['contact_phone' => '12345'])
             ->assertStatus(422)
-            ->assertJsonPath('error_code', 'NOTE_LOCKED');
-    }
-
-    // -----------------------------------------------------------------
-    // The collection time
-    // -----------------------------------------------------------------
-
-    public function test_the_collection_time_can_be_moved(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'pickup');
-        $later = CarbonImmutable::now('Asia/Manila')->setTime(16, 30);
+            ->assertJsonPath('error_code', 'CONTACT_PHONE_INVALID');
 
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['pickup_at' => $later->toIso8601String()])
-            ->assertOk();
-
-        $this->assertSame(
-            $later->toDateTimeString(),
-            CarbonImmutable::parse($order->fresh()->pickup_at)->setTimezone('Asia/Manila')->toDateTimeString()
-        );
-    }
-
-    public function test_a_collection_time_before_the_kitchen_can_manage_is_refused(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'pickup');
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'pickup_at' => CarbonImmutable::now('Asia/Manila')->addMinutes(2)->toIso8601String(),
-            ])
+            ->patchJson("/api/orders/{$order->id}", ['contact_name' => '   '])
             ->assertStatus(422)
-            ->assertJsonPath('error_code', 'PICKUP_TIME_TOO_SOON');
-    }
-
-    public function test_a_collection_time_after_closing_is_refused(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'pickup');
+            ->assertJsonPath('error_code', 'CONTACT_NAME_REQUIRED');
 
         $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'pickup_at' => CarbonImmutable::now('Asia/Manila')->setTime(23, 30)->toIso8601String(),
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'PICKUP_TIME_TOO_LATE');
-    }
-
-    public function test_the_collection_time_locks_once_the_food_is_waiting(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::READY_FOR_PICKUP);
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'pickup_at' => CarbonImmutable::now('Asia/Manila')->setTime(17, 0)->toIso8601String(),
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'PICKUP_TIME_LOCKED');
-    }
-
-    // -----------------------------------------------------------------
-    // What is never amendable
-    // -----------------------------------------------------------------
-
-    public function test_the_fulfilment_type_and_the_items_are_never_open(): void
-    {
-        $order = $this->order($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertOk()
-            ->assertJsonPath('order.editable.fulfilment_type', false)
-            ->assertJsonPath('order.editable.items', false);
-    }
-
-    public function test_switching_to_pickup_is_not_a_field_the_endpoint_accepts(): void
-    {
-        $order = $this->order($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['order_type' => 'pickup'])
+            ->patchJson("/api/orders/{$order->id}", [])
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'NOTHING_TO_CHANGE');
-
-        $this->assertSame('delivery', $order->fresh()->order_type);
     }
 
-    public function test_a_finished_order_is_closed_to_changes(): void
+    public function test_a_store_agent_cannot_change_a_customers_contact(): void
     {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::DELIVERED);
+        $order = $this->order($this->customer());
 
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Anything'])
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]), 'sanctum')
+            ->patchJson("/api/orders/{$order->id}", ['contact_name' => 'Someone else'])
             ->assertForbidden();
+
+        $this->assertSame('Julia Veneese', $order->fresh()->contact_name);
     }
 
-    // -----------------------------------------------------------------
-    // Who may amend
-    // -----------------------------------------------------------------
-
-    public function test_a_stranger_cannot_amend_someone_elses_order(): void
+    public function test_one_customer_cannot_change_anothers_order(): void
     {
         $order = $this->order($this->customer());
 
         $this->actingAs($this->customer(), 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Not mine'])
+            ->patchJson("/api/orders/{$order->id}", ['contact_name' => 'Someone else'])
             ->assertForbidden();
     }
 
-    public function test_a_store_agent_can_amend_on_the_customers_behalf(): void
+    public function test_a_guest_changes_their_contact_from_the_tracking_link(): void
     {
-        $order = $this->order($this->customer());
+        $order = $this->order(null, 'pickup');
+        $token = $order->mintGuestToken();
 
-        // The phone-in case the whole policy leans on.
-        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]), 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Customer called: leave with the guard'])
-            ->assertOk();
+        $this->withHeader(ResolveGuestOrder::HEADER, $token)
+            ->patchJson('/api/guest/order', ['contact_name' => 'Marco Guest', 'contact_phone' => '09178889999'])
+            ->assertOk()
+            ->assertJsonPath('order.contact.name', 'Marco Guest');
 
-        $this->assertSame('Customer called: leave with the guard', $order->fresh()->delivery_note);
+        $this->assertSame('09178889999', $order->fresh()->contact_phone);
     }
 
-    public function test_a_guest_cannot_amend_anything(): void
+    public function test_an_unpaid_checkout_is_not_an_order_to_change(): void
     {
-        $order = $this->order($this->customer());
+        $customer = $this->customer();
+        $order = $this->order($customer, 'pickup', OrderStatus::AWAITING_PAYMENT, paymentStatus: 'unpaid');
 
-        $this->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Hello'])->assertUnauthorized();
+        $this->actingAs($customer, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}", ['contact_name' => 'Marco'])
+            ->assertNotFound();
     }
 
-    // -----------------------------------------------------------------
-    // "These details are right - start cooking"
-    // -----------------------------------------------------------------
-
-    public function test_a_customer_can_close_their_own_change_window_early(): void
+    public function test_an_older_account_order_reads_its_contact_off_the_account(): void
     {
-        $order = $this->order($customer = $this->customer());
+        $customer = $this->customer();
+        $order = $this->order($customer);
+        $order->forceFill(['contact_name' => null, 'contact_phone' => null])->save();
 
         $this->actingAs($customer, 'sanctum')
             ->getJson("/api/orders/{$order->id}")
-            ->assertJsonPath('order.can_confirm_details', true)
-            ->assertJsonPath('order.details_confirmed_at', null);
-
-        $this->actingAs($customer, 'sanctum')
-            ->postJson("/api/orders/{$order->id}/confirm-details")
-            ->assertOk();
-
-        $this->assertNotNull($order->fresh()->details_confirmed_at);
+            ->assertJsonPath('order.contact.name', 'Julia Veneese')
+            ->assertJsonPath('order.contact.phone', '+639171112222');
     }
 
-    public function test_confirming_twice_is_refused_rather_than_re_stamped(): void
+    public function test_details_are_correct_is_hidden_for_now(): void
     {
-        $order = $this->order($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/confirm-details")->assertOk();
-        $stamped = $order->fresh()->details_confirmed_at;
-
-        $this->actingAs($customer, 'sanctum')
-            ->postJson("/api/orders/{$order->id}/confirm-details")
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'NOTHING_TO_CONFIRM');
-
-        $this->assertEquals($stamped, $order->fresh()->details_confirmed_at);
-    }
-
-    public function test_there_is_nothing_to_confirm_once_the_kitchen_has_started(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::PREPARING);
-
-        $this->actingAs($customer, 'sanctum')
-            ->postJson("/api/orders/{$order->id}/confirm-details")
-            ->assertStatus(422)
-            ->assertJsonPath('error_code', 'NOTHING_TO_CONFIRM');
-    }
-
-    public function test_amending_the_order_withdraws_the_confirmation(): void
-    {
-        $order = $this->order($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/confirm-details")->assertOk();
-        $this->assertNotNull($order->fresh()->details_confirmed_at);
-
-        // They have just changed the thing they confirmed, so the agent's
-        // "safe to start" signal must stop being true.
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", ['delivery_note' => 'Actually, the blue gate'])
-            ->assertOk();
-
-        $this->assertNull($order->fresh()->details_confirmed_at);
-    }
-
-    public function test_the_agents_queue_shows_which_orders_are_green_lit(): void
-    {
-        $order = $this->order($customer = $this->customer());
-        $order->enterQueue();
-
-        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/confirm-details")->assertOk();
-
-        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]), 'sanctum')
-            ->getJson('/api/agent/queue')
-            ->assertOk()
-            ->assertJsonPath('line.0.id', $order->id);
-
-        $this->assertNotNull($order->fresh()->details_confirmed_at);
-    }
-
-    public function test_a_stranger_cannot_confirm_someone_elses_details(): void
-    {
-        $order = $this->order($this->customer());
-
-        $this->actingAs($this->customer(), 'sanctum')
-            ->postJson("/api/orders/{$order->id}/confirm-details")
-            ->assertForbidden();
-    }
-
-    // -----------------------------------------------------------------
-    // What the tracker advertises
-    // -----------------------------------------------------------------
-
-    public function test_the_tracker_says_what_is_still_open(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::PREPARING);
+        $customer = $this->customer();
+        $order = $this->order($customer);
 
         $this->actingAs($customer, 'sanctum')
             ->getJson("/api/orders/{$order->id}")
-            ->assertOk()
-            ->assertJsonPath('order.editable.address', true)
-            ->assertJsonPath('order.editable.note', true)
-            ->assertJsonPath('order.editable.pickup_at', false);
-    }
-
-    public function test_the_tracker_closes_everything_once_it_is_on_the_way(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'delivery', OrderStatus::ON_THE_WAY);
-
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertOk()
-            ->assertJsonPath('order.editable.address', false)
-            ->assertJsonPath('order.editable.note', false);
-    }
-
-    // -----------------------------------------------------------------
-    // Advance orders are not amendable here
-    // -----------------------------------------------------------------
-    //
-    // `confirmed` exists in both chains, so without an explicit guard an
-    // advance order would be offered the pickup-time editor - and the change
-    // would be written to `pickup_at`, a column an advance order does not use
-    // for its collection date. Rescheduling one is its own piece of work.
-
-    private function advanceOrder(User $owner, string $status = OrderStatus::CONFIRMED): Order
-    {
-        $order = $this->order($owner, 'pickup', $status);
-
-        $order->forceFill([
-            'scheduled_for' => CarbonImmutable::now('Asia/Manila')->addDays(7)->setTime(12, 0),
-        ])->save();
-
-        return $order->fresh();
-    }
-
-    public function test_an_advance_order_offers_no_amendable_fields(): void
-    {
-        $order = $this->advanceOrder($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertOk()
-            ->assertJsonPath('order.is_advance', true)
-            ->assertJsonPath('order.editable.pickup_at', false)
-            ->assertJsonPath('order.editable.address', false)
-            ->assertJsonPath('order.editable.note', false);
-    }
-
-    public function test_an_advance_order_is_not_asked_to_confirm_its_details(): void
-    {
-        // "Go ahead and start" means nothing on an order booked for next week.
-        $order = $this->advanceOrder($customer = $this->customer());
-
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertOk()
             ->assertJsonPath('order.can_confirm_details', false);
-    }
-
-    public function test_the_endpoint_refuses_to_amend_an_advance_order(): void
-    {
-        // Not merely hidden in the UI - the door itself is shut.
-        $order = $this->advanceOrder($customer = $this->customer());
-        $booked = $order->scheduled_for;
-
-        $this->actingAs($customer, 'sanctum')
-            ->patchJson("/api/orders/{$order->id}", [
-                'pickup_at' => CarbonImmutable::now('Asia/Manila')->addDays(7)->setTime(15, 0)->toIso8601String(),
-            ])
-            ->assertStatus(422);
-
-        $this->assertTrue(
-            $booked->equalTo($order->fresh()->scheduled_for),
-            'the collection date must survive a refused amendment untouched'
-        );
-    }
-
-    public function test_an_immediate_pickup_order_still_offers_its_collection_time(): void
-    {
-        // The guard must key on the order being an advance one, not on pickup.
-        $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::CONFIRMED);
-
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertOk()
-            ->assertJsonPath('order.is_advance', false)
-            ->assertJsonPath('order.editable.pickup_at', true);
     }
 }

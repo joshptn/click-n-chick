@@ -269,7 +269,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
             ? `Tick at least one item to ${isAdvance ? "continue" : "check out"}`
             : isAdvance
               ? "For collection at the store · a Store Agent confirms before you pay"
-              : "🔒 Secure checkout · cancel any time before the kitchen starts"}
+              : "🔒 Secure checkout · cancel for a full refund until the store confirms"}
         </p>
       </footer>
     </section>

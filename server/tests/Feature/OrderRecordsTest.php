@@ -204,8 +204,8 @@ class OrderRecordsTest extends TestCase
 
         $guest = $this->close($this->order([
             'user_id' => null,
-            'guest_name' => 'Veneese Lazaraga',
-            'guest_phone' => '09171234567',
+            'contact_name' => 'Veneese Lazaraga',
+            'contact_phone' => '09171234567',
             'guest_email' => 'lazaraga@example.test',
         ], $this->food('Liempo', 250)), OrderStatus::COMPLETED);
 

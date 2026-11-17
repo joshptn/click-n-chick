@@ -45,7 +45,9 @@ class OrderPolicy
             return false;
         }
 
-        return $this->owns($user, $order) || $this->operate($user);
+        // The customer only: a Store Agent may not change an order's contact
+        // details (decided 2026-11-17).
+        return $this->owns($user, $order);
     }
 
     public function cancel(User $user, Order $order): bool

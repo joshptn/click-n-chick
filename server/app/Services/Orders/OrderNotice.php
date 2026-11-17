@@ -183,8 +183,9 @@ class OrderNotice
             return "{$this->peso($owed)} will be refunded to you.";
         }
 
+        // Paid and nothing owed back: the store chose not to refund (BR-21a).
         return $order->isPaid()
-            ? 'As the kitchen had already started, this one is not refunded.'
+            ? 'This order is not refunded.'
             : 'Nothing had been paid, so there is nothing to refund.';
     }
 

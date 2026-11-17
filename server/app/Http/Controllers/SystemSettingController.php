@@ -6,9 +6,7 @@ use App\Events\StoreBroadcast;
 use App\Jobs\NotifyEveryAccount;
 use App\Models\Discount;
 use App\Models\Setting;
-use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\DeliveryPricing;
-use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -108,29 +106,6 @@ class SystemSettingController extends Controller
             'success' => true,
             'message' => 'Delivery pricing updated.',
         ] + $this->deliveryPayload());
-    }
-
-    public function showCancellation()
-    {
-        return response()->json($this->cancellationPayload());
-    }
-    
-    public function updateCancellation(Request $request)
-    {
-        $validated = $request->validate([
-            'full_refund_through' => ['required', 'string', Rule::in(CancellationPolicy::thresholds())],
-        ], [
-            'full_refund_through.in' => 'A refund window cannot extend past the kitchen starting.',
-        ]);
-
-        $actor = (int) $request->user()->getKey();
-
-        Setting::put(Setting::CANCELLATION_FULL_REFUND_THROUGH, $validated['full_refund_through'], $actor);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Cancellation and refund rules updated.',
-        ] + $this->cancellationPayload());
     }
 
     public function showLoyalty()
@@ -258,23 +233,6 @@ class SystemSettingController extends Controller
             'updated_at' => $setting?->updated_at?->toIso8601String(),
             'updated_by' => $setting?->updatedBy,
         ];
-    }
-
-    /** @return array<string, mixed> */
-    private function cancellationPayload(): array
-    {
-        $policy = app(CancellationPolicy::class);
-
-        return [
-            'full_refund_through' => $policy->fullRefundThrough(),
-            'options' => array_map(fn (string $status) => [
-                'value' => $status,
-                'label' => OrderStatus::label($status),
-            ], CancellationPolicy::thresholds()),
-            'defaults' => [
-                'full_refund_through' => CancellationPolicy::DEFAULT_FULL_REFUND_THROUGH,
-            ],
-        ] + $this->provenance(Setting::CANCELLATION_FULL_REFUND_THROUGH);
     }
 
     private function deliveryPayload(): array

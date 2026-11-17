@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Services\Orders\AmendmentPolicy;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\OrderStatus;
+use App\Services\Payments\PaymentCheckout;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class OrderTrackingResource extends JsonResource
@@ -14,6 +15,7 @@ class OrderTrackingResource extends JsonResource
         $status = (string) $this->status;
         $isCancelled = $status === OrderStatus::CANCELLED;
         $isDelivery = $this->order_type === 'delivery';
+        $cancellation = app(CancellationPolicy::class)->for($this->resource);
 
         return [
             'id' => $this->id,
@@ -33,6 +35,8 @@ class OrderTrackingResource extends JsonResource
             'is_advance' => $this->isAdvance(),
             'scheduled_for' => $this->scheduled_for?->toIso8601String(),
             'payment_due_at' => $this->paymentDueAt()?->toIso8601String(),
+            // Waiting on the customer's payment: the web app offers "Pay now".
+            'awaiting_payment' => ! $this->isTerminal() && PaymentCheckout::awaitsPayment($this->resource),
 
             'queue' => [
                 'number' => $this->queue_number,
@@ -42,8 +46,8 @@ class OrderTrackingResource extends JsonResource
                 'ahead' => $this->aheadInQueue(),
             ],
 
-            'cancellation' => app(CancellationPolicy::class)->for($this->resource),
-            'can_cancel' => ! $this->isTerminal(),
+            'cancellation' => $cancellation,
+            'can_cancel' => $cancellation['can_cancel'],
             'editable' => app(AmendmentPolicy::class)->editable($this->resource),
             'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
             'can_confirm_details' => app(AmendmentPolicy::class)->canConfirmDetails($this->resource),
@@ -68,10 +72,8 @@ class OrderTrackingResource extends JsonResource
             ]),
 
             'contact' => [
-                'name' => $this->user
-                    ? trim(($this->user->first_name ?? '').' '.($this->user->last_name ?? ''))
-                    : $this->guest_name,
-                'phone' => $this->user?->phone_number ?? $this->guest_phone,
+                'name' => $this->contactName(),
+                'phone' => $this->contactPhone(),
             ],
 
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($item) => [

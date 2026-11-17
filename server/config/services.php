@@ -96,4 +96,24 @@ return [
         'lock_wait' => (int) env('ROUTING_LOCK_WAIT', 3),
     ],
 
+    /*
+     * Xendit (FR-04.2, decided 2026-11-17): QR Ph and GCash through its hosted
+     * checkout (Payment Sessions). Both values are secrets. A test-mode key
+     * starts xnd_development_; the webhook token is the "verification token" on
+     * Xendit's Webhooks settings page and arrives as the x-callback-token header.
+     *
+     * return_url is where Xendit sends the customer back. Xendit accepts only
+     * HTTPS there, so the web app's /payment/return page on the deployed site.
+     */
+    'xendit' => [
+        'secret_key' => env('XENDIT_SECRET_KEY'),
+        'webhook_token' => env('XENDIT_WEBHOOK_TOKEN'),
+        'endpoint' => env('XENDIT_ENDPOINT', 'https://api.xendit.co'),
+        'return_url' => env(
+            'XENDIT_RETURN_URL',
+            rtrim((string) env('FRONTEND_URL', 'http://localhost:5173'), '/').'/payment/return'
+        ),
+        'timeout' => (int) env('XENDIT_TIMEOUT', 15),
+    ],
+
 ];
