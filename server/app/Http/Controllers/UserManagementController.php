@@ -314,8 +314,8 @@ class UserManagementController extends Controller
 
             Order::query()->where('user_id', $target->getKey())->toBase()->update([
                 'user_id' => null,
-                'guest_name' => Order::ANONYMIZED_CUSTOMER,
-                'guest_phone' => null,
+                'contact_name' => Order::ANONYMIZED_CUSTOMER,
+                'contact_phone' => null,
                 'guest_email' => null,
             ]);
 

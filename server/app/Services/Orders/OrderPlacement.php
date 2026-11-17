@@ -68,11 +68,8 @@ class OrderPlacement
                 'location' => $isDelivery ? ($destination['locality'] ?? null) : null,
                 'delivery_note' => $isDelivery ? ($destination['delivery_note'] ?? null) : null,
                 'payment_status' => Order::PAYMENT_UNPAID,
-                // Only a guest order carries its contact on the row. An account
-                // order reads it back off the user, so copying it here as well
-                // would be a second version free to drift from the first.
-                'guest_name' => $isGuest ? $contact['name'] : null,
-                'guest_phone' => $isGuest ? $contact['phone'] : null,
+                'contact_name' => $contact['name'],
+                'contact_phone' => $contact['phone'],
                 'guest_email' => $isGuest ? ($contact['email'] ?: null) : null,
             ]);
 

@@ -49,7 +49,7 @@ class OrderRecordResource extends JsonResource
 
             'customer' => [
                 'name' => $this->customerName(),
-                'is_guest' => $this->user_id === null && $this->guest_name !== Order::ANONYMIZED_CUSTOMER,
+                'is_guest' => $this->user_id === null && $this->contact_name !== Order::ANONYMIZED_CUSTOMER,
             ],
 
             'item_count' => (int) ($this->item_count ?? $items->sum('quantity')),
@@ -83,7 +83,7 @@ class OrderRecordResource extends JsonResource
         return $row + [
             'contact' => [
                 'email' => $this->user?->email ?? $this->guest_email,
-                'phone' => $this->user?->phone_number ?? $this->guest_phone,
+                'phone' => $this->contactPhone(),
             ],
 
             'pickup_at' => $this->when(! $isDelivery, fn () => $this->pickup_at?->toIso8601String()),
@@ -157,7 +157,7 @@ class OrderRecordResource extends JsonResource
             return $name === '' ? null : $name;
         }
 
-        return $this->guest_name;
+        return $this->contact_name;
     }
 
     private function cancelledByStore(): bool

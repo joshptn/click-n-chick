@@ -45,13 +45,11 @@ class OrderQueueResource extends JsonResource
             'order_type' => $this->order_type,
             'estimated_time_of_completion' => $this->estimated_time_of_completion,
 
-            // Whoever is actually collecting or receiving. Falls back to the
-            // guest fields, which are the only contact a guest order has.
+            // Whoever is actually collecting or receiving: the order's own
+            // contact (BR-21b), which the customer may have changed since.
             'customer' => [
-                'name' => $this->user
-                    ? trim(($this->user->first_name ?? '').' '.($this->user->last_name ?? ''))
-                    : $this->guest_name,
-                'phone' => $this->user?->phone_number ?? $this->guest_phone,
+                'name' => $this->contactName(),
+                'phone' => $this->contactPhone(),
                 'is_guest' => $this->user_id === null,
             ],
 

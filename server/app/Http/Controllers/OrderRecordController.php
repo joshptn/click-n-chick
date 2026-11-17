@@ -192,7 +192,7 @@ class OrderRecordController extends Controller
             }
 
             $where
-                ->orWhereRaw('LOWER(orders.guest_name) LIKE ?', [$needle])
+                ->orWhereRaw('LOWER(orders.contact_name) LIKE ?', [$needle])
                 ->orWhereRaw('LOWER(orders.guest_email) LIKE ?', [$needle])
                 ->orWhereRaw('LOWER(orders.order_number) LIKE ?', [$needle])
                 ->orWhereHas('user', fn (Builder $user) => $user
@@ -201,7 +201,7 @@ class OrderRecordController extends Controller
                 ->orWhereHas('items.food', fn (Builder $food) => $food->whereRaw('LOWER(food_name) LIKE ?', [$needle]));
 
             if (strlen($digits) >= 7) {
-                $where->orWhere('orders.guest_phone', 'like', '%'.$digits.'%');
+                $where->orWhere('orders.contact_phone', 'like', '%'.$digits.'%');
             }
 
             if ($phoneHash !== null) {

@@ -64,8 +64,8 @@ class Order extends Model
         'total_amount',
         'payment_status',
         'estimated_time_of_completion',
-        'guest_name',
-        'guest_phone',
+        'contact_name',
+        'contact_phone',
         'guest_email',
         'full_address',
         'latitude',
@@ -125,6 +125,29 @@ class Order extends Model
     public function isGuest(): bool
     {
         return $this->user_id === null;
+    }
+
+    /**
+     * Who the order is for (BR-21b): the name given at checkout, or changed on
+     * the order since. Orders from before every order carried one read it off
+     * their account.
+     */
+    public function contactName(): ?string
+    {
+        $name = trim((string) $this->contact_name);
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        $account = trim(($this->user?->first_name ?? '').' '.($this->user?->last_name ?? ''));
+
+        return $account === '' ? null : $account;
+    }
+
+    public function contactPhone(): ?string
+    {
+        return $this->contact_phone ?: $this->user?->phone_number;
     }
 
     /**
