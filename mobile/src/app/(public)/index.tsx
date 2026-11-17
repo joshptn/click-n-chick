@@ -8,17 +8,12 @@ import { colors } from "../../theme/colors";
 
 /**
  * The landing page (design of 2026-11-16), for signed-out customers. A
- * signed-in customer goes straight past it: to their account for now, to the
- * menu once it exists (phase 6).
- *
- * "Order now" and "Start your order" open Sign in; "Explore the menu" opens the
- * menu (a placeholder until phase 6).
  */
 export default function Landing() {
   const { signedIn } = useSession();
   const { width } = useWindowDimensions();
 
-  if (signedIn) return <Redirect href="/account" />;
+  if (signedIn) return <Redirect href="/home" />;
 
   // The headline and the mascot scale down on narrow phones.
   const headline = Math.min(56, Math.round(width * 0.135));
@@ -103,7 +98,7 @@ export default function Landing() {
             </AppText>
           </Pressable>
 
-          <Link href="/menu" asChild>
+          <Link href="/home" asChild>
             <Pressable accessibilityRole="button" style={styles.explore} hitSlop={8} testID="landing-explore-menu">
               <AppText family="display" weight="semibold" size={13.5} color={colors.espresso}>
                 Explore the menu

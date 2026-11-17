@@ -232,7 +232,7 @@ export default function SignUp() {
           <PromptRow prompt="Already have an account?">
             <TextLink label="Sign in" onPress={() => router.replace("/sign-in")} testID="go-sign-in" />
           </PromptRow>
-          <QuietLink label="Continue without an account" onPress={() => router.push("/menu")} />
+          <QuietLink label="Continue without an account" onPress={() => router.dismissTo("/home")} />
         </View>
       </View>
     </AuthCard>

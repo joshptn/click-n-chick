@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import Constants from "expo-constants";
 
 import { getDeviceId } from "../lib/deviceId";
+import { guestToken } from "../lib/guestCart";
 import { currentToken, endSession } from "../lib/session";
 
 /**
@@ -79,6 +80,7 @@ export async function apiFetch<T = unknown>(
 
   const token = auth ? currentToken() : null;
   const deviceId = await getDeviceId();
+  const guest = guestToken();
   const multipart = typeof FormData !== "undefined" && body instanceof FormData;
 
   // The caller's signal and our timeout both cancel the request.
@@ -99,6 +101,9 @@ export async function apiFetch<T = unknown>(
         ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(deviceId ? { "X-Device-Id": deviceId } : {}),
+        // Sent whenever one exists, as on the web: the API ignores it on an
+        // account's cart, and it is how a new sign-in finds the guest's cart.
+        ...(guest ? { "X-Guest-Token": guest } : {}),
         ...(extraHeaders ?? {}),
       },
       body: multipart ? (body as FormData) : body !== undefined ? JSON.stringify(body) : undefined,

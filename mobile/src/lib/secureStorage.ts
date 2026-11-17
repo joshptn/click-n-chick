@@ -10,6 +10,10 @@ export const STORAGE_KEYS = {
   token: "session_token",
   /** This install's id, sent as X-Device-Id. Survives sign-out. */
   deviceId: "device_id",
+  /** A guest's cart key, sent as X-Guest-Token (lib/guestCart.ts). */
+  guestCart: "guest_cart_token",
+  /** A guest's tracked orders and their link tokens (lib/guestOrders.ts). */
+  guestOrders: "guest_tracked_orders",
 } as const;
 
 export async function readSecure(key: string): Promise<string | null> {
