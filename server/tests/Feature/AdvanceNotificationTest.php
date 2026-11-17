@@ -302,7 +302,7 @@ class AdvanceNotificationTest extends TestCase
         $order = $this->advanceOrderAt(OrderStatus::SCHEDULED, $customer, paid: true);
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
-            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'A pipe burst in the kitchen'])
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'A pipe burst in the kitchen', 'refund' => true])
             ->assertOk();
 
         $body = $this->bodyFor($customer->id);
@@ -315,14 +315,31 @@ class AdvanceNotificationTest extends TestCase
     public function test_a_customer_cancelling_is_not_told_the_store_did_it(): void
     {
         $customer = $this->user();
-        $order = $this->advanceOrderAt(OrderStatus::SCHEDULED, $customer, paid: true);
+        // Decided 2026-11-17: a customer can cancel an advance order only
+        // while it is unpaid.
+        $order = $this->advanceOrderAt(OrderStatus::AWAITING_PAYMENT, $customer);
 
         $this->actingAs($customer)->postJson("/api/order/{$order->id}/cancel")->assertOk();
 
         $body = $this->bodyFor($customer->id);
 
         $this->assertStringNotContainsString('The store cancelled', $body);
-        $this->assertStringContainsString('₱400.00 will be refunded', $body);
+        $this->assertStringContainsString('nothing to refund', $body);
+    }
+
+    public function test_a_shop_cancellation_without_a_refund_says_so(): void
+    {
+        $customer = $this->user();
+        $order = $this->advanceOrderAt(OrderStatus::SCHEDULED, $customer, paid: true);
+
+        $this->actingAs($this->user(User::ROLE_ADMIN))
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Never collected', 'refund' => false])
+            ->assertOk();
+
+        $body = $this->bodyFor($customer->id);
+
+        $this->assertStringContainsString('The store cancelled', $body);
+        $this->assertStringContainsString('This order is not refunded.', $body);
     }
 
     public function test_cancelling_an_unpaid_request_promises_no_refund(): void
@@ -335,18 +352,18 @@ class AdvanceNotificationTest extends TestCase
         $this->assertStringContainsString('nothing to refund', $this->bodyFor($customer->id));
     }
 
-    public function test_staff_are_told_when_a_customer_calls_off_a_booked_order(): void
+    public function test_staff_are_told_when_a_customer_calls_off_an_accepted_order(): void
     {
         $agent = $this->user(User::ROLE_ADMIN);
         $customer = $this->user();
-        $order = $this->advanceOrderAt(OrderStatus::SCHEDULED, $customer, paid: true);
+        $order = $this->advanceOrderAt(OrderStatus::AWAITING_PAYMENT, $customer);
 
         $this->actingAs($customer)->postJson("/api/order/{$order->id}/cancel")->assertOk();
 
         $body = $this->bodyFor($agent->id, OrderNotice::TYPE_ADVANCE);
 
         $this->assertStringContainsString("The customer cancelled order #{$order->id}", $body);
-        $this->assertStringContainsString('₱400.00 is owed back', $body);
+        $this->assertStringContainsString('No refund is owed', $body);
     }
 
     public function test_an_immediate_cancellation_does_not_pester_staff(): void
@@ -357,7 +374,7 @@ class AdvanceNotificationTest extends TestCase
         $order = Order::create([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
-            'status' => OrderStatus::CONFIRMED,
+            'status' => OrderStatus::PLACED,
             'total_price' => 300,
             'total_amount' => 300,
             'payment_status' => 'paid',

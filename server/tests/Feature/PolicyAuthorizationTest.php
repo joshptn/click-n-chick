@@ -163,19 +163,13 @@ class PolicyAuthorizationTest extends TestCase
     {
         $owner = $this->user(User::ROLE_CUSTOMER);
 
-        // BR-19/BR-20: the gate is the order closing, not the agent confirming.
-        // What confirmation changes is the refund, not the right to cancel.
-        foreach (['placed', 'confirmed', 'preparing', 'ready_for_pickup'] as $status) {
-            $this->assertTrue(
-                Gate::forUser($owner)->allows('cancel', $this->order($owner, $status)),
-                "FR-02.8: still cancellable at {$status}"
-            );
-        }
+        // BR-19 (decided 2026-11-17): only while placed, before the store confirms.
+        $this->assertTrue(Gate::forUser($owner)->allows('cancel', $this->order($owner, 'placed')));
 
-        foreach (['completed', 'cancelled'] as $status) {
+        foreach (['confirmed', 'preparing', 'ready_for_pickup', 'completed', 'cancelled'] as $status) {
             $this->assertFalse(
                 Gate::forUser($owner)->allows('cancel', $this->order($owner, $status)),
-                "a {$status} order is finished"
+                "not cancellable by the customer at {$status}"
             );
         }
     }

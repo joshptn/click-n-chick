@@ -297,7 +297,7 @@ class StockReservationTest extends TestCase
         $order->forceFill(['status' => OrderStatus::CONFIRMED])->save();
 
         $this->actingAs($this->user(User::ROLE_ADMIN), 'sanctum')
-            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Out of stock'])
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Out of stock', 'refund' => true])
             ->assertOk();
 
         $this->assertSame(10, $food->fresh()->stock_quantity);
@@ -310,7 +310,7 @@ class StockReservationTest extends TestCase
         $order->forceFill(['status' => OrderStatus::PREPARING])->save();
 
         $this->actingAs($this->user(User::ROLE_ADMIN), 'sanctum')
-            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Customer left'])
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Customer left', 'refund' => false])
             ->assertOk();
 
         $this->assertSame(7, $food->fresh()->stock_quantity);

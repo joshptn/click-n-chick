@@ -510,8 +510,8 @@ class UserManagementTest extends TestCase
         // The record is not, and it no longer points at anyone.
         $kept = $order->fresh();
         $this->assertNull($kept->user_id);
-        $this->assertSame(Order::ANONYMIZED_CUSTOMER, $kept->guest_name);
-        $this->assertNull($kept->guest_phone);
+        $this->assertSame(Order::ANONYMIZED_CUSTOMER, $kept->contact_name);
+        $this->assertNull($kept->contact_phone);
         $this->assertNull($kept->guest_email);
         $this->assertSame('350.00', $kept->total_amount);
         $this->assertSame('delivered', $kept->status);

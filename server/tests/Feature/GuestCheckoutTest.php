@@ -224,8 +224,8 @@ class GuestCheckoutTest extends TestCase
         $order = Order::firstOrFail();
 
         $this->assertNull($order->user_id);
-        $this->assertSame('Julia Veneese', $order->guest_name);
-        $this->assertSame('09171234567', $order->guest_phone);
+        $this->assertSame('Julia Veneese', $order->contact_name);
+        $this->assertSame('09171234567', $order->contact_phone);
         $this->assertSame('julia@example.test', $order->guest_email);
         $this->assertSame('350.00', $order->total_amount);
         $this->assertSame('unpaid', $order->payment_status);

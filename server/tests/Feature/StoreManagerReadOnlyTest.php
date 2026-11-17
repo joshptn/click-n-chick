@@ -204,7 +204,8 @@ class StoreManagerReadOnlyTest extends TestCase
             ->patchJson("/api/orders/{$someoneElses->id}", ['delivery_note' => 'Leave it outside.'])
             ->assertForbidden();
 
-        $this->assertTrue(Gate::forUser($this->user(User::ROLE_ADMIN))->allows('amend', $someoneElses));
+        // Nor may a Store Agent (decided 2026-11-17): only the customer.
+        $this->assertFalse(Gate::forUser($this->user(User::ROLE_ADMIN))->allows('amend', $someoneElses));
     }
 
     /** A new write added to these areas has to be placed deliberately. */

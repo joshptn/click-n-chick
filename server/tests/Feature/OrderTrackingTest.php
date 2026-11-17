@@ -291,25 +291,16 @@ class OrderTrackingTest extends TestCase
             ->assertJsonPath('order.status', OrderStatus::CANCELLED);
     }
 
-    public function test_a_confirmed_order_is_still_cancellable_and_still_refundable(): void
+    public function test_once_confirmed_the_tracker_says_it_can_no_longer_be_cancelled(): void
     {
-        $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::CONFIRMED);
+        foreach ([OrderStatus::CONFIRMED, OrderStatus::PREPARING] as $status) {
+            $order = $this->order($customer = $this->customer(), 'pickup', $status);
 
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertJsonPath('order.can_cancel', true)
-            ->assertJsonPath('order.cancellation.refundable', true);
-    }
-
-    public function test_once_cooking_starts_the_tracker_says_cancelling_costs_them(): void
-    {
-        $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::PREPARING);
-
-        $this->actingAs($customer, 'sanctum')
-            ->getJson("/api/orders/{$order->id}")
-            ->assertJsonPath('order.can_cancel', true)
-            ->assertJsonPath('order.cancellation.refundable', false)
-            ->assertJsonPath('order.cancellation.code', 'KITCHEN_STARTED');
+            $this->actingAs($customer, 'sanctum')
+                ->getJson("/api/orders/{$order->id}")
+                ->assertJsonPath('order.can_cancel', false)
+                ->assertJsonPath('order.cancellation.code', 'STORE_CONFIRMED');
+        }
     }
 
     // -----------------------------------------------------------------

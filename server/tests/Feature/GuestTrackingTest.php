@@ -55,8 +55,8 @@ class GuestTrackingTest extends TestCase
             'total_price' => 350,
             'total_amount' => 350,
             'payment_status' => 'paid',
-            'guest_name' => 'Julia Veneese',
-            'guest_phone' => '09171234567',
+            'contact_name' => 'Julia Veneese',
+            'contact_phone' => '09171234567',
             'guest_email' => 'julia@example.test',
             'full_address' => 'ADD Street, Apalit',
             'latitude' => 14.97,
@@ -348,19 +348,20 @@ class GuestTrackingTest extends TestCase
         $this->assertSame('350.00', $fresh->refund_owed);
     }
 
-    public function test_a_guest_cancelling_after_the_kitchen_starts_gets_no_refund(): void
+    public function test_a_guest_cannot_cancel_once_the_store_confirms(): void
     {
         [$order, $token] = $this->guestOrder(['status' => OrderStatus::PREPARING]);
 
+        // BR-19 (decided 2026-11-17): only while placed.
         $this->holdingToken($token)
             ->postJson('/api/guest/order/cancel')
-            ->assertOk()
-            ->assertJsonPath('refunded', false);
+            ->assertStatus(400)
+            ->assertJsonPath('error_code', 'STORE_CONFIRMED');
 
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+        $this->assertSame(OrderStatus::PREPARING, $order->fresh()->status);
     }
 
-    public function test_a_guest_is_offered_no_amendments_and_no_details_to_confirm(): void
+    public function test_a_guest_may_change_only_the_contact_and_has_no_details_to_confirm(): void
     {
         [, $token] = $this->guestOrder();
 
@@ -368,6 +369,8 @@ class GuestTrackingTest extends TestCase
             ->getJson('/api/guest/order')
             ->assertOk()
             ->assertJsonPath('order.can_confirm_details', false)
+            ->assertJsonPath('order.editable.contact_name', true)
+            ->assertJsonPath('order.editable.contact_phone', true)
             ->assertJsonPath('order.editable.address', false)
             ->assertJsonPath('order.editable.note', false)
             ->assertJsonPath('order.editable.pickup_at', false);
