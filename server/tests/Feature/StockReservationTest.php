@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\StockHold;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
+use App\Services\Payments\PaymentGateway;
 use App\Services\Stock\StockReservation;
 use App\Services\Verification\Channel;
 use Carbon\CarbonImmutable;
@@ -99,12 +100,28 @@ class StockReservationTest extends TestCase
         return $this->actingAs($customer, 'sanctum')->postJson('/api/order/place', $this->body());
     }
 
+    /** Checked out and paid for: the sale. */
     private function placed(User $customer, Food $food, int $quantity): Order
     {
         $this->cart($customer, $food, $quantity);
         $this->place($customer)->assertCreated();
 
-        return Order::query()->where('user_id', $customer->id)->latest('id')->firstOrFail();
+        $order = Order::query()->where('user_id', $customer->id)->latest('id')->firstOrFail();
+        $this->pay($customer, $order);
+
+        return $order->refresh();
+    }
+
+    /** The customer pays on the hosted page and comes back to the order. */
+    private function pay(User $customer, Order $order): void
+    {
+        $gateway = app(PaymentGateway::class);
+        $gateway->pay($order->payments()->latest('id')->value('provider_reference_id'));
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}/payment")
+            ->assertOk()
+            ->assertJsonPath('paid', true);
     }
 
     private function bareOrder(): Order
@@ -124,7 +141,20 @@ class StockReservationTest extends TestCase
     // Taking stock
     // -----------------------------------------------------------------
 
-    public function test_placing_an_order_takes_its_units_off_the_count(): void
+    public function test_checking_out_holds_the_units_without_selling_them(): void
+    {
+        $food = $this->food(['stock_quantity' => 10]);
+        $customer = $this->user();
+
+        $this->cart($customer, $food, 3);
+        $this->place($customer)->assertCreated();
+
+        $this->assertSame(10, $food->fresh()->stock_quantity);
+        $this->assertSame(7, $food->fresh()->available_quantity);
+        $this->assertSame(StockHold::HOLDING, StockHold::query()->value('status'));
+    }
+
+    public function test_paying_for_an_order_takes_its_units_off_the_count(): void
     {
         $food = $this->food(['stock_quantity' => 10]);
 
@@ -151,7 +181,10 @@ class StockReservationTest extends TestCase
 
         $this->place($first)->assertCreated();
 
+        // Held for the first while they pay, so already gone for the second.
         $this->place($second)->assertStatus(409);
+
+        $this->pay($first, Order::query()->firstOrFail());
 
         $this->assertSame(0, $food->fresh()->stock_quantity);
         $this->assertSame(1, Order::count());
