@@ -91,6 +91,8 @@ Route::prefix('guest')->group(function () {
             ->middleware('throttle:payment-start');
         Route::get('/order/payment', [OrderPaymentController::class, 'guestStatus'])
             ->middleware('throttle:payment-status');
+        Route::patch('/order', [OrderModificationController::class, 'guestUpdate'])
+            ->middleware('throttle:user-update');
         Route::post('/order/cancel', [GuestOrderController::class, 'cancel'])
             ->middleware('throttle:user-update');
         Route::post('/order/received', [GuestOrderController::class, 'confirmReceipt'])
@@ -295,10 +297,6 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::get('/admin/settings/store', [SystemSettingController::class, 'showStore']);
     Route::put('/admin/settings/store', [SystemSettingController::class, 'updateStore'])
         ->middleware('throttle:user-update');
-
-    Route::get('/admin/settings/cancellation', [SystemSettingController::class, 'showCancellation']);
-    Route::put('/admin/settings/cancellation', [SystemSettingController::class, 'updateCancellation'])
-        ->middleware(['throttle:user-update', 'confirm-password:change the cancellation and refund rules']);
 
     Route::get('/admin/settings/loyalty', [SystemSettingController::class, 'showLoyalty']);
     Route::put('/admin/settings/loyalty', [SystemSettingController::class, 'updateLoyalty'])
