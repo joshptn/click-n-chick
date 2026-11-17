@@ -4,7 +4,6 @@ namespace App\Services\Payments;
 
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -13,7 +12,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * An immediate order not paid within 10 minutes of checkout is cancelled and
  * its stock released (FR-04.5, decided 2026-11-17). Nothing was charged, so
- * nothing is refunded, and staff never see it (Order::scopeSeenByStaff).
+ * nothing is refunded. Nobody is told and nobody sees it, staff or customer
+ * (decided 2026-11-17): it never became an order (Order::scopeWithoutUnpaidCheckouts).
  *
  * The checkout is closed with the provider first, so a customer cannot pay
  * into an order that is about to go. A QR Ph code cannot be given an expiry
@@ -26,10 +26,7 @@ class CheckoutExpiry
 
     public const ERROR_CODE = 'PAYMENT_WINDOW_CLOSED';
 
-    public function __construct(
-        private PaymentCheckout $checkout,
-        private OrderAnnouncer $announcer,
-    ) {}
+    public function __construct(private PaymentCheckout $checkout) {}
 
     /** @return Collection<int, Order> */
     public function due(?CarbonImmutable $now = null): Collection
@@ -66,7 +63,7 @@ class CheckoutExpiry
             return null;
         }
 
-        $expired = DB::transaction(function () use ($order, $now) {
+        return DB::transaction(function () use ($order, $now) {
             $locked = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();
 
             if ($locked === null || ! $this->isDue($locked, $now)) {
@@ -85,12 +82,6 @@ class CheckoutExpiry
 
             return $locked;
         });
-
-        if ($expired !== null) {
-            $this->announcer->statusChanged($expired);
-        }
-
-        return $expired;
     }
 
     /**
