@@ -3,7 +3,6 @@
 namespace App\Services\Orders;
 
 use App\Models\Discount;
-use App\Models\Order;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 
@@ -16,12 +15,6 @@ class DiscountUsage
 
         return $user->orders()
             ->where('discount_amount', '>', 0)
-            // Decided 2026-11-17: an immediate order uses the day's discount only
-            // once it is paid and placed. One still being paid for, or one that
-            // lapsed unpaid, has used nothing.
-            ->where(fn ($query) => $query
-                ->whereNotNull('scheduled_for')
-                ->orWhere('payment_status', Order::PAYMENT_PAID))
             ->when($ignoreOrderId !== null, fn ($query) => $query->whereKeyNot($ignoreOrderId))
             ->where(function ($query) use ($start, $end) {
                 $query

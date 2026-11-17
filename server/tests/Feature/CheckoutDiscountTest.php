@@ -9,7 +9,6 @@ use App\Models\Food;
 use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
-use App\Services\Payments\PaymentGateway;
 use App\Services\Verification\Channel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -298,21 +297,6 @@ class CheckoutDiscountTest extends TestCase
             ->assertJsonPath('blockers.0.code', 'DISCOUNT_NOT_ELIGIBLE');
     }
 
-    /**
-     * The customer pays for their latest order. Decided 2026-11-17: only a paid
-     * order uses the day's discount.
-     */
-    private function pay(User $user): void
-    {
-        $order = Order::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
-        app(PaymentGateway::class)->pay($order->payments()->latest('id')->value('provider_reference_id'));
-
-        $this->actingAs($user, 'sanctum')
-            ->getJson("/api/orders/{$order->id}/payment")
-            ->assertOk()
-            ->assertJsonPath('paid', true);
-    }
-
     // -----------------------------------------------------------------
     // BR-09: once per calendar day, Asia/Manila
     // -----------------------------------------------------------------
@@ -325,8 +309,6 @@ class CheckoutDiscountTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->body(['apply_discount' => true]))
             ->assertCreated();
-
-        $this->pay($user);
 
         $this->assertSame('80.00', Order::firstOrFail()->discount_amount);
 
@@ -357,8 +339,6 @@ class CheckoutDiscountTest extends TestCase
             ->postJson('/api/order/place', $this->body(['apply_discount' => true]))
             ->assertCreated();
 
-        $this->pay($user);
-
         Order::firstOrFail()->forceFill(['status' => 'cancelled'])->save();
 
         $this->actingAs($user, 'sanctum')
@@ -380,8 +360,6 @@ class CheckoutDiscountTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->body(['apply_discount' => true]))
             ->assertCreated();
-
-        $this->pay($user);
 
         // 23:00 the same evening: still spent.
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-08-24 23:00', 'Asia/Manila')->utc());
@@ -417,8 +395,6 @@ class CheckoutDiscountTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->body(['apply_discount' => true]))
             ->assertCreated();
-
-        $this->pay($user);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/cart/items', ['food_id' => Food::first()->id, 'quantity' => 1])
