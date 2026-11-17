@@ -33,10 +33,6 @@ import { useOrderChannel, usePublicOrderChannel } from "../../context/useRealtim
 
 const IN_LINE_POLL_MS = 30 * 1000;
 
-// While an immediate order waits on its payment, the server is asked to check
-// with Xendit every few seconds: the webhook usually gets there first, but this
-// keeps the page honest when it is slow (and locally, where none arrives).
-const PAYMENT_POLL_MS = 5 * 1000;
 
 function TrackingSkeleton() {
   return (
@@ -97,8 +93,9 @@ function OrderTracking({ guest = false }) {
   }, [inLine, queryKey, queryClient]);
 
   const payTarget = guest ? { token } : { orderId };
-  const awaitingPayment = Boolean(order?.awaiting_payment);
-  const advanceOrder = Boolean(order?.is_advance);
+  // Only an advance order is waiting for payment here: an unpaid immediate
+  // checkout is not an order, and the server does not show it on this page.
+  const awaitingPayment = Boolean(order?.awaiting_payment) && Boolean(order?.is_advance);
 
   const paymentCheck = useQuery({
     queryKey: [...queryKey, "payment"],
@@ -113,9 +110,9 @@ function OrderTracking({ guest = false }) {
 
       return payload;
     },
+    // A day to pay: asked once when the page opens, which is also when the
+    // customer comes back from Xendit.
     enabled: awaitingPayment,
-    // An advance order has a day to pay: asked once when the page opens.
-    refetchInterval: awaitingPayment && !advanceOrder ? PAYMENT_POLL_MS : false,
     retry: false,
   });
 

@@ -22,11 +22,6 @@ import { formatCollection } from "../../lib/advance";
 const MotionSpan = motion.span;
 
 const HERO = {
-  awaiting_payment: {
-    icon: IconCreditCard,
-    title: "Waiting for payment",
-    body: "Your order reaches the store as soon as your payment goes through.",
-  },
   placed: {
     icon: IconReceipt,
     title: "Order placed!",
