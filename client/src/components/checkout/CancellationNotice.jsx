@@ -1,14 +1,12 @@
 import { IconAlertTriangle } from "@tabler/icons-react";
 
-import { FULFILMENT } from "../../lib/checkout";
-
+/**
+ * The cancellation terms, shown before payment and agreed with a tick (BR-21c).
+ * Decided 2026-11-17: cancel only before the store confirms, for a full
+ * refund; only the contact name and number can change afterwards.
+ */
 function CancellationNotice({ quote }) {
-  const terms = quote?.cancellation ?? null;
-
-  if (!terms) return null;
-
-  const isDelivery = quote?.fulfilment_type === FULFILMENT.DELIVERY;
-  const freeUntil = terms.full_refund_through_label?.toLowerCase() ?? "confirmed";
+  if (!quote) return null;
 
   return (
     <aside className="rounded-[16px] border border-[#ffe6a8] bg-[#fff9e8] px-5 py-4">
@@ -19,15 +17,14 @@ function CancellationNotice({ quote }) {
 
       <ul className="m-0 mt-2 list-disc space-y-1.5 pl-4 font-display text-[12px] leading-snug text-[#8a6206]">
         <li>
-          Cancel any time while your order is <strong>{freeUntil}</strong> and you get a full refund.
+          You can cancel while your order is <strong>placed</strong>, before the store confirms it, and get a{" "}
+          <strong>full refund</strong>.
         </li>
         <li>
-          Once the kitchen starts cooking you can still cancel, but{" "}
-          <strong>the order cannot be refunded</strong>.
+          Once the store confirms your order, <strong>it can no longer be cancelled</strong>.
         </li>
         <li>
-          You can correct your {isDelivery ? "address or delivery note" : "collection time"} without
-          cancelling, right up until your order leaves the kitchen.
+          Only the contact name and mobile number can be changed after you pay, until your order is completed.
         </li>
       </ul>
     </aside>
