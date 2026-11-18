@@ -40,6 +40,7 @@ export const unstable_settings = {
  * - food/[id] a dish, open to everyone;
  * - track/[token] a guest's order from its tracking link, open to everyone;
  * - checkout, payment  checking out and paying, for customers and guests;
+ * - payment-return  the link back from the web's payment return page;
  * - orders/[id] a customer's order, only while signed in;
  * - account/*   the account pages opened from Profile, only while signed in;
  * - advance/*   advance orders (menu, scheduling, request sent), only while
@@ -83,6 +84,7 @@ export default function RootLayout() {
             <Stack.Screen name="track/[token]" />
             <Stack.Screen name="checkout" />
             <Stack.Screen name="payment" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="payment-return" options={{ animation: "none" }} />
 
             <Stack.Protected guard={session.signedIn}>
               <Stack.Screen name="orders/[id]" />

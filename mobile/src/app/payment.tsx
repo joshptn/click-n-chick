@@ -10,7 +10,7 @@ import { ORDERS_KEY } from "../api/orders";
 import { AppText } from "../components/AppText";
 import { ScreenHeader } from "../components/account/ScreenHeader";
 import { CheckoutButton } from "../components/checkout/CheckoutButton";
-import { IconClockHour4, IconCreditCard, IconLock, IconToolsKitchen2 } from "../components/icons";
+import { IconClock, IconClockHour4, IconCreditCard, IconLock, IconToolsKitchen2 } from "../components/icons";
 import { formatPeso } from "../lib/money";
 import { toast } from "../lib/toast";
 import { colors } from "../theme/colors";
@@ -34,10 +34,12 @@ async function openPaymentPage(url: string) {
 
 /**
  * Paying for a checkout (phase 11; the web's PaymentReturn). Opens Xendit's
- * page and, since Xendit returns only to an HTTPS address and Android's
- * browser cannot be closed by the app, checks the payment with the API each
- * time the customer comes back to the app, and every few seconds while this
- * screen is open. The API confirms the payment, never the app.
+ * page and checks the payment with the API each time the customer comes back
+ * to the app ("Verifying your payment..."), and every few seconds while this
+ * screen is open. Xendit returns only to an HTTPS address, so an app payment
+ * returns to the web's /payment/return?source=app, whose "Open BES App"
+ * button brings the customer back here (clicknchick://payment-return,
+ * decided 2026-11-19). The API confirms the payment, never the app.
  *
  * Paid: on to the order's tracking. Not yet: "Finish paying", with the time
  * left and the way back to Xendit's page; an unpaid checkout is not an order,
@@ -61,11 +63,16 @@ export default function Payment() {
     refetchInterval: (query) => (query.state.data?.order.awaiting_payment ? POLL_MS : false),
   });
 
-  // Back from Xendit's page (or from anywhere): ask straight away.
+  // Back from Xendit's page (or from anywhere): ask straight away, and say so.
   const refetch = status.refetch;
+  const [verifying, setVerifying] = useState(false);
+
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") void refetch();
+      if (state !== "active") return;
+
+      setVerifying(true);
+      void refetch().finally(() => setVerifying(false));
     });
 
     return () => subscription.remove();
@@ -122,12 +129,16 @@ export default function Payment() {
       <ScreenHeader title="Payment" onBack={home} />
 
       <View style={styles.body}>
-        {status.isLoading ? (
-          <View style={styles.card}>
-            <ActivityIndicator color={colors.orange} />
-            <AppText family="display" size={13.5} color={colors.authMuted} style={styles.center}>
-              Checking your payment...
+        {status.isLoading || verifying ? (
+          <View style={styles.card} testID="verifying-payment">
+            <IconClock size={34} color={colors.ink500} strokeWidth={1.8} />
+            <AppText family="display" weight="semibold" size={17} color={colors.authInk} style={styles.center}>
+              Verifying your payment...
             </AppText>
+            <AppText family="display" size={13.5} color={colors.authMuted} style={styles.center}>
+              We&apos;re waiting for payment confirmation. This may take a moment.
+            </AppText>
+            <ActivityIndicator color={colors.orange} style={styles.spinner} />
           </View>
         ) : waiting && remaining ? (
           <View style={styles.card} testID="finish-paying">
@@ -203,6 +214,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   center: { textAlign: "center" },
+  spinner: { marginTop: 6 },
   ring: { width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   ringBrand: { backgroundColor: colors.orange },
   ringMuted: { backgroundColor: "#f4f1ec" },
