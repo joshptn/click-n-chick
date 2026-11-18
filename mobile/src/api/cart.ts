@@ -1,13 +1,14 @@
 import { api } from "./client";
 
 /**
- * The immediate-order cart (CartController on the API), for an account or a
- * guest. The two live at different paths: /api/cart with the bearer token,
- * /api/guest/cart with the guest's X-Guest-Token. Advance-order carts are
- * phase 9.
+ * The carts (CartController on the API), for an account or a guest. The two
+ * live at different paths: /api/cart with the bearer token, /api/guest/cart
+ * with the guest's X-Guest-Token. Each account also has an advance-order cart
+ * (mode "advance", phase 9), separate from today's; a guest has none.
  */
 
 export type CartScope = "account" | "guest";
+export type CartMode = "immediate" | "advance";
 
 export type CartLine = {
   id: number;
@@ -52,8 +53,6 @@ export const EMPTY_CART: Cart = {
   has_unavailable_items: false,
 };
 
-const MODE = "immediate";
-
 function base(scope: CartScope) {
   return scope === "guest" ? "/api/guest/cart" : "/api/cart";
 }
@@ -64,13 +63,13 @@ function auth(scope: CartScope) {
 }
 
 export const cartApi = {
-  get: (scope: CartScope, signal?: AbortSignal) =>
-    api.get<CartPayload>(base(scope), { ...auth(scope), signal, params: { mode: MODE } }),
+  get: (scope: CartScope, mode: CartMode, signal?: AbortSignal) =>
+    api.get<CartPayload>(base(scope), { ...auth(scope), signal, params: { mode } }),
 
-  add: (scope: CartScope, input: { foodId: number; quantity: number; addonIds: number[] }) =>
+  add: (scope: CartScope, mode: CartMode, input: { foodId: number; quantity: number; addonIds: number[] }) =>
     api.post<CartPayload>(
       `${base(scope)}/items`,
-      { food_id: input.foodId, quantity: input.quantity, addon_ids: input.addonIds, mode: MODE },
+      { food_id: input.foodId, quantity: input.quantity, addon_ids: input.addonIds, mode },
       auth(scope)
     ),
 
@@ -80,8 +79,8 @@ export const cartApi = {
   remove: (scope: CartScope, lineId: number) =>
     api.delete<CartPayload>(`${base(scope)}/items/${lineId}`, auth(scope)),
 
-  removeMany: (scope: CartScope, ids: number[]) =>
-    api.delete<CartPayload>(`${base(scope)}/items`, { ...auth(scope), body: { ids, mode: MODE } }),
+  removeMany: (scope: CartScope, mode: CartMode, ids: number[]) =>
+    api.delete<CartPayload>(`${base(scope)}/items`, { ...auth(scope), body: { ids, mode } }),
 
   /** Brings the guest cart named by X-Guest-Token into the signed-in account. */
   merge: () => api.post<CartPayload>("/api/cart/merge"),
