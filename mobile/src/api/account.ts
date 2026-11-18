@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import { api } from "./client";
 import type { Channel } from "./auth";
 
@@ -99,8 +100,10 @@ function fileForm(field: string, file: PickedFile, extra: Record<string, string>
   const form = new FormData();
 
   Object.entries(extra).forEach(([key, value]) => form.append(key, value));
-  // React Native's FormData reads a file from { uri, name, type }.
-  form.append(field, file as unknown as Blob);
+  // Expo SDK 58 replaces the global fetch with expo/fetch, which cannot send
+  // React Native's { uri, name, type } file parts (it throws before any
+  // request is made). An expo-file-system File is a Blob it can read.
+  form.append(field, new File(file.uri) as unknown as Blob, file.name);
 
   return form;
 }
