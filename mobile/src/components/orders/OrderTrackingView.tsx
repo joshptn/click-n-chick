@@ -19,6 +19,7 @@ import {
   IconClock,
   IconCreditCard,
   IconInfoCircle,
+  IconLock,
   IconMail,
   IconMapPin,
   IconReceipt,
@@ -45,7 +46,8 @@ const HERO: Record<string, Hero> = {
 };
 
 const ADVANCE_HERO: Record<string, Hero> = {
-  submitted: { icon: IconSend, title: "Request sent", body: "A Store Agent is checking whether the kitchen can make this on your date." },
+  // "Request sent" itself is the request-sent screen's (decided 2026-11-19).
+  submitted: { icon: IconSend, title: "Waiting for the store", body: "A Store Agent is checking whether the kitchen can make this on your date." },
   accepted: { icon: IconCircleCheck, title: "Your request was accepted!", body: "Pay within 24 hours to lock in your collection date." },
   awaiting_payment: { icon: IconCreditCard, title: "Ready for payment", body: "Pay within 24 hours of the store accepting to lock in your collection date." },
   confirmed: { icon: IconCircleCheck, title: "Payment received!", body: "Your date is booked. Nothing happens in the kitchen until then." },
@@ -85,6 +87,9 @@ type Props = {
   cancelling: boolean;
   confirmingReceipt: boolean;
   confirmingDetails?: boolean;
+  /** Pay for an accepted advance order (customers only). */
+  onPay?: () => void;
+  paying?: boolean;
 };
 
 /**
@@ -106,6 +111,8 @@ export function OrderTrackingView({
   cancelling,
   confirmingReceipt,
   confirmingDetails = false,
+  onPay,
+  paying = false,
 }: Props) {
   const back = () => (router.canGoBack() ? router.back() : router.replace(guest ? "/home" : "/notifications"));
 
@@ -159,6 +166,8 @@ export function OrderTrackingView({
           <>
             <OrderProgress order={order} />
             <StatusCard order={order} />
+
+            {order.is_advance && order.awaiting_payment && onPay && <PayCard order={order} paying={paying} onPay={onPay} />}
 
             {order.can_confirm_receipt && (
               <View style={[styles.card, styles.receiptCard]}>
@@ -309,6 +318,53 @@ function StatusCard({ order }: { order: Order }) {
           </View>
         </View>
       )}
+    </View>
+  );
+}
+
+/**
+ * An accepted advance order waiting on its payment (BR-16f; the web's
+ * PaymentPanel): Xendit's page, the same one while it is still open.
+ */
+function PayCard({ order, paying, onPay }: { order: Order; paying: boolean; onPay: () => void }) {
+  const due = order.payment_due_at ? `${formatDay(order.payment_due_at)}, ${formatTime(order.payment_due_at)}` : null;
+
+  return (
+    <View style={[styles.card, styles.payCard]} testID="pay-card">
+      <View style={styles.payHead}>
+        <View style={styles.payIcon}>
+          <IconCreditCard size={19} color={colors.white} strokeWidth={2} />
+        </View>
+        <View style={styles.flex}>
+          <AppText family="display" weight="bold" size={15} color={colors.authInk}>
+            Pay {formatPeso(order.total)} to lock in your date
+          </AppText>
+          <AppText family="display" size={12.5} color={colors.ink500}>
+            Your collection date is booked once payment goes through.
+          </AppText>
+        </View>
+      </View>
+      {due && (
+        <View style={styles.payDue}>
+          <IconClock size={14} color={colors.brand800} strokeWidth={2.2} />
+          <AppText family="display" weight="semibold" size={12.5} color={colors.brand800}>
+            Pay by {due}
+          </AppText>
+        </View>
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ busy: paying, disabled: paying }}
+        disabled={paying}
+        onPress={onPay}
+        style={({ pressed }) => [styles.action, { backgroundColor: colors.orange }, (pressed || paying) && styles.pressed]}
+        testID="pay-now"
+      >
+        <IconLock size={16} color={colors.white} strokeWidth={2.2} />
+        <AppText family="display" weight="semibold" size={13.5} color={colors.white}>
+          {paying ? "Opening payment..." : "Pay now with QR Ph or GCash"}
+        </AppText>
+      </Pressable>
     </View>
   );
 }
@@ -519,6 +575,19 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1 },
   receiptCard: { backgroundColor: "#f2fbf5", borderWidth: 1, borderColor: "#c8ebd4" },
+  payCard: { backgroundColor: "#fff8ef", borderWidth: 1, borderColor: "#ffd8a8" },
+  payHead: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  payIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.orange },
+  payDue: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.white,
+  },
   noteRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", gap: 6 },
   eyebrow: { letterSpacing: 1 },
   itemRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },

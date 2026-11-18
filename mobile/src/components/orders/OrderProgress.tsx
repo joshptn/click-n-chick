@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { StyleSheet, View } from "react-native";
 
-import type { Order } from "../../api/orders";
+import { displaySteps, isRefused, type Order } from "../../api/orders";
 import { colors } from "../../theme/colors";
 import { AppText } from "../AppText";
 import {
@@ -38,12 +38,15 @@ const ICONS: Record<string, ComponentType<IconProps>> = {
 export const GREEN = "#1fa64a";
 
 /**
- * "Progress of Your Order" (tracking design of 2026-11-17): the API's steps,
- * done in green, the current one in orange, the rest grey. A cancelled order
- * shows every step crossed out.
+ * "Progress of Your Order" (tracking design of 2026-11-17): the steps, done in
+ * green, the current one in orange, the rest grey. A cancelled order (or a
+ * declined request) shows every step crossed out. Advance orders show the
+ * app's five steps from "To pay" (displaySteps).
  */
 export function OrderProgress({ order }: { order: Order }) {
-  const { steps, is_cancelled: cancelled } = order;
+  const { steps, stepIndex, stepCount } = displaySteps(order);
+  // A declined advance request is crossed out too.
+  const cancelled = isRefused(order);
 
   if (steps.length === 0) return null;
 
@@ -58,7 +61,7 @@ export function OrderProgress({ order }: { order: Order }) {
         </AppText>
         <View style={[styles.pill, cancelled && styles.pillCancelled]}>
           <AppText family="display" weight="medium" size={11.5} color={cancelled ? colors.danger : "#d4500e"}>
-            {cancelled ? "Cancelled" : `${order.step_index ?? 0} of ${order.step_count} steps`}
+            {cancelled ? (order.status === "rejected" ? "Declined" : "Cancelled") : `${stepIndex} of ${stepCount} steps`}
           </AppText>
         </View>
       </View>
@@ -150,8 +153,7 @@ const styles = StyleSheet.create({
 
 /** The thin bar under a live order card or notification: "Placed … Delivery". */
 export function MiniProgress({ order }: { order: Order }) {
-  const steps = order.steps;
-  const at = order.step_index ?? 0;
+  const { steps, stepIndex: at } = displaySteps(order);
   const filled = steps.length > 1 ? Math.min(1, Math.max(0, (at - 1) / (steps.length - 1))) : 0;
 
   return (

@@ -1,7 +1,10 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { AppState } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { paymentApi } from "../../api/checkout";
 import { ORDERS_KEY, orderKey, ordersApi, type OrderAnswer } from "../../api/orders";
 import { OrderTrackingView } from "../../components/orders/OrderTrackingView";
 import { useOrderChannel } from "../../hooks/useRealtime";
@@ -68,6 +71,45 @@ export default function CustomerOrder() {
     },
   });
 
+  // Paying for an accepted advance order: Xendit's page in the in-app browser,
+  // then, back in the app, the API checks with Xendit (as the payment screen).
+  const awaitingReturn = useRef(false);
+
+  const pay = useMutation({
+    mutationFn: () => paymentApi.pay({ orderId: id }),
+    onSuccess: async (payload) => {
+      if (payload.paid || !payload.payment?.url) {
+        settle({ order: payload.order });
+        return;
+      }
+
+      awaitingReturn.current = true;
+      await WebBrowser.openBrowserAsync(payload.payment.url, { showTitle: true, toolbarColor: "#ffffff" });
+    },
+    onError: (error) => toast.error("Payment unavailable", errorText(error, "Payment could not be opened. Please try again.")),
+  });
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !awaitingReturn.current) return;
+
+      paymentApi
+        .status({ orderId: id })
+        .then((payload) => {
+          settle({ order: payload.order });
+          if (payload.paid) {
+            awaitingReturn.current = false;
+            toast.success("Payment received", "Your collection date is booked.");
+          }
+        })
+        .catch(() => void query.refetch());
+    });
+
+    return () => subscription.remove();
+    // settle and query are stable enough for a listener that only reads them on return.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   const confirmDetails = useMutation({
     mutationFn: () => ordersApi.confirmDetails(id),
     onSuccess: (payload) => {
@@ -90,6 +132,8 @@ export default function CustomerOrder() {
       cancelling={cancel.isPending}
       confirmingReceipt={confirmReceipt.isPending}
       confirmingDetails={confirmDetails.isPending}
+      onPay={() => pay.mutate()}
+      paying={pay.isPending}
     />
   );
 }
