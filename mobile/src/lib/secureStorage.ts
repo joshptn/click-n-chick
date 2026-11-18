@@ -14,6 +14,8 @@ export const STORAGE_KEYS = {
   guestCart: "guest_cart_token",
   /** A guest's tracked orders and their link tokens (lib/guestOrders.ts). */
   guestOrders: "guest_tracked_orders",
+  /** Push on or off for one account on this phone; the user id is appended (lib/push.ts). */
+  pushPreference: "push_pref_",
 } as const;
 
 export async function readSecure(key: string): Promise<string | null> {
