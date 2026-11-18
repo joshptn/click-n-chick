@@ -25,3 +25,6 @@ Schedule::command('payments:expire-checkouts')->everyMinute()->withoutOverlappin
 Schedule::command('guest:prune-tokens')->daily();
 
 Schedule::command('guest:prune-carts')->daily();
+
+// Cheap when the file is fresh; a new container fetches it within ten minutes.
+Schedule::command('geoip:update')->everyTenMinutes()->withoutOverlapping(30);

@@ -28,7 +28,15 @@
           "imageWidth": 80
         }
       ],
-      "expo-image"
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Click n Chick uses your photos for your profile picture and your discount ID.",
+          "cameraPermission": "Click n Chick uses the camera to take your profile picture and a photo of your discount ID.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "scheme": "clicknchick"
   }

@@ -99,6 +99,8 @@ export default function Notifications() {
     (notification: AppNotification) => {
       if (!notification.is_read) markRead(notification.id);
       if (notification.order_id) router.push(`/orders/${notification.order_id}`);
+      // A new-device sign-in alert opens the device list, where it can be signed out.
+      else if (notificationKind(notification) === "security") router.push("/account/devices");
     },
     [markRead]
   );

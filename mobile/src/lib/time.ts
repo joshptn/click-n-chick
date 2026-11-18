@@ -35,6 +35,25 @@ export function formatDay(iso: string | null | undefined): string {
   return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
+/**
+ * "Today at 12:18 AM", "Yesterday at 5:15 AM", "September 28 at 1:21 AM", or
+ * with the year once it is not this year: "January 9, 2025 at 5:13 PM".
+ */
+export function formatWhen(iso: string | null | undefined, now = new Date()): string {
+  if (!iso) return "";
+
+  const date = new Date(iso);
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / DAY_MS);
+  const time = formatTime(iso);
+
+  if (days === 0) return `Today at ${time}`;
+  if (days === 1) return `Yesterday at ${time}`;
+
+  const day = `${MONTHS[date.getMonth()]} ${date.getDate()}`;
+
+  return date.getFullYear() === now.getFullYear() ? `${day} at ${time}` : `${day}, ${date.getFullYear()} at ${time}`;
+}
+
 /** "Just now", "8 min ago", "3 h ago", then the day. */
 export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return "";
