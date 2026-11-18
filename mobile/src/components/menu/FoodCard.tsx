@@ -17,17 +17,20 @@ export const FoodCard = memo(function FoodCard({
   food,
   width,
   adding,
+  advance = false,
   onOpen,
   onAdd,
 }: {
   food: Food;
   width: number;
   adding: boolean;
+  /** On the advance menu: today's stock does not apply, as on the web. */
+  advance?: boolean;
   onOpen: (food: Food) => void;
   onAdd: (food: Food) => void;
 }) {
-  const orderable = food.is_orderable;
-  const label = stockLabel(food);
+  const orderable = advance || food.is_orderable;
+  const label = advance ? null : stockLabel(food);
   // The design's grey line under the name, from the dish's description.
   const summary = food.description?.split("\n")[0]?.trim();
 

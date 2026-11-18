@@ -30,6 +30,11 @@ type DiscountStepProps = {
   onChoose: (choice: DiscountChoice) => void;
   /** An application was sent: the quote is asked again, and now says "pending". */
   onSubmitted: () => void;
+  /**
+   * An advance order's collection day ("Thursday, November 20"): the
+   * once-a-day rule counts that day, not today.
+   */
+  forDay?: string | null;
 };
 
 /**
@@ -39,7 +44,7 @@ type DiscountStepProps = {
  * step offers the application itself (type and ID photo, the account page's
  * upload); once it is approved, Use Discount appears here.
  */
-export function DiscountStep({ discount, choice, onChoose, onSubmitted }: DiscountStepProps) {
+export function DiscountStep({ discount, choice, onChoose, onSubmitted, forDay = null }: DiscountStepProps) {
   if (!discount) {
     return (
       <>
@@ -59,7 +64,8 @@ export function DiscountStep({ discount, choice, onChoose, onSubmitted }: Discou
         <>
           <TypeRow title={discount.type_label ?? "Discount"} chip={discount.type ? DISCOUNT_LABEL[discount.type] : null} />
           <Notice tone="info">
-            Using your discount consumes it for the day. You save {formatPeso(discount.available_amount)} ({percent}% off the meal items).
+            Using your discount consumes it for {forDay ?? "the day"}. You save {formatPeso(discount.available_amount)} ({percent}% off
+            the meal items).
           </Notice>
           <View style={styles.buttons}>
             <CheckoutButton
@@ -84,7 +90,11 @@ export function DiscountStep({ discount, choice, onChoose, onSubmitted }: Discou
 
       {spent && (
         <>
-          <Notice>You have used your discount today. It is one order per day and resets tomorrow; this order is at the normal price.</Notice>
+          <Notice>
+            {forDay
+              ? `You already have a discounted order for ${forDay}. It is one order per day: pick another date, or continue without it.`
+              : "You have used your discount today. It is one order per day and resets tomorrow; this order is at the normal price."}
+          </Notice>
           <LaterOnly choice={choice} onChoose={onChoose} />
         </>
       )}
