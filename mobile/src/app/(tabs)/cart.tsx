@@ -10,14 +10,13 @@ import { IconAlertTriangle, IconCheck, IconShoppingCart, IconTrash } from "../..
 import { AppHeader } from "../../components/menu/AppHeader";
 import { useCart } from "../../hooks/useCart";
 import { formatPeso } from "../../lib/money";
-import { toast } from "../../lib/toast";
 import { colors } from "../../theme/colors";
 
 /**
  * My Cart (design of 2026-11-17), with the web CartPanel's behaviour: lines
  * ticked for checkout by default (BR-25), the totals counting only ticked
- * lines, and checkout blocked while a ticked line has sold out. Checkout in
- * the app arrives in phase 11; until then the button says so.
+ * lines, and checkout blocked while a ticked line has sold out. The button
+ * opens checkout (phase 11) with the ticked lines.
  */
 export default function CartScreen() {
   const cart = useCart();
@@ -54,9 +53,8 @@ export default function CartScreen() {
   const empty = !isLoading && lines.length === 0;
   const canCheckout = selectedCount > 0 && !hasUnavailableSelected && !isMutating;
 
-  const checkout = () => {
-    toast.info("Checkout is coming to the app", "Checkout in the app arrives in a later update. Your cart is saved.");
-  };
+  // Only the ticked lines go to checkout (BR-25), as on the web.
+  const checkout = () => router.push({ pathname: "/checkout", params: { ids: cart.selectedIds.join(",") } });
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -221,7 +219,7 @@ export default function CartScreen() {
             <AppText family="display" size={10.5} color={colors.ink300} style={styles.note}>
               {selectedCount === 0
                 ? "Tick at least one item to check out"
-                : "🔒 Secure checkout · cancel any time before the kitchen starts"}
+                : "🔒 Secure checkout · cancel any time before the store confirms"}
             </AppText>
           </>
         )}

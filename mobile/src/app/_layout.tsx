@@ -39,6 +39,7 @@ export const unstable_settings = {
  *             and guests alike (the tabs guard their own signed-in screens);
  * - food/[id] a dish, open to everyone;
  * - track/[token] a guest's order from its tracking link, open to everyone;
+ * - checkout, payment  checking out and paying, for customers and guests;
  * - orders/[id] a customer's order, only while signed in;
  * - account/*   the account pages opened from Profile, only while signed in;
  * - (auth)    sign-in screens, only while signed out.
@@ -78,6 +79,8 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="food/[id]" />
             <Stack.Screen name="track/[token]" />
+            <Stack.Screen name="checkout" />
+            <Stack.Screen name="payment" options={{ gestureEnabled: false }} />
 
             <Stack.Protected guard={session.signedIn}>
               <Stack.Screen name="orders/[id]" />
