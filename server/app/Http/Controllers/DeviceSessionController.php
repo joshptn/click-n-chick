@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Events\SessionRevoked;
 use App\Models\KnownDevice;
+use App\Services\Geo\IpLocator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -26,6 +27,8 @@ use Throwable;
  */
 class DeviceSessionController extends Controller
 {
+    public function __construct(private IpLocator $locator) {}
+
     /** GET /api/user/devices */
     public function index(Request $request)
     {
@@ -318,6 +321,8 @@ class DeviceSessionController extends Controller
             'name' => $device->device_name,
             'platform' => $device->platform,
             'last_ip_address' => $device->last_ip_address,
+            // Approximate, from the local GeoLite2 database; null when unknown.
+            'location' => $this->locator->locate($device->last_ip_address),
             'last_seen_at' => $device->last_seen_at?->toIso8601String(),
             'first_seen_at' => $device->created_at?->toIso8601String(),
             'is_trusted' => (bool) $device->is_trusted,
