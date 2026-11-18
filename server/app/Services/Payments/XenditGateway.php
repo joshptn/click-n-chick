@@ -47,6 +47,7 @@ class XenditGateway implements PaymentGateway
         string $description,
         CarbonImmutable $expiresAt,
         array $metadata = [],
+        bool $toApp = false,
     ): GatewaySession {
         $earliest = CarbonImmutable::now()->addSeconds(self::MIN_SESSION_SECONDS);
 
@@ -62,8 +63,8 @@ class XenditGateway implements PaymentGateway
                 ->utc()->format('Y-m-d\TH:i:s\Z'),
             'description' => $description,
             'metadata' => (object) $metadata,
-            'success_return_url' => $this->returnUrl(),
-            'cancel_return_url' => $this->returnUrl(),
+            'success_return_url' => $this->returnUrl($toApp ? ['source' => 'app', 'result' => 'success'] : []),
+            'cancel_return_url' => $this->returnUrl($toApp ? ['source' => 'app', 'result' => 'cancelled'] : []),
         ]));
 
         return GatewaySession::fromXendit($body);
@@ -108,10 +109,23 @@ class XenditGateway implements PaymentGateway
      * the scheme is raised: the session is still created, and the customer
      * comes back to the order page by hand. Deployed, FRONTEND_URL is already
      * HTTPS and nothing changes.
+     *
+     * The native app's checkouts add `source=app` and the outcome (decided
+     * 2026-11-19): the page then sends the customer back to the app instead of
+     * showing the website inside the app's browser tab. Still no order or
+     * token in the address.
+     *
+     * @param  array<string, string>  $query
      */
-    private function returnUrl(): string
+    private function returnUrl(array $query = []): string
     {
-        return preg_replace('#^http://#i', 'https://', $this->returnUrl) ?? $this->returnUrl;
+        $url = preg_replace('#^http://#i', 'https://', $this->returnUrl) ?? $this->returnUrl;
+
+        if ($query === []) {
+            return $url;
+        }
+
+        return $url.(str_contains($url, '?') ? '&' : '?').http_build_query($query);
     }
 
     private function client(): PendingRequest

@@ -20,6 +20,7 @@ use App\Services\Payments\FakePaymentGateway;
 use App\Services\Payments\GatewaySession;
 use App\Services\Payments\PaymentGateway;
 use App\Services\Verification\Channel;
+use App\Support\NativeApp;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -581,5 +582,52 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
         $this->assertContains($session, $this->gateway->cancelled);
         $this->assertSame(GatewaySession::CANCELED, $this->gateway->sessions[$session]->status);
+    }
+
+    public function test_a_checkout_from_the_app_returns_to_the_app_and_one_from_the_web_does_not(): void
+    {
+        $food = $this->food();
+
+        $this->checkout($this->user(), $food, 1)->assertCreated();
+        $this->assertFalse($this->gateway->returnsToApp[$this->gateway->latest()->id]);
+
+        $this->withHeader(NativeApp::HEADER, NativeApp::ANDROID);
+        $this->checkout($this->user(), $food, 1)->assertCreated();
+        $this->assertTrue($this->gateway->returnsToApp[$this->gateway->latest()->id]);
+    }
+
+    public function test_a_guest_checkout_from_the_app_returns_to_the_app(): void
+    {
+        $food = $this->food();
+        $this->withHeader(NativeApp::HEADER, NativeApp::ANDROID);
+        $cart = $this->postJson('/api/guest/cart/items', ['food_id' => $food->id])->assertCreated()->json('guest_token');
+
+        $this->withHeader(CartController::GUEST_HEADER, $cart)->postJson('/api/guest/orders', $this->body())->assertCreated();
+
+        $this->assertTrue($this->gateway->returnsToApp[$this->gateway->latest()->id]);
+    }
+
+    public function test_paying_for_an_advance_order_from_the_app_returns_to_the_app(): void
+    {
+        $customer = $this->user();
+        $order = Order::create([
+            'user_id' => $customer->id,
+            'order_type' => 'pickup',
+            'scheduled_for' => now()->addDays(3),
+            'accepted_at' => now(),
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'payment_status' => Order::PAYMENT_UNPAID,
+            'subtotal' => 500,
+            'discount_amount' => 0,
+            'total_amount' => 500,
+            'total_price' => 500,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')
+            ->withHeader(NativeApp::HEADER, NativeApp::ANDROID)
+            ->postJson("/api/orders/{$order->id}/pay")
+            ->assertOk();
+
+        $this->assertTrue($this->gateway->returnsToApp[$this->gateway->latest()->id]);
     }
 }

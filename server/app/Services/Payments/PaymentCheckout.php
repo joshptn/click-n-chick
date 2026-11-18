@@ -36,9 +36,13 @@ class PaymentCheckout
      * The checkout to send the customer to. A session that turns out to have
      * been paid already is settled and returned as completed.
      *
+     * $toApp: opened from the native app, so a new session returns there. A
+     * still-open session is reused as it is, wherever it returns, rather than
+     * opening a second one that could take the money twice.
+     *
      * @throws PaymentGatewayException
      */
-    public function open(Order $order): GatewaySession
+    public function open(Order $order, bool $toApp = false): GatewaySession
     {
         $open = $this->reusable($order);
 
@@ -59,6 +63,7 @@ class PaymentCheckout
                 'Click n Chick order #'.$order->getKey(),
                 $this->expiresAt($order),
                 ['order_id' => (string) $order->getKey(), 'payment_id' => (string) $payment->getKey()],
+                $toApp,
             );
         } catch (PaymentGatewayException $e) {
             $payment->forceFill(['payment_status' => Payment::STATUS_CLOSED])->save();

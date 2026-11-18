@@ -6,6 +6,7 @@ use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Services\Orders\OrderPlacement;
+use App\Support\NativeApp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
@@ -27,7 +28,7 @@ class CheckoutResponder
     public function respond(Order $order, Cart $cart, array $quote, array $extra = []): JsonResponse
     {
         try {
-            $session = $this->checkout->open($order);
+            $session = $this->checkout->open($order, NativeApp::isNative(request()));
         } catch (PaymentGatewayException $e) {
             Log::error('A checkout could not be opened with Xendit.', ['order_id' => $order->getKey(), 'error' => $e->getMessage()]);
 

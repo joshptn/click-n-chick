@@ -10,6 +10,7 @@ use App\Services\Payments\CheckoutExpiry;
 use App\Services\Payments\PaymentCheckout;
 use App\Services\Payments\PaymentGatewayException;
 use App\Services\Payments\PaymentSettlement;
+use App\Support\NativeApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -34,7 +35,7 @@ class OrderPaymentController extends Controller
 
     public function pay(Request $request, Order $order)
     {
-        return $this->startPayment($this->owned($request, $order));
+        return $this->startPayment($this->owned($request, $order), NativeApp::isNative($request));
     }
 
     public function status(Request $request, Order $order)
@@ -44,7 +45,7 @@ class OrderPaymentController extends Controller
 
     public function guestPay(Request $request)
     {
-        return $this->startPayment($request->attributes->get(ResolveGuestOrder::ATTRIBUTE));
+        return $this->startPayment($request->attributes->get(ResolveGuestOrder::ATTRIBUTE), NativeApp::isNative($request));
     }
 
     public function guestStatus(Request $request)
@@ -52,7 +53,7 @@ class OrderPaymentController extends Controller
         return $this->report($request->attributes->get(ResolveGuestOrder::ATTRIBUTE));
     }
 
-    private function startPayment(Order $order)
+    private function startPayment(Order $order, bool $toApp)
     {
         if ($refusal = $this->enforce($order)) {
             return response()->json($refusal, 422);
@@ -75,7 +76,7 @@ class OrderPaymentController extends Controller
         }
 
         try {
-            $session = $this->checkout->open($order);
+            $session = $this->checkout->open($order, $toApp);
         } catch (PaymentGatewayException $e) {
             Log::error('A checkout could not be opened with Xendit.', ['order_id' => $order->getKey(), 'error' => $e->getMessage()]);
 
