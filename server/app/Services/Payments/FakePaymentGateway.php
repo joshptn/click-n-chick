@@ -24,6 +24,9 @@ class FakePaymentGateway implements PaymentGateway
 
     public bool $unreachable = false;
 
+    /** @var array<string, bool> session id => returns to the native app */
+    public array $returnsToApp = [];
+
     private int $counter = 0;
 
     public function createSession(
@@ -32,10 +35,12 @@ class FakePaymentGateway implements PaymentGateway
         string $description,
         CarbonImmutable $expiresAt,
         array $metadata = [],
+        bool $toApp = false,
     ): GatewaySession {
         $this->guard();
 
         $id = 'ps-fake-'.(++$this->counter);
+        $this->returnsToApp[$id] = $toApp;
 
         return $this->sessions[$id] = new GatewaySession(
             id: $id,

@@ -14,7 +14,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.joshptn.clicknchick"
+      "package": "com.bes.clicknchick",
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-router",
@@ -36,7 +37,23 @@
           "cameraPermission": "Click n Chick uses the camera to take your profile picture and a photo of your discount ID.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Click n Chick uses your location to pin where your delivery should go."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ff8904",
+          "defaultChannel": "orders"
+        }
+      ],
+      "expo-dev-client"
     ],
     "scheme": "clicknchick"
   }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "266519199976",
+    "project_id": "bes-click-n-chick",
+    "storage_bucket": "bes-click-n-chick.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:266519199976:android:437415d4ee5f3e1af9895d",
+        "android_client_info": {
+          "package_name": "com.bes.clicknchick"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCIZW-lBkrYU0FrFesYH4Vup13DMaUrofE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -28,14 +28,18 @@ function fromListing(queryClient: ReturnType<typeof useQueryClient>, id: number)
 /**
  * A dish (the web's FoodDetailModal as a screen): photo, price, description,
  * stock, optional add-ons, and the quantity to add, capped at the stock left.
+ * With `?mode=advance` (from the advance menu) it adds to the advance cart and
+ * today's stock does not apply.
  */
 export default function FoodDetail() {
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; mode?: string }>();
   const id = Number(params.id);
+  // Opened from the advance menu: added to the advance cart, stock aside.
+  const advance = params.mode === "advance";
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { addItem, addingFoodId } = useCart();
+  const { addItem, addingFoodId } = useCart(advance ? "advance" : "immediate");
 
   // The listing is the copy kept current, so it is preferred; only a dish
   // opened without it (a link) is asked for on its own.
@@ -83,9 +87,9 @@ export default function FoodDetail() {
     );
   }
 
-  const orderable = food.is_orderable;
-  const label = stockLabel(food);
-  const maxQuantity = Math.max(1, food.stock_quantity ?? MAX_QUANTITY);
+  const orderable = advance || food.is_orderable;
+  const label = advance ? null : stockLabel(food);
+  const maxQuantity = advance ? MAX_QUANTITY : Math.max(1, food.stock_quantity ?? MAX_QUANTITY);
   const addonsTotal = addons.reduce((sum, addonId) => sum + (prices.get(addonId) ?? 0), 0);
   const lineTotal = (Number(food.price) + addonsTotal) * quantity;
   const adding = addingFoodId === food.id;
@@ -267,7 +271,7 @@ export default function FoodDetail() {
         >
           <IconShoppingBagPlus size={18} color={colors.white} strokeWidth={2} />
           <AppText family="display" weight="semibold" size={14} color={colors.white} numberOfLines={1}>
-            {orderable ? `${adding ? "Adding" : "Add to Cart"} — ${formatPeso(lineTotal)}` : "Unavailable"}
+            {orderable ? `${adding ? "Adding" : advance ? "Add to Advance" : "Add to Cart"} — ${formatPeso(lineTotal)}` : "Unavailable"}
           </AppText>
         </Pressable>
       </View>

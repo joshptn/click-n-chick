@@ -13,7 +13,8 @@ use Carbon\CarbonImmutable;
 interface PaymentGateway
 {
     /**
-     * Open a hosted checkout for one payment.
+     * Open a hosted checkout for one payment. With $toApp the customer is
+     * returned to the page that sends them back to the native app.
      *
      * @throws PaymentGatewayException
      */
@@ -23,6 +24,7 @@ interface PaymentGateway
         string $description,
         CarbonImmutable $expiresAt,
         array $metadata = [],
+        bool $toApp = false,
     ): GatewaySession;
 
     /** @throws PaymentGatewayException */

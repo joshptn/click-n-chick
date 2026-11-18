@@ -23,6 +23,11 @@ export type Order = {
   step_count: number;
   is_advance: boolean;
   scheduled_for: string | null;
+  /** Open for payment now (an accepted advance order, BR-16f). */
+  awaiting_payment?: boolean;
+  /** An advance order's 24-hour payment deadline. */
+  payment_due_at?: string | null;
+  payment_status?: string | null;
   queue: { number: number | null; label: string | null; in_line: boolean; position: number | null; ahead: number | null };
   cancellation: { refundable?: boolean; refund_amount?: number; code?: string; message?: string } | null;
   can_cancel: boolean;
@@ -35,6 +40,8 @@ export type Order = {
   pickup?: { at: string | null };
   delivery?: { full_address: string | null; location: string | null; note: string | null };
   contact: { name: string | null; phone: string | null };
+  /** What the customer may still change (BR-21b: only the contact, until the order closes). */
+  editable?: { contact_name?: boolean; contact_phone?: boolean };
   items: {
     id: number;
     food_name: string;
@@ -56,8 +63,11 @@ export type OrdersPage = {
   counts: { active: number };
 };
 
-/** An answer to cancel, confirm details or confirm receipt. */
+/** An answer to cancel, confirm details, confirm receipt or a contact change. */
 export type OrderAnswer = { message?: string; order?: Order };
+
+/** Only what changed is sent, as on the web's EditOrderModal. */
+export type ContactChanges = { contact_name?: string; contact_phone?: string };
 
 export const ORDERS_KEY = ["orders"] as const;
 export const orderKey = (id: number | string) => ["orders", String(id)] as const;
@@ -75,6 +85,7 @@ export const ordersApi = {
   cancel: (id: number | string) => api.post<OrderAnswer>(`/api/order/${id}/cancel`),
   confirmDetails: (id: number | string) => api.post<OrderAnswer>(`/api/orders/${id}/confirm-details`),
   confirmReceipt: (id: number | string) => api.post<OrderAnswer>(`/api/orders/${id}/received`),
+  updateContact: (id: number | string, changes: ContactChanges) => api.patch<OrderAnswer>(`/api/orders/${id}`, changes),
 };
 
 /**
@@ -90,7 +101,52 @@ export const guestOrdersApi = {
     api.get<{ order: Order; channel: string | null }>("/api/guest/order", { ...holding(token), signal }),
   cancel: (token: string) => api.post<OrderAnswer>("/api/guest/order/cancel", undefined, holding(token)),
   confirmReceipt: (token: string) => api.post<OrderAnswer>("/api/guest/order/received", undefined, holding(token)),
+  updateContact: (token: string, changes: ContactChanges) => api.patch<OrderAnswer>("/api/guest/order", changes, holding(token)),
 };
+
+/**
+ * An advance order's steps as the app shows them (decided 2026-11-19): To pay
+ * → Scheduled → Preparing → Ready for pickup → Completed. The API's chain also
+ * has Request sent, Accepted and Confirmed; "Request sent" is the
+ * request-sent screen's, Accepted is when paying opens, and Confirmed (paid)
+ * counts as Scheduled.
+ */
+const ADVANCE_STEPS = [
+  { key: "awaiting_payment", label: "To pay" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "preparing", label: "Preparing" },
+  { key: "ready_for_pickup", label: "Ready for pickup" },
+  { key: "completed", label: "Completed" },
+];
+
+const ADVANCE_AT: Record<string, number> = {
+  submitted: -1,
+  accepted: 0,
+  awaiting_payment: 0,
+  confirmed: 1,
+  scheduled: 1,
+  preparing: 2,
+  ready_for_pickup: 3,
+  completed: 4,
+};
+
+/** The steps to draw: the API's for today's orders, the app's own for advance ones. */
+export function displaySteps(order: Order): { steps: Order["steps"]; stepIndex: number; stepCount: number } {
+  if (!order.is_advance) {
+    return { steps: order.steps, stepIndex: order.step_index ?? 0, stepCount: order.step_count };
+  }
+
+  const at = isRefused(order) ? -1 : (ADVANCE_AT[order.status] ?? -1);
+
+  return {
+    steps: ADVANCE_STEPS.map((step, index) => ({
+      ...step,
+      state: index < at ? "done" : index === at ? (order.is_terminal ? "done" : "current") : "upcoming",
+    })),
+    stepIndex: at + 1,
+    stepCount: ADVANCE_STEPS.length,
+  };
+}
 
 /** "1 order ahead of you", or null when the order is not waiting in line. */
 export function queueMessage(queue: Order["queue"] | undefined) {

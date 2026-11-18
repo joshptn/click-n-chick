@@ -1,24 +1,29 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { EMPTY_CART, cartApi, type Cart, type CartPayload, type CartScope } from "../api/cart";
+import { EMPTY_CART, cartApi, type Cart, type CartMode, type CartPayload, type CartScope } from "../api/cart";
 import { forgetGuestToken, guestToken, rememberGuestToken } from "../lib/guestCart";
 import { toast } from "../lib/toast";
 import { useSession } from "./useSession";
 
 /**
- * The immediate-order cart, for an account or a guest, as the web's
- * CartProvider (client/src/context/CartContext.jsx):
+ * The carts, for an account or a guest, as the web's CartProvider
+ * (client/src/context/CartContext.jsx):
  * - every write answers with the whole cart, which replaces the cached copy;
  * - a guest's first add mints the X-Guest-Token key, kept on the phone;
  * - on sign-in the guest's cart is merged into the account's, and the key is
  *   forgotten once the API has answered;
  * - lines can be unticked (partial checkout, BR-25); ticked is the default.
+ *
+ * Two carts run side by side: today's ("immediate") and, for a signed-in
+ * customer, the advance-order cart (phase 9). `useCart()` is today's;
+ * `useCart("advance")` the advance one.
  */
 
 type AddInput = { foodId: number; quantity: number; addonIds: number[] };
 
 type CartContextValue = Cart & {
+  mode: CartMode;
   scope: CartScope;
   isLoading: boolean;
   isError: boolean;
@@ -47,41 +52,37 @@ type CartContextValue = Cart & {
   allSelected: boolean;
 };
 
-const CartContext = createContext<CartContextValue | null>(null);
+const CartContext = createContext<{ immediate: CartContextValue; advance: CartContextValue } | null>(null);
 
-export function cartKey(scope: CartScope) {
-  return ["cart", scope] as const;
+/** Today's cart keeps the phase 6 key, so `["cart"]` still covers every cart. */
+export function cartKey(scope: CartScope, mode: CartMode = "immediate") {
+  return mode === "advance" ? (["cart", scope, "advance"] as const) : (["cart", scope] as const);
 }
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Please try again.";
 }
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const { signedIn } = useSession();
+function useCartStore(mode: CartMode, signedIn: boolean, hasGuestCart: boolean, onGuestToken: (token: string) => void): CartContextValue {
   const queryClient = useQueryClient();
+  const advance = mode === "advance";
   const scope: CartScope = signedIn ? "account" : "guest";
-  const queryKey = useMemo(() => cartKey(scope), [scope]);
-
-  // A guest has a cart only once they have added something: before that there
-  // is nothing to ask for, and the first add's answer fills the cart in.
-  const [hasGuestCart, setHasGuestCart] = useState(() => guestToken() !== null);
+  const queryKey = useMemo(() => cartKey(scope, mode), [scope, mode]);
 
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => cartApi.get(scope, signal),
-    enabled: signedIn || hasGuestCart,
+    queryFn: ({ signal }) => cartApi.get(scope, mode, signal),
+    // A guest has a cart only once they have added something, and never an
+    // advance one (the API asks for an account).
+    enabled: advance ? signedIn : signedIn || hasGuestCart,
     staleTime: 30 * 1000,
   });
 
   const write = useCallback(
     (payload: CartPayload, writtenScope: CartScope) => {
-      if (writtenScope === "guest" && payload.guest_token) {
-        void rememberGuestToken(payload.guest_token);
-        setHasGuestCart(true);
-      }
+      if (writtenScope === "guest" && payload.guest_token) onGuestToken(payload.guest_token);
 
-      queryClient.setQueryData<Cart>(cartKey(writtenScope), {
+      queryClient.setQueryData<Cart>(cartKey(writtenScope, mode), {
         cart: payload.cart,
         item_count: payload.item_count,
         line_count: payload.line_count,
@@ -90,7 +91,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         has_unavailable_items: payload.has_unavailable_items,
       });
     },
-    [queryClient]
+    [queryClient, mode, onGuestToken]
   );
 
   // A failed change may mean the cart moved on elsewhere (a line removed on
@@ -104,10 +105,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const add = useMutation({
-    mutationFn: ({ input, scope: target }: { input: AddInput; scope: CartScope }) => cartApi.add(target, input),
+    mutationFn: ({ input, scope: target }: { input: AddInput; scope: CartScope }) => cartApi.add(target, mode, input),
     onSuccess: (payload, { scope: writtenScope }) => {
       write(payload, writtenScope);
-      toast.success("Added to your order", payload.message);
+      toast.success(advance ? "Added to your advance order" : "Added to your order", payload.message);
     },
     onError,
   });
@@ -126,10 +127,132 @@ export function CartProvider({ children }: { children: ReactNode }) {
   });
 
   const removeMany = useMutation({
-    mutationFn: ({ ids, scope: target }: { ids: number[]; scope: CartScope }) => cartApi.removeMany(target, ids),
+    mutationFn: ({ ids, scope: target }: { ids: number[]; scope: CartScope }) => cartApi.removeMany(target, mode, ids),
     onSuccess: (payload, { scope: writtenScope }) => write(payload, writtenScope),
     onError,
   });
+
+  // A signed-out phone has no advance cart, whatever is cached.
+  const cart = (advance && !signedIn ? null : query.data) ?? EMPTY_CART;
+  const lines = cart.cart;
+
+  // Unticked lines, for the cart they were unticked in: another cart (signed
+  // in or out) starts fully ticked.
+  const [unticked, setUnticked] = useState<{ scope: CartScope; ids: Set<number> }>(() => ({ scope, ids: new Set() }));
+  const deselected = useMemo(() => (unticked.scope === scope ? unticked.ids : new Set<number>()), [unticked, scope]);
+
+  const setDeselected = useCallback(
+    (update: (prev: Set<number>) => Set<number>) => setUnticked((prev) => ({ scope, ids: update(prev.scope === scope ? prev.ids : new Set()) })),
+    [scope]
+  );
+
+  const selection = useMemo(() => {
+    const selected = lines.filter((line) => !deselected.has(line.id));
+
+    return {
+      selectedIds: selected.map((line) => line.id),
+      selectedCount: selected.length,
+      selectedItemCount: selected.reduce((sum, line) => sum + line.quantity, 0),
+      selectedSubtotal: selected.reduce((sum, line) => sum + Number(line.subtotal ?? 0), 0),
+      // Stock does not apply ahead of time: the store checks on acceptance.
+      hasUnavailableSelected: !advance && selected.some((line) => !line.is_orderable),
+      allSelected: lines.length > 0 && selected.length === lines.length,
+    };
+  }, [lines, deselected, advance]);
+
+  const toggleSelected = useCallback(
+    (id: number) =>
+      setDeselected((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [setDeselected]
+  );
+
+  const selectAll = useCallback(() => setDeselected(() => new Set()), [setDeselected]);
+  const deselectAll = useCallback(
+    () => setDeselected(() => new Set(lines.map((line) => line.id))),
+    [setDeselected, lines]
+  );
+
+  const addAsync = add.mutateAsync;
+  const changeAsync = change.mutate;
+  const removeAsync = remove.mutate;
+  const removeManyAsync = removeMany.mutate;
+  const refetchCart = query.refetch;
+
+  const pendingLineId =
+    (change.isPending ? change.variables?.lineId : null) ?? (remove.isPending ? remove.variables?.lineId : null) ?? null;
+
+  return useMemo<CartContextValue>(
+    () => ({
+      ...cart,
+      mode,
+      scope,
+      isLoading: (advance ? signedIn : signedIn || hasGuestCart) && query.isLoading,
+      isError: query.isError,
+      isRefetching: query.isRefetching,
+      refetch: () => void refetchCart(),
+
+      addItem: (input) => addAsync({ input, scope }),
+      addingFoodId: add.isPending ? (add.variables?.input.foodId ?? null) : null,
+      setQuantity: (lineId, quantity) => changeAsync({ lineId, quantity, scope }),
+      removeItem: (lineId) => removeAsync({ lineId, scope }),
+      removeSelected: () => removeManyAsync({ ids: selection.selectedIds, scope }),
+      pendingLineId,
+      isMutating: change.isPending || remove.isPending || removeMany.isPending,
+
+      ...selection,
+      isSelected: (id) => !deselected.has(id),
+      toggleSelected,
+      selectAll,
+      deselectAll,
+    }),
+    [
+      cart,
+      mode,
+      scope,
+      advance,
+      signedIn,
+      hasGuestCart,
+      query.isLoading,
+      query.isError,
+      query.isRefetching,
+      refetchCart,
+      addAsync,
+      add.isPending,
+      add.variables,
+      changeAsync,
+      removeAsync,
+      removeManyAsync,
+      pendingLineId,
+      change.isPending,
+      remove.isPending,
+      removeMany.isPending,
+      selection,
+      deselected,
+      toggleSelected,
+      selectAll,
+      deselectAll,
+    ]
+  );
+}
+
+export function CartProvider({ children }: { children: ReactNode }) {
+  const { signedIn } = useSession();
+  const queryClient = useQueryClient();
+
+  const [hasGuestCart, setHasGuestCart] = useState(() => guestToken() !== null);
+
+  const onGuestToken = useCallback((token: string) => {
+    void rememberGuestToken(token);
+    setHasGuestCart(true);
+  }, []);
+
+  const immediate = useCartStore("immediate", signedIn, hasGuestCart, onGuestToken);
+  const advance = useCartStore("advance", signedIn, hasGuestCart, onGuestToken);
 
   /**
    * Bring a pre-sign-in cart into the account. Keyed on the session existing,
@@ -162,115 +285,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       });
   }, [signedIn, queryClient]);
 
-  const cart = query.data ?? EMPTY_CART;
-  const lines = cart.cart;
-
-  // Unticked lines, for the cart they were unticked in: another cart (signed
-  // in or out) starts fully ticked.
-  const [unticked, setUnticked] = useState<{ scope: CartScope; ids: Set<number> }>(() => ({ scope, ids: new Set() }));
-  const deselected = useMemo(() => (unticked.scope === scope ? unticked.ids : new Set<number>()), [unticked, scope]);
-
-  const setDeselected = useCallback(
-    (update: (prev: Set<number>) => Set<number>) => setUnticked((prev) => ({ scope, ids: update(prev.scope === scope ? prev.ids : new Set()) })),
-    [scope]
-  );
-
-  const selection = useMemo(() => {
-    const selected = lines.filter((line) => !deselected.has(line.id));
-
-    return {
-      selectedIds: selected.map((line) => line.id),
-      selectedCount: selected.length,
-      selectedItemCount: selected.reduce((sum, line) => sum + line.quantity, 0),
-      selectedSubtotal: selected.reduce((sum, line) => sum + Number(line.subtotal ?? 0), 0),
-      hasUnavailableSelected: selected.some((line) => !line.is_orderable),
-      allSelected: lines.length > 0 && selected.length === lines.length,
-    };
-  }, [lines, deselected]);
-
-  const toggleSelected = useCallback(
-    (id: number) =>
-      setDeselected((prev) => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        return next;
-      }),
-    [setDeselected]
-  );
-
-  const selectAll = useCallback(() => setDeselected(() => new Set()), [setDeselected]);
-  const deselectAll = useCallback(
-    () => setDeselected(() => new Set(lines.map((line) => line.id))),
-    [setDeselected, lines]
-  );
-
-  const addAsync = add.mutateAsync;
-  const changeAsync = change.mutate;
-  const removeAsync = remove.mutate;
-  const removeManyAsync = removeMany.mutate;
-  const refetchCart = query.refetch;
-
-  const pendingLineId =
-    (change.isPending ? change.variables?.lineId : null) ?? (remove.isPending ? remove.variables?.lineId : null) ?? null;
-
-  const value = useMemo<CartContextValue>(
-    () => ({
-      ...cart,
-      scope,
-      isLoading: (signedIn || hasGuestCart) && query.isLoading,
-      isError: query.isError,
-      isRefetching: query.isRefetching,
-      refetch: () => void refetchCart(),
-
-      addItem: (input) => addAsync({ input, scope }),
-      addingFoodId: add.isPending ? (add.variables?.input.foodId ?? null) : null,
-      setQuantity: (lineId, quantity) => changeAsync({ lineId, quantity, scope }),
-      removeItem: (lineId) => removeAsync({ lineId, scope }),
-      removeSelected: () => removeManyAsync({ ids: selection.selectedIds, scope }),
-      pendingLineId,
-      isMutating: change.isPending || remove.isPending || removeMany.isPending,
-
-      ...selection,
-      isSelected: (id) => !deselected.has(id),
-      toggleSelected,
-      selectAll,
-      deselectAll,
-    }),
-    [
-      cart,
-      scope,
-      signedIn,
-      hasGuestCart,
-      query.isLoading,
-      query.isError,
-      query.isRefetching,
-      refetchCart,
-      addAsync,
-      add.isPending,
-      add.variables,
-      changeAsync,
-      removeAsync,
-      removeManyAsync,
-      pendingLineId,
-      change.isPending,
-      remove.isPending,
-      removeMany.isPending,
-      selection,
-      deselected,
-      toggleSelected,
-      selectAll,
-      deselectAll,
-    ]
-  );
+  const value = useMemo(() => ({ immediate, advance }), [immediate, advance]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
-export function useCart(): CartContextValue {
+export function useCart(mode: CartMode = "immediate"): CartContextValue {
   const value = useContext(CartContext);
 
   if (!value) throw new Error("useCart must be used inside a CartProvider.");
 
-  return value;
+  return value[mode];
 }

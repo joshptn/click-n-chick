@@ -70,6 +70,20 @@ class XenditGatewayTest extends TestCase
         CarbonImmutable::setTestNow();
     }
 
+    public function test_a_session_opened_from_the_app_returns_to_the_app_page(): void
+    {
+        Http::fake(['api.xendit.co/sessions' => Http::response($this->sessionBody(), 201)]);
+
+        $this->gateway()->createSession('cnc-order-1-payment-1', 130, 'd', CarbonImmutable::now()->addHour(), [], true);
+
+        Http::assertSent(function (Request $request) {
+            $body = $request->data();
+
+            return $body['success_return_url'] === 'https://localhost:5173/payment/return?source=app&result=success'
+                && $body['cancel_return_url'] === 'https://localhost:5173/payment/return?source=app&result=cancelled';
+        });
+    }
+
     public function test_a_completed_session_carries_its_payment(): void
     {
         Http::fake(['api.xendit.co/sessions/ps-123' => Http::response($this->sessionBody([

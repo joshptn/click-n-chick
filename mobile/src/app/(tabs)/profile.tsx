@@ -9,6 +9,7 @@ import { TAB_BAR_SPACE } from "../../components/TabBar";
 import { Avatar } from "../../components/account/Avatar";
 import { DiscountCard } from "../../components/account/DiscountCard";
 import { MenuRow } from "../../components/account/MenuRow";
+import { PushRow } from "../../components/account/PushRow";
 import { ScreenHeader } from "../../components/account/ScreenHeader";
 import { IconDevices, IconLock, IconLogout, IconStarFilled, IconUserEdit, IconWallet } from "../../components/icons";
 import { useProfile } from "../../hooks/useProfile";
@@ -47,7 +48,7 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader title="Profile" onBack={() => router.navigate("/home")} />
+      <ScreenHeader title="Profile" showBack={false} />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -106,6 +107,7 @@ export default function Profile() {
           onPress={() => router.push("/account/wallet")}
           testID="menu-wallet"
         />
+        <PushRow />
 
         <SectionLabel>Account security</SectionLabel>
         <MenuRow

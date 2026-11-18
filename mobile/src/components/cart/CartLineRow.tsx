@@ -16,6 +16,7 @@ import { DishImage } from "../menu/DishImage";
  */
 export const CartLineRow = memo(function CartLineRow({
   line,
+  advance = false,
   selected,
   busy,
   showNoAddons,
@@ -24,6 +25,8 @@ export const CartLineRow = memo(function CartLineRow({
   onRemove,
 }: {
   line: CartLine;
+  /** An advance-order line: today's stock does not apply (the API's 99 still does). */
+  advance?: boolean;
   selected: boolean;
   busy: boolean;
   /** "No add-ons" when the same dish is in the cart twice, to tell the lines apart. */
@@ -32,8 +35,9 @@ export const CartLineRow = memo(function CartLineRow({
   onQuantity: (id: number, quantity: number) => void;
   onRemove: (id: number) => void;
 }) {
-  const atStock = line.stock_quantity !== null && line.quantity >= line.stock_quantity;
-  const canAdd = !busy && line.is_orderable && !atStock;
+  const orderable = advance || line.is_orderable;
+  const atStock = advance ? line.quantity >= 99 : line.stock_quantity !== null && line.quantity >= line.stock_quantity;
+  const canAdd = !busy && orderable && !atStock;
 
   return (
     <View style={[styles.row, busy && styles.busy]} testID={`cart-line-${line.id}`}>
@@ -48,7 +52,7 @@ export const CartLineRow = memo(function CartLineRow({
         {selected && <IconCheck size={13} color={colors.white} strokeWidth={3} />}
       </Pressable>
 
-      <DishImage url={line.thumbnail} width={44} dimmed={!line.is_orderable} iconSize={15} style={styles.thumb} />
+      <DishImage url={line.thumbnail} width={44} dimmed={!orderable} iconSize={15} style={styles.thumb} />
 
       <View style={styles.text}>
         <AppText family="display" weight="medium" size={13} color={colors.authInk} numberOfLines={1}>
@@ -69,7 +73,7 @@ export const CartLineRow = memo(function CartLineRow({
           {formatPeso(line.subtotal)}
         </AppText>
 
-        {!line.is_orderable && (
+        {!orderable && (
           <AppText family="display" weight="semibold" size={10.5} color={colors.danger}>
             Sold out
           </AppText>

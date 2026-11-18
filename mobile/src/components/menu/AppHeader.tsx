@@ -1,26 +1,19 @@
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { router, usePathname } from "expo-router";
 
+import { useSession } from "../../hooks/useSession";
 import { useStoreStatus } from "../../hooks/useStoreStatus";
-import { useUser } from "../../hooks/useUser";
 import { setMenuSearch, useMenuSearch } from "../../lib/menuSearch";
 import { colors } from "../../theme/colors";
 import { fonts } from "../../theme/fonts";
 import { AppText } from "../AppText";
 import { IconSearch, IconX } from "../icons";
 
-/**
- * The top of every tab (designs of 2026-11-17): the customer's initial (the
- * logo for a guest), the menu search, and the store's Open/Closed badge.
- * Typing on another tab moves to Home, where the results are.
- */
 export function AppHeader() {
-  const user = useUser();
   const search = useMenuSearch();
   const pathname = usePathname();
   const { isOpen } = useStoreStatus();
-
-  const initial = (user?.first_name ?? "").trim().charAt(0).toUpperCase();
+  const { signedIn } = useSession();
 
   const onSearch = (text: string) => {
     setMenuSearch(text);
@@ -31,17 +24,12 @@ export function AppHeader() {
     <View style={styles.bar}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={user ? "Your profile" : "Click n Chick"}
-        onPress={() => (user ? router.navigate("/profile") : router.navigate("/home"))}
+        accessibilityLabel="Click n Chick home page"
+        onPress={() => router.navigate({ pathname: "/", params: { visit: "1" } })}
         style={styles.badge}
+        testID="header-logo"
       >
-        {user && initial ? (
-          <AppText family="display" weight="bold" size={15} color={colors.white}>
-            {initial}
-          </AppText>
-        ) : (
-          <Image source={require("../../../assets/images/logo-icon.png")} style={styles.logo} />
-        )}
+        <Image source={require("../../../assets/images/logo-icon.png")} style={styles.logo} />
       </Pressable>
 
       <View style={styles.search}>
@@ -62,6 +50,20 @@ export function AppHeader() {
           </Pressable>
         ) : null}
       </View>
+
+      {/* Advance orders need an account (the API's rule), so a guest signs in first. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={signedIn ? "Advance Order" : "Advance Order. Sign in first"}
+        onPress={() => router.push(signedIn ? "/advance" : "/sign-in")}
+        style={({ pressed }) => [styles.advance, pressed && styles.pressed]}
+        hitSlop={4}
+        testID="advance-order-entry"
+      >
+        <AppText family="display" weight="semibold" size={11.5} color={colors.orange} numberOfLines={1}>
+          Advance Order
+        </AppText>
+      </Pressable>
 
       <View style={[styles.status, isOpen ? styles.open : styles.closed]} testID="store-status">
         <View style={[styles.dot, { backgroundColor: isOpen ? colors.success : colors.ink300 }]} />
@@ -111,6 +113,17 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: colors.authInk,
   },
+  advance: {
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+  },
+  pressed: { opacity: 0.8 },
   status: {
     flexDirection: "row",
     alignItems: "center",
