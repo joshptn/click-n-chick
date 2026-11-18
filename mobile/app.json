@@ -36,6 +36,13 @@
           "cameraPermission": "Click n Chick uses the camera to take your profile picture and a photo of your discount ID.",
           "microphonePermission": false
         }
+      ],
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Click n Chick uses your location to pin where your delivery should go."
+        }
       ]
     ],
     "scheme": "clicknchick"
