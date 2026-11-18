@@ -13,6 +13,7 @@
         "laravel/reverb": "^1.11",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
+        "maxmind-db/reader": "^1.15",
         "predis/predis": "^3.7"
     },
     "require-dev": {

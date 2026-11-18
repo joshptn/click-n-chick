@@ -88,7 +88,7 @@ return [
             'api_key' => env('ORS_API_KEY'),
             'profile' => env('ORS_PROFILE', 'driving-car'),
         ],
-        
+
         'timeout' => (int) env('ROUTING_TIMEOUT', 6),
         'connect_timeout' => (int) env('ROUTING_CONNECT_TIMEOUT', 3),
         'cache_ttl' => (int) env('ROUTING_CACHE_TTL', 604800),
@@ -114,6 +114,16 @@ return [
             rtrim((string) env('FRONTEND_URL', 'http://localhost:5173'), '/').'/payment/return'
         ),
         'timeout' => (int) env('XENDIT_TIMEOUT', 15),
+    ],
+
+    'maxmind' => [
+        'account_id' => env('MAXMIND_ACCOUNT_ID'),
+        'license_key' => env('MAXMIND_LICENSE_KEY'),
+        'edition' => env('MAXMIND_EDITION', 'GeoLite2-City'),
+        'endpoint' => env('MAXMIND_ENDPOINT', 'https://download.maxmind.com/geoip/databases'),
+        'database' => env('MAXMIND_DATABASE', storage_path('app/geoip/GeoLite2-City.mmdb')),
+        'max_age_days' => (int) env('MAXMIND_MAX_AGE_DAYS', 7),
+        'timeout' => (int) env('MAXMIND_TIMEOUT', 120),
     ],
 
 ];
