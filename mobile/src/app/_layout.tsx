@@ -40,6 +40,7 @@ export const unstable_settings = {
  * - food/[id] a dish, open to everyone;
  * - track/[token] a guest's order from its tracking link, open to everyone;
  * - orders/[id] a customer's order, only while signed in;
+ * - account/*   the account pages opened from Profile, only while signed in;
  * - (auth)    sign-in screens, only while signed out.
  * Customer module only: there are no staff routes (PRD §9).
  */
@@ -80,6 +81,7 @@ export default function RootLayout() {
 
             <Stack.Protected guard={session.signedIn}>
               <Stack.Screen name="orders/[id]" />
+              <Stack.Screen name="account" />
             </Stack.Protected>
 
             <Stack.Protected guard={!session.signedIn}>
