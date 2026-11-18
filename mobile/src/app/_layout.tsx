@@ -42,6 +42,8 @@ export const unstable_settings = {
  * - checkout, payment  checking out and paying, for customers and guests;
  * - orders/[id] a customer's order, only while signed in;
  * - account/*   the account pages opened from Profile, only while signed in;
+ * - advance/*   advance orders (menu, scheduling, request sent), only while
+ *               signed in: the API takes them from accounts only;
  * - (auth)    sign-in screens, only while signed out.
  * Customer module only: there are no staff routes (PRD §9).
  */
@@ -85,6 +87,7 @@ export default function RootLayout() {
             <Stack.Protected guard={session.signedIn}>
               <Stack.Screen name="orders/[id]" />
               <Stack.Screen name="account" />
+              <Stack.Screen name="advance" />
             </Stack.Protected>
 
             <Stack.Protected guard={!session.signedIn}>

@@ -1,6 +1,7 @@
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { router, usePathname } from "expo-router";
 
+import { useSession } from "../../hooks/useSession";
 import { useStoreStatus } from "../../hooks/useStoreStatus";
 import { setMenuSearch, useMenuSearch } from "../../lib/menuSearch";
 import { colors } from "../../theme/colors";
@@ -12,6 +13,7 @@ export function AppHeader() {
   const search = useMenuSearch();
   const pathname = usePathname();
   const { isOpen } = useStoreStatus();
+  const { signedIn } = useSession();
 
   const onSearch = (text: string) => {
     setMenuSearch(text);
@@ -48,6 +50,20 @@ export function AppHeader() {
           </Pressable>
         ) : null}
       </View>
+
+      {/* Advance orders need an account (the API's rule), so a guest signs in first. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={signedIn ? "Advance Order" : "Advance Order. Sign in first"}
+        onPress={() => router.push(signedIn ? "/advance" : "/sign-in")}
+        style={({ pressed }) => [styles.advance, pressed && styles.pressed]}
+        hitSlop={4}
+        testID="advance-order-entry"
+      >
+        <AppText family="display" weight="semibold" size={11.5} color={colors.orange} numberOfLines={1}>
+          Advance Order
+        </AppText>
+      </Pressable>
 
       <View style={[styles.status, isOpen ? styles.open : styles.closed]} testID="store-status">
         <View style={[styles.dot, { backgroundColor: isOpen ? colors.success : colors.ink300 }]} />
@@ -97,6 +113,17 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: colors.authInk,
   },
+  advance: {
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: colors.orange,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+  },
+  pressed: { opacity: 0.8 },
   status: {
     flexDirection: "row",
     alignItems: "center",
