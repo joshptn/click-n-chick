@@ -3,7 +3,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../api/client";
-import { guestOrderKey, guestOrdersApi, type Order, type OrderAnswer } from "../../api/orders";
+import { guestOrderKey, guestOrdersApi, type ContactChanges, type Order, type OrderAnswer } from "../../api/orders";
 import { OrderTrackingView } from "../../components/orders/OrderTrackingView";
 import { usePublicOrderChannel } from "../../hooks/useRealtime";
 import { forgetGuestOrder, rememberGuestOrder } from "../../lib/guestOrders";
@@ -92,8 +92,19 @@ export default function GuestOrder() {
     },
   });
 
+  // The sheet shows a refusal itself; the order is asked again in case it closed meanwhile.
+  const updateContact = useMutation({
+    mutationFn: (changes: ContactChanges) => guestOrdersApi.updateContact(token, changes),
+    onSuccess: (payload) => {
+      settle(payload);
+      toast.success("Contact updated", payload.message ?? "Your contact details for this order have been updated.");
+    },
+    onError: () => void queryClient.invalidateQueries({ queryKey }),
+  });
+
   return (
     <OrderTrackingView
+      onUpdateContact={(changes) => updateContact.mutateAsync(changes)}
       guest
       order={order}
       isLoading={query.isLoading}

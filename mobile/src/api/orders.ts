@@ -40,6 +40,8 @@ export type Order = {
   pickup?: { at: string | null };
   delivery?: { full_address: string | null; location: string | null; note: string | null };
   contact: { name: string | null; phone: string | null };
+  /** What the customer may still change (BR-21b: only the contact, until the order closes). */
+  editable?: { contact_name?: boolean; contact_phone?: boolean };
   items: {
     id: number;
     food_name: string;
@@ -61,8 +63,11 @@ export type OrdersPage = {
   counts: { active: number };
 };
 
-/** An answer to cancel, confirm details or confirm receipt. */
+/** An answer to cancel, confirm details, confirm receipt or a contact change. */
 export type OrderAnswer = { message?: string; order?: Order };
+
+/** Only what changed is sent, as on the web's EditOrderModal. */
+export type ContactChanges = { contact_name?: string; contact_phone?: string };
 
 export const ORDERS_KEY = ["orders"] as const;
 export const orderKey = (id: number | string) => ["orders", String(id)] as const;
@@ -80,6 +85,7 @@ export const ordersApi = {
   cancel: (id: number | string) => api.post<OrderAnswer>(`/api/order/${id}/cancel`),
   confirmDetails: (id: number | string) => api.post<OrderAnswer>(`/api/orders/${id}/confirm-details`),
   confirmReceipt: (id: number | string) => api.post<OrderAnswer>(`/api/orders/${id}/received`),
+  updateContact: (id: number | string, changes: ContactChanges) => api.patch<OrderAnswer>(`/api/orders/${id}`, changes),
 };
 
 /**
@@ -95,6 +101,7 @@ export const guestOrdersApi = {
     api.get<{ order: Order; channel: string | null }>("/api/guest/order", { ...holding(token), signal }),
   cancel: (token: string) => api.post<OrderAnswer>("/api/guest/order/cancel", undefined, holding(token)),
   confirmReceipt: (token: string) => api.post<OrderAnswer>("/api/guest/order/received", undefined, holding(token)),
+  updateContact: (token: string, changes: ContactChanges) => api.patch<OrderAnswer>("/api/guest/order", changes, holding(token)),
 };
 
 /**

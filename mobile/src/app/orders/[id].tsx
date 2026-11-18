@@ -5,7 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { paymentApi } from "../../api/checkout";
-import { ORDERS_KEY, orderKey, ordersApi, type OrderAnswer } from "../../api/orders";
+import { ORDERS_KEY, orderKey, ordersApi, type ContactChanges, type OrderAnswer } from "../../api/orders";
 import { OrderTrackingView } from "../../components/orders/OrderTrackingView";
 import { useOrderChannel } from "../../hooks/useRealtime";
 import { toast } from "../../lib/toast";
@@ -110,6 +110,16 @@ export default function CustomerOrder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // The sheet shows a refusal itself; the order is asked again in case it closed meanwhile.
+  const updateContact = useMutation({
+    mutationFn: (changes: ContactChanges) => ordersApi.updateContact(id, changes),
+    onSuccess: (payload) => {
+      settle(payload);
+      toast.success("Contact updated", payload.message ?? "Your contact details for this order have been updated.");
+    },
+    onError: () => void queryClient.invalidateQueries({ queryKey }),
+  });
+
   const confirmDetails = useMutation({
     mutationFn: () => ordersApi.confirmDetails(id),
     onSuccess: (payload) => {
@@ -134,6 +144,7 @@ export default function CustomerOrder() {
       confirmingDetails={confirmDetails.isPending}
       onPay={() => pay.mutate()}
       paying={pay.isPending}
+      onUpdateContact={(changes) => updateContact.mutateAsync(changes)}
     />
   );
 }

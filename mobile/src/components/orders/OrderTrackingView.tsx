@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError } from "../../api/client";
-import { cancelPrompt, feedbackMailto, isRefused, queueMessage, statusTone, type Order } from "../../api/orders";
+import { cancelPrompt, feedbackMailto, isRefused, queueMessage, statusTone, type ContactChanges, type Order } from "../../api/orders";
 import { formatPeso } from "../../lib/money";
 import { formatDay, formatTime } from "../../lib/time";
 import { toast } from "../../lib/toast";
@@ -26,8 +26,10 @@ import {
   IconScooter,
   IconSend,
   IconShoppingBag,
+  IconUser,
   IconUsers,
 } from "../icons";
+import { ContactEditor } from "./ContactEditor";
 import { GREEN, OrderProgress } from "./OrderProgress";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
@@ -90,6 +92,8 @@ type Props = {
   /** Pay for an accepted advance order (customers only). */
   onPay?: () => void;
   paying?: boolean;
+  /** Change the contact name and number (BR-21b); rejects with the API's message. */
+  onUpdateContact?: (changes: ContactChanges) => Promise<unknown>;
 };
 
 /**
@@ -113,6 +117,7 @@ export function OrderTrackingView({
   confirmingDetails = false,
   onPay,
   paying = false,
+  onUpdateContact,
 }: Props) {
   const back = () => (router.canGoBack() ? router.back() : router.replace(guest ? "/home" : "/notifications"));
 
@@ -210,6 +215,10 @@ export function OrderTrackingView({
                   You confirmed these details. The kitchen can start any time.
                 </AppText>
               </View>
+            )}
+
+            {onUpdateContact && !order.is_terminal && (order.editable?.contact_name || order.editable?.contact_phone) && (
+              <ContactEditor order={order} onSave={onUpdateContact} />
             )}
 
             <OrderItems order={order} />
@@ -404,6 +413,15 @@ function OrderItems({ order }: { order: Order }) {
         {order.discount_amount > 0 && <TotalRow label="Discount" value={`-${formatPeso(order.discount_amount)}`} />}
         <TotalRow label="Total" value={formatPeso(order.total)} strong />
       </View>
+
+      {order.contact.name || order.contact.phone ? (
+        <View style={styles.whereRow} testID="order-contact">
+          <IconUser size={14} color={colors.ink300} strokeWidth={2} />
+          <AppText family="display" size={12} color={colors.ink500} style={styles.flex}>
+            {[order.contact.name, order.contact.phone].filter(Boolean).join(" · ")}
+          </AppText>
+        </View>
+      ) : null}
 
       {where ? (
         <View style={styles.whereRow}>
