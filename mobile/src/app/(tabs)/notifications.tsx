@@ -8,7 +8,7 @@ import { notificationKind, type AppNotification, type NotificationKind } from ".
 import { ORDERS_KEY, ordersApi, type Order } from "../../api/orders";
 import { AppText } from "../../components/AppText";
 import { TAB_BAR_SPACE } from "../../components/TabBar";
-import { IconArrowLeft, IconBellOff, IconReceipt } from "../../components/icons";
+import { IconBellOff, IconReceipt } from "../../components/icons";
 import { NotificationCard } from "../../components/orders/NotificationCard";
 import { OrderCard } from "../../components/orders/OrderCard";
 import { useNotifications } from "../../hooks/useNotifications";
@@ -118,16 +118,16 @@ export default function Notifications() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to Home"
-          onPress={() => router.navigate("/home")}
-          style={styles.back}
-          hitSlop={6}
+        {/* Centred on the whole bar; the tab bar moves between tabs, so no back button. */}
+        <AppText
+          family="display"
+          weight="semibold"
+          size={19}
+          color={colors.authInk}
+          style={styles.title}
+          pointerEvents="none"
+          accessibilityRole="header"
         >
-          <IconArrowLeft size={18} color={colors.authInk} strokeWidth={2.2} />
-        </Pressable>
-        <AppText family="display" weight="semibold" size={19} color={colors.authInk} style={styles.title}>
           Notification
         </AppText>
         <Pressable
@@ -253,21 +253,8 @@ export default function Notifications() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.landing },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
-  back: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.white,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  title: { flex: 1, textAlign: "center" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", minHeight: 58, paddingHorizontal: 16, paddingVertical: 10 },
+  title: { position: "absolute", left: 0, right: 0, textAlign: "center" },
   markAll: { paddingVertical: 4 },
   faded: { opacity: 0.4 },
   chipBar: { flexGrow: 0 },

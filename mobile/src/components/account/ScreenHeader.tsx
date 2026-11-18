@@ -11,7 +11,17 @@ import { IconArrowLeft } from "../icons";
  * on the Notification screen. `right` keeps the title centred when a screen
  * has nothing to put there.
  */
-export function ScreenHeader({ title, right, onBack }: { title: string; right?: ReactNode; onBack?: () => void }) {
+export function ScreenHeader({
+  title,
+  right,
+  onBack,
+  showBack = true,
+}: {
+  title: string;
+  right?: ReactNode;
+  onBack?: () => void;
+  showBack?: boolean;
+}) {
   const back = () => {
     if (onBack) return onBack();
     if (router.canGoBack()) router.back();
@@ -20,9 +30,13 @@ export function ScreenHeader({ title, right, onBack }: { title: string; right?: 
 
   return (
     <View style={styles.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={back} style={styles.back} hitSlop={6}>
-        <IconArrowLeft size={18} color={colors.authInk} strokeWidth={2.2} />
-      </Pressable>
+      {showBack ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={back} style={styles.back} hitSlop={6}>
+          <IconArrowLeft size={18} color={colors.authInk} strokeWidth={2.2} />
+        </Pressable>
+      ) : (
+        <View style={styles.side} />
+      )}
       <AppText
         family="display"
         weight="semibold"

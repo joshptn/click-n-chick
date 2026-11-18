@@ -1,5 +1,5 @@
 import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
-import { Link, Redirect, router } from "expo-router";
+import { Link, Redirect, router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppText } from "../../components/AppText";
@@ -7,13 +7,18 @@ import { useSession } from "../../hooks/useSession";
 import { colors } from "../../theme/colors";
 
 /**
- * The landing page (design of 2026-11-16), for signed-out customers. A
+ * The landing page (design of 2026-11-16). At launch a signed-in customer
+ * goes straight on to Home; the header logo opens it for anyone (decided
+ * 2026-11-18), and then its order buttons open the menu instead of Sign in.
  */
 export default function Landing() {
   const { signedIn } = useSession();
+  const { visit } = useLocalSearchParams<{ visit?: string }>();
   const { width } = useWindowDimensions();
 
-  if (signedIn) return <Redirect href="/home" />;
+  if (signedIn && !visit) return <Redirect href="/home" />;
+
+  const startOrder = () => (signedIn ? router.navigate("/home") : router.push("/sign-in"));
 
   // The headline and the mascot scale down on narrow phones.
   const headline = Math.min(56, Math.round(width * 0.135));
@@ -32,7 +37,7 @@ export default function Landing() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push("/sign-in")}
+            onPress={startOrder}
             style={({ pressed }) => [styles.orderNow, pressed && styles.pressed]}
             testID="landing-order-now"
           >
@@ -86,7 +91,7 @@ export default function Landing() {
           {/* Not a Link: Link's asChild drops a style given as a function. */}
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push("/sign-in")}
+            onPress={startOrder}
             style={({ pressed }) => [styles.start, pressed && styles.pressed]}
             testID="landing-start-order"
           >

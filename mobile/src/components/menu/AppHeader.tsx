@@ -2,25 +2,16 @@ import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { router, usePathname } from "expo-router";
 
 import { useStoreStatus } from "../../hooks/useStoreStatus";
-import { useUser } from "../../hooks/useUser";
 import { setMenuSearch, useMenuSearch } from "../../lib/menuSearch";
 import { colors } from "../../theme/colors";
 import { fonts } from "../../theme/fonts";
 import { AppText } from "../AppText";
 import { IconSearch, IconX } from "../icons";
 
-/**
- * The top of every tab (designs of 2026-11-17): the customer's initial (the
- * logo for a guest), the menu search, and the store's Open/Closed badge.
- * Typing on another tab moves to Home, where the results are.
- */
 export function AppHeader() {
-  const user = useUser();
   const search = useMenuSearch();
   const pathname = usePathname();
   const { isOpen } = useStoreStatus();
-
-  const initial = (user?.first_name ?? "").trim().charAt(0).toUpperCase();
 
   const onSearch = (text: string) => {
     setMenuSearch(text);
@@ -31,17 +22,12 @@ export function AppHeader() {
     <View style={styles.bar}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={user ? "Your profile" : "Click n Chick"}
-        onPress={() => (user ? router.navigate("/profile") : router.navigate("/home"))}
+        accessibilityLabel="Click n Chick home page"
+        onPress={() => router.navigate({ pathname: "/", params: { visit: "1" } })}
         style={styles.badge}
+        testID="header-logo"
       >
-        {user && initial ? (
-          <AppText family="display" weight="bold" size={15} color={colors.white}>
-            {initial}
-          </AppText>
-        ) : (
-          <Image source={require("../../../assets/images/logo-icon.png")} style={styles.logo} />
-        )}
+        <Image source={require("../../../assets/images/logo-icon.png")} style={styles.logo} />
       </Pressable>
 
       <View style={styles.search}>

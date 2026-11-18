@@ -47,7 +47,7 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader title="Profile" onBack={() => router.navigate("/home")} />
+      <ScreenHeader title="Profile" showBack={false} />
 
       <ScrollView
         contentContainerStyle={styles.content}
