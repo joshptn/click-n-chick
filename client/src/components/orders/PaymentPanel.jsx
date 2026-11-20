@@ -43,6 +43,10 @@ function PaymentPanel({ order, onPay, isOpening, isChecking }) {
             <IconClockHour4 size={14} stroke={2.2} aria-hidden="true" />
             Pay by {payBy(order.payment_due_at) ?? "the deadline"}
           </p>
+
+          <p className="m-0 mt-2 font-display text-[12px] leading-snug text-[#8d8884]">
+            If it is not paid by then, the store will cancel it.
+          </p>
         </div>
       </div>
 

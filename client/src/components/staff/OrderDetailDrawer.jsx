@@ -74,11 +74,11 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
                     </a>
                   </Line>
                 )}
-                {/* "Details are correct" is hidden for now (2026-11-17); only
-                    the contact can change, which does not hold up the kitchen. */}
+                {/* "Details are correct" is hidden for now (2026-11-17); since
+                    2026-11-20 only Review Advance Order writes this, before paying. */}
                 {order.details_confirmed_at && (
                   <Line icon={IconCircleCheck}>
-                    <span className="text-[#2f9e44]">Customer confirmed their details</span>
+                    <span className="text-[#2f9e44]">Customer reviewed the order before paying</span>
                   </Line>
                 )}
               </div>
