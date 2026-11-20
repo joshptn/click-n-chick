@@ -25,12 +25,9 @@ export function toScheduleIso(date, time) {
     return null;
   }
 
-  const [year, month, day] = date.split("-").map(Number);
-  const [hours, minutes] = time.split(":").map(Number);
-
-  const when = new Date(year, month - 1, day, hours, minutes, 0, 0);
-
-  return Number.isNaN(when.getTime()) ? null : when.toISOString();
+  // Store time, with no offset: the API reads it in the store's time zone, so a
+  // browser set to another zone still books the time it showed (2026-11-20).
+  return `${date}T${time}:00`;
 }
 
 export function formatCollection(iso) {
