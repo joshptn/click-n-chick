@@ -50,8 +50,8 @@ function AdvanceSubmitted() {
             </h1>
 
             <p className="m-0 mt-1.5 font-display text-[13px] text-white/85">
-              Request #{orderId}
-              {collectAt ? ` · for ${collectAt}` : ""}
+              {/* No number until the store accepts (decided 2026-11-20). */}
+              {collectAt ? `Order for ${collectAt}` : "Your advance order"}
             </p>
           </div>
 

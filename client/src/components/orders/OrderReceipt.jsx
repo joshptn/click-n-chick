@@ -3,7 +3,6 @@ import {
   IconMapPin,
   IconPhone,
   IconShoppingBag,
-  IconTicket,
 } from "@tabler/icons-react";
 
 import { formatDay, formatTime } from "../../lib/orders";
@@ -38,7 +37,7 @@ export function OrderSummaryCard({ order }) {
           {isDelivery ? (
             <p className="m-0 mt-1 flex items-start gap-1.5 font-display text-[12px] leading-snug text-[#6f6b68]">
               <IconMapPin size={13} stroke={2} aria-hidden="true" className="mt-0.5 shrink-0" />
-              <span className="min-w-0">{order.delivery?.full_address || order.delivery?.location || "—"}</span>
+              <span className="[overflow-wrap:anywhere] min-w-0">{order.delivery?.full_address || order.delivery?.location || "—"}</span>
             </p>
           ) : (
             order.pickup?.at && (
@@ -76,10 +75,10 @@ export function OrderSummaryCard({ order }) {
               className="flex items-start justify-between gap-3 border-b border-[#f7f4f0] py-2.5 last:border-b-0"
             >
               <span className="min-w-0 flex-1">
-                <span className="block font-display text-[13.5px] font-semibold leading-snug text-ink">
+                <span className="[overflow-wrap:anywhere] block font-display text-[13.5px] font-semibold leading-snug text-ink">
                   {line.food_name}
                 </span>
-                <span className="block font-display text-[11.5px] text-[#8d8884]">
+                <span className="[overflow-wrap:anywhere] block font-display text-[11.5px] text-[#8d8884]">
                   {line.quantity}&times;
                   {line.addons?.length > 0 &&
                     ` (${line.addons.map((addon) => addon.addon_name).join(", ")})`}
@@ -123,32 +122,14 @@ export function OrderSummaryCard({ order }) {
           </span>
         </div>
       </div>
-    </aside>);
+    </aside>
+  );
 }
 
 function OrderReceipt({ order }) {
-  const isDelivery = order.order_type === "delivery";
-
   return (
     <div className="flex flex-col gap-3.5">
       <OrderSummaryCard order={order} />
-
-      {!isDelivery && order.queue?.label && (
-        <aside className="flex items-center gap-3 rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#fff4e8] text-brand-600">
-            <IconTicket size={19} stroke={2} aria-hidden="true" />
-          </span>
-
-          <div className="min-w-0">
-            <p className="m-0 font-display text-[11px] font-bold uppercase tracking-[0.7px] text-[#a39f9b]">
-              Your number at the counter
-            </p>
-            <p className="m-0 font-display text-[18px] font-extrabold leading-tight text-ink">
-              {order.queue.label}
-            </p>
-          </div>
-        </aside>
-      )}
 
       {order.closed_at ? (
         <aside className="flex items-center justify-between gap-3 rounded-[16px] border border-[#f0e9df] bg-white px-5 py-4">

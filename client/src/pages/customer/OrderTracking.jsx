@@ -33,7 +33,6 @@ import {
 } from "../../lib/orders";
 import { useOrderChannel, usePublicOrderChannel } from "../../context/useRealtime";
 
-const IN_LINE_POLL_MS = 30 * 1000;
 
 
 function TrackingSkeleton() {
@@ -82,18 +81,6 @@ function OrderTracking({ guest = false }) {
   const order = data?.order ?? null;
   const prompt = cancelPrompt(order);
 
-  const inLine = Boolean(order?.queue?.in_line);
-
-  useEffect(() => {
-    if (!inLine) return undefined;
-
-    const timer = window.setInterval(
-      () => queryClient.invalidateQueries({ queryKey }),
-      IN_LINE_POLL_MS
-    );
-
-    return () => window.clearInterval(timer);
-  }, [inLine, queryKey, queryClient]);
 
   const payTarget = guest ? { token } : { orderId };
   // Only an advance order is waiting for payment here: an unpaid immediate
@@ -228,7 +215,7 @@ function OrderTracking({ guest = false }) {
               Track your order
             </h1>
             {order && (
-              <p className="m-0 font-display text-[12.5px] text-[#8d8884]">Order {order.reference}</p>
+              <p className="m-0 font-display text-[12.5px] text-[#8d8884]">{order.title ?? `Order ${order.reference}`}</p>
             )}
           </div>
 

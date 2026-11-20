@@ -4,7 +4,6 @@ import {
   IconCalendarEvent,
   IconChevronRight,
   IconShoppingBag,
-  IconUsers,
 } from "@tabler/icons-react";
 
 import { formatDay, formatTime, itemsSummary, statusBadgeClass } from "../../lib/orders";
@@ -14,7 +13,6 @@ import { formatPeso } from "../../lib/menu";
 function OrderCard({ order }) {
   const isDelivery = order.order_type === "delivery";
   const isAdvance = Boolean(order.is_advance);
-  const ahead = order.queue?.in_line ? order.queue.ahead ?? 0 : null;
   const when = order.closed_at ?? order.placed_at;
 
   const collectAt = isAdvance ? formatCollection(order.scheduled_for) : null;
@@ -83,14 +81,6 @@ function OrderCard({ order }) {
         </div>
       </div>
 
-      {ahead !== null && (
-        <p className="m-0 mt-3 flex items-center gap-2 rounded-[10px] bg-[#faf7f3] px-3 py-2 font-display text-[12.5px] font-semibold text-ink">
-          <IconUsers size={14} stroke={2.2} aria-hidden="true" className="shrink-0 text-brand-500" />
-          {ahead === 0
-            ? "We're starting your order now"
-            : `${ahead} order${ahead === 1 ? "" : "s"} ahead of you`}
-        </p>
-      )}
     </Link>
   );
 }
