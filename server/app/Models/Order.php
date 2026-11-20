@@ -82,6 +82,17 @@ class Order extends Model
         'delivery_note',
     ];
 
+    /**
+     * Every date is stored as UTC (fixed 2026-11-20). Laravel writes a date's
+     * clock time as it stands, so a time carrying an offset ("15:00+08:00",
+     * as the pickup and collection times arrive) was stored as 15:00 UTC and
+     * read back eight hours late. Converting first keeps the moment.
+     */
+    public function fromDateTime($value)
+    {
+        return empty($value) ? $value : parent::fromDateTime($this->asDateTime($value)->utc());
+    }
+
     protected function casts(): array
     {
         return [

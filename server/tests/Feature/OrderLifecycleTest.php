@@ -204,6 +204,16 @@ class OrderLifecycleTest extends TestCase
         return $order->fresh();
     }
 
+    public function test_a_time_with_an_offset_is_stored_as_that_moment(): void
+    {
+        // Fixed 2026-11-20: 3:00 PM in Manila was stored as 15:00 UTC.
+        $order = $this->order();
+        $order->forceFill(['pickup_at' => '2026-11-20T15:00:00+08:00'])->save();
+
+        $this->assertSame('2026-11-20 07:00:00', $order->fresh()->getRawOriginal('pickup_at'));
+        $this->assertSame('3:00 PM', $order->fresh()->pickup_at->setTimezone('Asia/Manila')->format('g:i A'));
+    }
+
     public function test_placing_an_order_gives_it_no_number(): void
     {
         $this->assertNull($this->order()->order_number, 'The number comes with the payment, not the checkout.');

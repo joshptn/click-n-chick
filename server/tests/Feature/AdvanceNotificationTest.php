@@ -223,7 +223,7 @@ class AdvanceNotificationTest extends TestCase
         $this->assertStringContainsString('accepted your advance order', $body);
         // Collected tomorrow with 30 minutes to prepare (decided 2026-11-20): a
         // real time the customer can act on, and why.
-        $this->assertStringContainsString('needs 30 minutes to prepare it, so please pay by 7:30 PM tomorrow', $body);
+        $this->assertStringContainsString('needs 30 minutes to prepare it, so please pay by 11:30 AM tomorrow', $body);
         $this->assertStringContainsString('the store will cancel it', $body);
     }
 
