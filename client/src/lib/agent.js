@@ -185,6 +185,14 @@ export const ADVANCE_CANCEL_REASONS = [
   "The kitchen cannot fulfil it on the day.",
 ];
 
+/**
+ * What staff call an advance order (decided 2026-11-20): "A-007" once
+ * accepted; before that it has no number and goes by its customer's name.
+ */
+export function advanceName(order) {
+  return order?.reference ?? (order?.customer?.name || "Customer");
+}
+
 /** "Tomorrow · 12:00 PM", "Fri, Nov 7 · 3:30 PM" - when the customer collects. */
 export function collectionLabel(order) {
   if (!order?.scheduled_for) return "";
@@ -422,9 +430,7 @@ export function matchesSearch(order, term) {
   if (!needle) return true;
 
   const haystack = [
-    order.queue_label,
     order.reference,
-    order.order_number,
     order.customer?.name,
     order.customer?.phone,
     ...(order.items ?? []).flatMap((item) => [item.food_name, ...(item.addons ?? [])]),

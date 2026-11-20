@@ -23,15 +23,9 @@ const SURFACE = "rounded-[14px] bg-white ring-1 ring-[#f0e9df] shadow-[0_1px_2px
 const AGENT_GRID = "md:grid md:grid-cols-[96px_minmax(130px,0.8fr)_minmax(0,2fr)_minmax(100px,0.6fr)_150px] md:items-center md:gap-x-4";
 const MANAGER_GRID = "md:grid md:grid-cols-[96px_minmax(130px,0.8fr)_minmax(0,2fr)_minmax(100px,0.6fr)_16px] md:items-center md:gap-x-4";
 
-function waited(minutes) {
-  if (minutes === null || minutes === undefined) return null;
-
-  return minutes < 60 ? `Waiting ${minutes} min` : `Waiting ${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-}
-
 function TimeCell({ order, withDate }) {
   if (withDate) {
-    const moment = order.needed_at ?? order.queued_at ?? order.created_at;
+    const moment = order.needed_at ?? order.created_at;
 
     return (
       <span className="block">
@@ -59,7 +53,6 @@ function AdvanceTag({ order }) {
 
 function PendingRow({ order, withDate, canAct, busy, onOpen, onMove }) {
   const addons = (order.items ?? []).flatMap((item) => item.addons ?? []);
-  const wait = order.is_advance ? null : waited(order.waiting_minutes);
   const move = canAct ? advanceLabel(order) : null;
 
   return (
@@ -100,13 +93,12 @@ function PendingRow({ order, withDate, canAct, busy, onOpen, onMove }) {
         <span className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-[#8d8884] md:hidden">
           <span>{typeLabel(order)}</span>
           {withDate && <span>{order.status_label}</span>}
-          {wait && !withDate && <span>{wait}</span>}
         </span>
       </span>
 
       <span className="hidden min-w-0 md:block">
         <span className="block text-[12px] text-[#5f5b58]">{typeLabel(order)}</span>
-        <span className="block truncate text-[11px] text-[#8d8884]">{withDate ? order.status_label : wait}</span>
+        <span className="block truncate text-[11px] text-[#8d8884]">{withDate ? order.status_label : null}</span>
       </span>
 
       {canAct ? (

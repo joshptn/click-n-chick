@@ -11,7 +11,6 @@ import {
   IconNote,
   IconPhone,
   IconRefresh,
-  IconTicket,
 } from "@tabler/icons-react";
 
 import { Line, Money, Section } from "./DetailParts";
@@ -98,7 +97,6 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
           <p className="m-0 font-display text-[11px] font-bold uppercase tracking-[0.6px] text-ink">Order details</p>
           <p className="m-0 mt-0.5 font-display text-[12.5px] font-bold text-brand-600">
             {shown?.reference ?? ""}
-            {shown?.queue_label && <span className="ml-1.5 font-medium text-[#a39f9b]">· Order #{shown.id}</span>}
           </p>
         </div>
         {shown && (
@@ -146,7 +144,7 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
                       {initialsOf(name)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="m-0 flex flex-wrap items-center gap-1.5 font-display text-[14px] font-bold leading-snug text-ink">
+                      <p className="[overflow-wrap:anywhere] m-0 flex flex-wrap items-center gap-1.5 font-display text-[14px] font-bold leading-snug text-ink">
                         {name}
                         {shown.customer?.is_guest && (
                           <span className="rounded bg-[#f4f1ec] px-1.5 text-[10px] font-semibold text-[#8d8884]">Guest</span>
@@ -214,7 +212,6 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
                           {record.pickup_at ? `Collection set for ${formatRecordStamp(record.pickup_at)}` : "Collected when ready"}
                         </Line>
                       )}
-                      {record.queue_label && <Line icon={IconTicket}>Ticket {record.queue_label}</Line>}
                     </div>
                   </Section>
 
@@ -223,14 +220,14 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
                       {(record.items ?? []).map((item) => (
                         <li key={item.id} className="flex items-start justify-between gap-3" data-testid="record-item">
                           <span className="min-w-0">
-                            <span className="block font-display text-[13px] font-semibold leading-snug text-ink">
+                            <span className="[overflow-wrap:anywhere] block font-display text-[13px] font-semibold leading-snug text-ink">
                               {item.food_name}
                             </span>
                             <span className="block font-display text-[11px] text-[#8d8884]">
                               {item.quantity}× {formatPeso(item.unit_price)}
                             </span>
                             {item.addons?.map((addon) => (
-                              <span key={addon.id} className="block font-display text-[11px] text-[#8d8884]">
+                              <span key={addon.id} className="[overflow-wrap:anywhere] block font-display text-[11px] text-[#8d8884]">
                                 + {addon.addon_name}
                                 {addon.unit_price != null && ` (${formatPeso(addon.unit_price)})`}
                               </span>
@@ -280,7 +277,6 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
                     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
                       <TimelineRow label="Placed" at={record.timeline?.placed_at} />
                       {record.timeline?.accepted_at && <TimelineRow label="Accepted" at={record.timeline.accepted_at} />}
-                      {record.timeline?.queued_at && <TimelineRow label="Joined the line" at={record.timeline.queued_at} />}
                       <TimelineRow label={outcome.label} at={record.timeline?.closed_at} />
                       <TimelineRow label="Open for">
                         {durationLabel(record.timeline?.placed_at, record.timeline?.closed_at)}

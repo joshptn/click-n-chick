@@ -39,7 +39,7 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
       title={
         order ? (
           <span className="flex items-center gap-2.5">
-            <span className="font-display text-[15px] font-bold text-brand-600">{order.queue_label ?? `#${order.id}`}</span>
+            <span className="font-display text-[15px] font-bold text-brand-600">{order.reference ?? `#${order.id}`}</span>
             <span className="rounded-full bg-[#f4f1ec] px-2 py-0.5 font-display text-[10.5px] font-semibold text-[#5f5b58]">
               {handoverLabel(order) ?? order.status_label}
             </span>
@@ -114,8 +114,6 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
                 <Line icon={IconClock}>
                   <span className="text-[#6f6b68]">
                     Placed {formatTime(order.created_at)}
-                    {order.waiting_minutes != null && !finished && ` · waiting ${order.waiting_minutes} min`}
-                    {order.queue_position ? ` · #${order.queue_position} in line` : ""}
                   </span>
                 </Line>
               </div>
@@ -129,7 +127,7 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
                       {item.quantity}×
                     </span>
                     <span className="min-w-0">
-                      <span className="block font-display text-[12.5px] font-semibold text-ink">{item.food_name}</span>
+                      <span className="[overflow-wrap:anywhere] block font-display text-[12.5px] font-semibold text-ink">{item.food_name}</span>
                       {item.addons?.length > 0 && (
                         <span className="block font-display text-[11px] text-[#8d8884]">+ {item.addons.join(", ")}</span>
                       )}

@@ -15,7 +15,8 @@ const LINE = ["placed", "confirmed", "preparing"];
 const HANDOVER = ["ready_for_pickup", "on_the_way"];
 const DONE = ["completed", "delivered"];
 
-const byQueueNumber = (a, b) => (a.queue_number ?? 0) - (b.queue_number ?? 0);
+/** The day's number, then the id: numbers may repeat (decided 2026-11-20). */
+const byQueueNumber = (a, b) => Number(a.order_number ?? 0) - Number(b.order_number ?? 0) || a.id - b.id;
 
 /** The queue payload with one order moved to wherever its status now puts it. */
 function withOrder(queue, updated) {

@@ -161,7 +161,6 @@ function AdminDashboard() {
               </div>
               <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
                 {boardDate(board.queue?.date)}
-                {summary?.longest_wait_minutes != null && ` · longest wait ${summary.longest_wait_minutes} min`}
                 {summary?.cancelled_today > 0 && ` · ${summary.cancelled_today} cancelled`}
               </p>
             </div>

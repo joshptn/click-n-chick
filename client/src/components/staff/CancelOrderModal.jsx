@@ -58,7 +58,8 @@ function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, 
   const isReject = mode === "reject";
   const paid = order.payment_status === "paid";
   const amount = formatPeso(order.total ?? order.total_amount ?? order.subtotal);
-  const label = order.queue_label ?? order.reference ?? `#${order.id}`;
+  // A request not accepted yet has no number: it goes by its customer.
+  const label = order.reference ?? order.customer?.name ?? `#${order.id}`;
   const action = isReject ? "Reject order" : "Cancel order";
   const hasReason = reason.trim() !== "";
   const close = loading ? () => {} : onClose;
