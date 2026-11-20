@@ -72,21 +72,8 @@ function pad(value: number) {
   return String(value).padStart(2, "0");
 }
 
-/** Every bookable day, "YYYY-MM-DD", from the API's earliest to its latest. */
-export function bookableDates(schedule: AdvanceSchedule | null | undefined): string[] {
-  const start = schedule ? parseDate(schedule.earliest_date) : null;
-  const end = schedule ? parseDate(schedule.latest_date) : null;
-  if (!start || !end) return [];
-
-  const dates: string[] = [];
-  for (const day = new Date(start); day <= end && dates.length < 62; day.setDate(day.getDate() + 1)) {
-    dates.push(`${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`);
-  }
-
-  return dates;
-}
-
-const SLOT_MINUTES = 15;
+/** The dial picker's step (decided 2026-11-20). */
+const SLOT_MINUTES = 5;
 
 const LAST_MINUTE_OF_DAY = 23 * 60 + 59;
 
@@ -99,7 +86,7 @@ function toMinutes(value: string | undefined) {
  * The last collection time the app offers, "HH:mm". When the store closes
  * after midnight (closes_at "01:44" with opens_at "07:00"), the API still
  * checks a collection against the chosen day's own opening, so a time after
- * midnight would be refused: the day's list ends at 23:45 instead.
+ * midnight would be refused: the day's times end at 23:55 instead.
  */
 export function lastCollection(schedule: AdvanceSchedule | null | undefined): string | null {
   const opens = toMinutes(schedule?.opens_at);
@@ -109,20 +96,6 @@ export function lastCollection(schedule: AdvanceSchedule | null | undefined): st
 
   const last = Math.floor(LAST_MINUTE_OF_DAY / SLOT_MINUTES) * SLOT_MINUTES;
   return `${pad(Math.floor(last / 60))}:${pad(last % 60)}`;
-}
-
-/** Collection times every 15 minutes, "HH:mm", from opening to the last collection. */
-export function collectionTimes(schedule: AdvanceSchedule | null | undefined): string[] {
-  const opens = toMinutes(schedule?.opens_at);
-  const closes = toMinutes(lastCollection(schedule) ?? undefined);
-  if (opens === null || closes === null) return [];
-
-  const times: string[] = [];
-  for (let at = Math.ceil(opens / SLOT_MINUTES) * SLOT_MINUTES; at <= closes; at += SLOT_MINUTES) {
-    times.push(`${pad(Math.floor(at / 60))}:${pad(at % 60)}`);
-  }
-
-  return times;
 }
 
 /**
@@ -137,17 +110,8 @@ export function toScheduleIso(date: string | null, time: string | null): string 
   return `${date}T${time}:00`;
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAYS_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-/** { weekday: "Thu", day: "20", month: "Nov" } for a date chip. */
-export function dateParts(date: string) {
-  const day = parseDate(date);
-  if (!day) return { weekday: "", day: "", month: "" };
-  return { weekday: WEEKDAYS[day.getDay()], day: String(day.getDate()), month: MONTHS[day.getMonth()] };
-}
 
 /** "Thursday, November 20" */
 export function formatCollectionDay(isoOrDate: string | null | undefined): string {

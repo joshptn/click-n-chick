@@ -175,26 +175,3 @@ export function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-const SLOT_MINUTES = 15;
-
-/**
- * Pickup times every 15 minutes inside the API's window (from when the order
- * can be ready to the last pickup), as ISO strings the API reads back.
- */
-export function pickupSlots(window: Quote["pickup"]): string[] {
-  if (!window) return [];
-
-  const earliest = new Date(window.earliest).getTime();
-  const latest = new Date(window.latest).getTime();
-
-  if (!Number.isFinite(earliest) || !Number.isFinite(latest)) return [];
-
-  const step = SLOT_MINUTES * 60 * 1000;
-  const slots: string[] = [];
-
-  for (let at = Math.ceil(earliest / step) * step; at <= latest && slots.length < 96; at += step) {
-    slots.push(new Date(at).toISOString());
-  }
-
-  return slots;
-}
