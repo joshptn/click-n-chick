@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError } from "../../api/client";
-import { cancelPrompt, feedbackMailto, isRefused, queueMessage, statusTone, type ContactChanges, type Order } from "../../api/orders";
+import { cancelPrompt, feedbackMailto, isRefused, statusTone, type ContactChanges, type Order } from "../../api/orders";
 import { formatPeso } from "../../lib/money";
 import { formatDay, formatTime } from "../../lib/time";
 import { toast } from "../../lib/toast";
@@ -27,7 +27,6 @@ import {
   IconSend,
   IconShoppingBag,
   IconUser,
-  IconUsers,
 } from "../icons";
 import { Sheet } from "../account/Sheet";
 import { ContactEditor } from "./ContactEditor";
@@ -39,7 +38,7 @@ type Hero = { icon: ComponentType<IconProps>; title: string; body: string };
 /** The status card's words, as the web's OrderStatusPanel. */
 const HERO: Record<string, Hero> = {
   placed: { icon: IconReceipt, title: "Order placed!", body: "We have your order and are confirming it with the store." },
-  confirmed: { icon: IconCircleCheck, title: "Order confirmed!", body: "The store has accepted your order. It joins the kitchen queue next." },
+  confirmed: { icon: IconCircleCheck, title: "Order confirmed!", body: "The store has accepted your order. The kitchen starts on it next." },
   preparing: { icon: IconChefHat, title: "We're cooking!", body: "Your food is being prepared right now." },
   ready_for_pickup: { icon: IconShoppingBag, title: "Ready for pickup!", body: "Come and collect it at the counter. Show your order number." },
   on_the_way: { icon: IconScooter, title: "On the way!", body: "Your order has left the store and is heading to you." },
@@ -103,7 +102,7 @@ type Props = {
 
 /**
  * Order tracking (designs of 2026-11-17), with the web's behaviour: the
- * steps, the status in words, the queue, confirming details and receipt,
+ * steps, the status in words, confirming details and receipt,
  * cancelling on the API's terms, the order itself, and feedback by email.
  * Shared by a customer's order and a guest's tracking link.
  */
@@ -309,7 +308,6 @@ function StatusCard({ order }: { order: Order }) {
   const hero = (order.is_advance ? ADVANCE_HERO[order.status] : undefined) ?? HERO[order.status] ?? HERO.placed;
   const tone = TONES[statusTone(order)];
   const Icon = hero.icon;
-  const queue = queueMessage(order.queue);
   const refused = isRefused(order);
   const collectAt = order.is_advance && order.scheduled_for ? `${formatDay(order.scheduled_for)}, ${formatTime(order.scheduled_for)}` : null;
 
@@ -352,19 +350,6 @@ function StatusCard({ order }: { order: Order }) {
         </View>
       )}
 
-      {queue && (
-        <View style={styles.infoBox}>
-          <IconUsers size={18} color={colors.orange} strokeWidth={2} />
-          <View style={styles.flex}>
-            <AppText family="display" weight="semibold" size={13.5} color={colors.authInk}>
-              {queue.headline}
-            </AppText>
-            <AppText family="display" size={12} color={colors.ink500}>
-              {queue.detail}
-            </AppText>
-          </View>
-        </View>
-      )}
     </View>
   );
 }

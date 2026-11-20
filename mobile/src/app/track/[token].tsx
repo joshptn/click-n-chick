@@ -9,7 +9,6 @@ import { usePublicOrderChannel } from "../../hooks/useRealtime";
 import { forgetGuestOrder, rememberGuestOrder } from "../../lib/guestOrders";
 import { toast } from "../../lib/toast";
 
-const IN_LINE_POLL_MS = 30 * 1000;
 
 function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -33,7 +32,6 @@ export default function GuestOrder() {
     enabled: Boolean(token),
     retry: false,
     refetchOnWindowFocus: true,
-    refetchInterval: (current) => (current.state.data?.order.queue?.in_line ? IN_LINE_POLL_MS : false),
   });
 
   const order = query.data?.order ?? null;
