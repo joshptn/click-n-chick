@@ -54,7 +54,7 @@ function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0, isA
 
       <div className="flex flex-1 flex-col gap-1 px-3.5 pb-3.5 pt-3">
         <h3
-          className={`m-0 line-clamp-2 font-display text-[13.5px] font-semibold leading-snug ${
+          className={`[overflow-wrap:anywhere] m-0 line-clamp-2 font-display text-[13.5px] font-semibold leading-snug ${
             orderable ? "text-ink" : "text-[#a39f9b]"
           }`}
         >

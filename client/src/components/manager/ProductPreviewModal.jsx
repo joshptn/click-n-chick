@@ -35,7 +35,7 @@ function ProductPreviewModal({ food, opened, onClose }) {
           </div>
           <div className="p-5">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="m-0 font-display text-[18px] font-bold leading-snug text-ink">{food.food_name}</h2>
+              <h2 className="[overflow-wrap:anywhere] m-0 font-display text-[18px] font-bold leading-snug text-ink">{food.food_name}</h2>
               <button
                 type="button"
                 onClick={onClose}

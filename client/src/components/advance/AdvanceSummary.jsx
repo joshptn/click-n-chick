@@ -61,10 +61,10 @@ function AdvanceSummary({
         {items.map((line) => (
           <li key={line.id} className="flex items-start justify-between gap-3 py-1.5">
             <span className="min-w-0 flex-1">
-              <span className="block font-display text-[13.5px] font-semibold leading-snug text-ink">
+              <span className="[overflow-wrap:anywhere] block font-display text-[13.5px] font-semibold leading-snug text-ink">
                 {line.food_name}
               </span>
-              <span className="block font-display text-[11.5px] text-[#8d8884]">
+              <span className="[overflow-wrap:anywhere] block font-display text-[11.5px] text-[#8d8884]">
                 {line.quantity}&times;
                 {line.addons.length > 0 &&
                   ` (${line.addons.map((addon) => addon.addon_name).join(", ")})`}

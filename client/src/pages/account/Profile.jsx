@@ -59,7 +59,7 @@ function SectionCard({ icon, title, subtitle, children }) {
   const Glyph = icon;
 
   return (
-    <section className="rounded-2xl border border-[#f0e9df] bg-white p-5 sm:p-6">
+    <section className="min-w-0 rounded-2xl border border-[#f0e9df] bg-white p-5 sm:p-6">
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
@@ -326,7 +326,9 @@ function Profile() {
         </div>
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid min-w-0 gap-5">
+          {/* minmax(0, 1fr): the column keeps its width however long the name
+              is, so the name truncates instead of stretching the cards. */}
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
             <SectionCard
               icon={IconUsers}
               title="Personal Information"
@@ -373,8 +375,8 @@ function Profile() {
                   </button>
                 </div>
 
-                <div className="min-w-0">
-                  <p className="m-0 truncate font-display text-[16px] font-bold text-ink">
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 truncate font-display text-[16px] font-bold text-ink" title={`${displayUser?.first_name ?? ""} ${displayUser?.last_name ?? ""}`.trim()}>
                     {`${displayUser?.first_name ?? ""} ${displayUser?.last_name ?? ""}`.trim() || "Your account"}
                   </p>
                   <p className="m-0 truncate font-display text-[12.5px] text-[#8d8884]">{displayUser?.email}</p>

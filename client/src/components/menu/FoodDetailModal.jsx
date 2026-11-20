@@ -117,7 +117,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </button>
           </div>
 
-          <h2 className="m-0 font-display text-[26px] font-extrabold leading-tight tracking-[-0.5px] text-ink sm:text-[30px]">
+          <h2 className="[overflow-wrap:anywhere] m-0 font-display text-[26px] font-extrabold leading-tight tracking-[-0.5px] text-ink sm:text-[30px]">
             {detail.food_name}
           </h2>
 
@@ -179,7 +179,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
                             onChange={() => toggleAddon(addon.id)}
                             className="sr-only"
                           />
-                          <span className="block font-display text-[12.5px] font-semibold leading-tight text-ink">
+                          <span className="[overflow-wrap:anywhere] block font-display text-[12.5px] font-semibold leading-tight text-ink">
                             {addon.addon_name}
                           </span>
                           <span className="mt-0.5 block font-display text-[12px] font-bold text-brand-600">

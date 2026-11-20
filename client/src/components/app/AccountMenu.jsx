@@ -88,7 +88,9 @@ function AccountMenu({ trigger = "pill", position = "bottom-end", showOrders = t
               className="flex items-center gap-2 rounded-full bg-transparent py-1 pl-1 pr-1 transition-colors hover:bg-[#f7f4f0] sm:pr-3"
             >
               {face}
-              <span className="hidden font-display text-[13.5px] font-semibold text-ink sm:inline">{displayName}</span>
+              <span className="hidden max-w-[140px] truncate font-display text-[13.5px] font-semibold text-ink sm:inline-block" title={displayName}>
+                {displayName}
+              </span>
             </button>
           )}
         </Menu.Target>

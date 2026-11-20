@@ -55,7 +55,7 @@ function DeleteProductModal({ food, opened, onClose, onConfirm, loading }) {
               )}
             </span>
             <span className="min-w-0">
-              <span className="block font-display text-[14px] font-bold text-ink">{food.food_name}</span>
+              <span className="[overflow-wrap:anywhere] block font-display text-[14px] font-bold text-ink">{food.food_name}</span>
               <span className="block font-display text-[11.5px] text-[#8d8884]">
                 ID {food.id} · {food.category?.name ?? "No category"} · {formatPeso(food.price)}
               </span>

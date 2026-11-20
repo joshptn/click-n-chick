@@ -159,7 +159,7 @@ function ScheduleStep({
         </p>
 
         <p className="m-0 flex items-center gap-2 font-display text-[13px] text-ink">
-          <IconUser size={15} stroke={2} aria-hidden="true" className="shrink-0 text-brand-500" />
+          <IconUser size={15} stroke={2} aria-hidden="true" className="[overflow-wrap:anywhere] shrink-0 text-brand-500" />
           {contact?.name || "—"}
           {contact?.phone && <span className="text-[#8d8884]">· {contact.phone}</span>}
         </p>

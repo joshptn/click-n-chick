@@ -315,7 +315,7 @@ function SalesLog() {
                   <span className="text-[13px] font-semibold text-ink">{record.reference}</span>
                   <span className="text-[13px] font-semibold tabular-nums text-ink">{formatPeso(record.total)}</span>
                 </span>
-                <span className="text-[12px] text-[#5f5b58]">{record.customer?.name || "Customer"}</span>
+                <span className="[overflow-wrap:anywhere] text-[12px] text-[#5f5b58]">{record.customer?.name || "Customer"}</span>
                 <span className="truncate text-[12px] text-[#8d8884]">{itemsPreview(record)}</span>
                 <span className="mt-1 flex w-full items-center justify-between gap-2">
                   <FulfilmentTag record={record} />

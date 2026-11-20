@@ -192,7 +192,7 @@ function TableView({ foods, loading, rowProps }) {
                   className="min-w-0 bg-transparent text-left"
                 >
                   <span
-                    className={`block font-display text-[13.5px] font-semibold leading-snug ${isArchived(food) ? "text-[#a39f9b]" : "text-ink"}`}
+                    className={`[overflow-wrap:anywhere] block font-display text-[13.5px] font-semibold leading-snug ${isArchived(food) ? "text-[#a39f9b]" : "text-ink"}`}
                   >
                     {food.food_name}
                   </span>
@@ -235,7 +235,7 @@ function CardView({ foods, loading, rowProps }) {
             <Thumb food={food} onOpen={rowProps.onPreview} />
             <button type="button" onClick={() => rowProps.onPreview(food)} className="min-w-0 flex-1 bg-transparent text-left">
               <span
-                className={`block font-display text-[13.5px] font-semibold leading-snug ${isArchived(food) ? "text-[#a39f9b]" : "text-ink"}`}
+                className={`[overflow-wrap:anywhere] block font-display text-[13.5px] font-semibold leading-snug ${isArchived(food) ? "text-[#a39f9b]" : "text-ink"}`}
               >
                 {food.food_name}
               </span>

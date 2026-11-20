@@ -149,7 +149,7 @@ function ClaimReviewPanel({ claim, percentage, busy, approving, canAct, onApprov
               <span className="grid h-10 w-10 place-items-center rounded-[10px] bg-brand-500 font-display text-[14px] font-bold text-white">
                 {initialsOf(name)}
               </span>
-              <span className="font-display text-[13px] font-semibold text-brand-600">{name}</span>
+              <span className="[overflow-wrap:anywhere] font-display text-[13px] font-semibold text-brand-600">{name}</span>
             </div>
           </div>
 

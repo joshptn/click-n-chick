@@ -37,7 +37,7 @@ function MenuCard({ item, onSelect }) {
           <span className="w-[2px] shrink-0 bg-[#f58c2f]" aria-hidden="true" />
 
           <div className="min-w-0 pb-[6.5px] pl-[0.5px] pt-[8.5px]">
-            <p className="m-0 font-display text-[20px] font-bold uppercase leading-[22px] text-white">{item.food_name}</p>
+            <p className="[overflow-wrap:anywhere] m-0 font-display text-[20px] font-bold uppercase leading-[22px] text-white">{item.food_name}</p>
             <p className="m-0 line-clamp-2 font-display text-[15px] font-semibold leading-[18px] text-[#f58c2f]">
               {item.category?.name ?? item.description}
             </p>

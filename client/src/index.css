@@ -64,6 +64,10 @@
 
 body {
   font-family: 'Fredoka', sans-serif;
+  /* A word too long for its box (a name or dish typed without spaces) breaks
+     onto the next line instead of running out of it. Ordinary text is
+     unaffected: it only applies when a single word cannot fit. */
+  overflow-wrap: break-word;
 }
 
 /* Anchor targets sit behind the fixed header without this offset. */

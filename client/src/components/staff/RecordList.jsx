@@ -163,7 +163,7 @@ export function RecordCards({ records, loading, selectedId, onSelect, intent, sh
             </span>
             <StatusPill record={record} />
           </span>
-          <span className="block font-display text-[13px] font-semibold text-ink">
+          <span className="[overflow-wrap:anywhere] block font-display text-[13px] font-semibold text-ink">
             {record.customer?.name || "Customer"}
             {record.customer?.is_guest && <span className="ml-1.5 text-[10.5px] font-medium text-[#a39f9b]">Guest</span>}
           </span>
