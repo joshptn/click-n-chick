@@ -26,8 +26,10 @@ class AdvanceRequestResource extends JsonResource
 
         return [
             'id' => $this->id,
-            'order_number' => $this->order_number,
-            'reference' => '#'.$this->id,
+            // "A-007" once accepted; nothing before (decided 2026-11-20): a
+            // request is known by its customer's name until then.
+            'advance_order_number' => $this->advance_order_number,
+            'reference' => $this->number(),
 
             'status' => $this->status,
             'status_label' => OrderStatus::label((string) $this->status),

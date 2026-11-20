@@ -19,7 +19,10 @@ class OrderTrackingResource extends JsonResource
 
         return [
             'id' => $this->id,
+            // "007", "A-007", "#29" before payment, or "Order for Sunday,
+            // November 22 at 3:00 AM" for an advance request not accepted yet.
             'reference' => $this->reference(),
+            'title' => $this->title(),
             'order_type' => $this->order_type,
 
             'status' => $status,
@@ -38,14 +41,6 @@ class OrderTrackingResource extends JsonResource
             // Waiting on the customer's payment: the web app offers "Pay now".
             'awaiting_payment' => ! $this->isTerminal() && PaymentCheckout::awaitsPayment($this->resource),
 
-            'queue' => [
-                'number' => $this->queue_number,
-                'label' => $this->queueLabel(),
-                'in_line' => $this->isInLine(),
-                'position' => $this->queuePosition(),
-                'ahead' => $this->aheadInQueue(),
-            ],
-
             'cancellation' => $cancellation,
             'can_cancel' => $cancellation['can_cancel'],
             'editable' => app(AmendmentPolicy::class)->editable($this->resource),
@@ -56,7 +51,6 @@ class OrderTrackingResource extends JsonResource
             'can_confirm_receipt' => $isDelivery && $status === OrderStatus::ON_THE_WAY,
 
             'placed_at' => $this->created_at?->toIso8601String(),
-            'queued_at' => $this->queued_at?->toIso8601String(),
             'closed_at' => $this->closed_at?->toIso8601String(),
 
             'pickup' => $this->when(! $isDelivery, fn () => [

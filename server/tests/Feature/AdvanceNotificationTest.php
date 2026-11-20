@@ -151,10 +151,12 @@ class AdvanceNotificationTest extends TestCase
             ]);
         }
 
-        // The wording has to be actionable: which order, for when, how big.
+        // The wording has to be actionable: whose request, for when, how big.
+        // Before acceptance a request has no number, only its requestor.
         $body = $this->bodyFor($agentOne->id, OrderNotice::TYPE_ADVANCE_REQUEST);
 
-        $this->assertStringContainsString("Request #{$order->id}", $body);
+        $this->assertStringContainsString("{$customer->first_name} {$customer->last_name}'s request for", $body);
+        $this->assertStringNotContainsString("#{$order->id}", $body);
         $this->assertStringContainsString('2 item(s)', $body);
         $this->assertStringContainsString('accepting or rejecting', $body);
     }
@@ -362,7 +364,7 @@ class AdvanceNotificationTest extends TestCase
 
         $body = $this->bodyFor($agent->id, OrderNotice::TYPE_ADVANCE);
 
-        $this->assertStringContainsString("The customer cancelled order #{$order->id}", $body);
+        $this->assertStringContainsString("{$customer->first_name} {$customer->last_name}'s request was cancelled by the customer", $body);
         $this->assertStringContainsString('No refund is owed', $body);
     }
 

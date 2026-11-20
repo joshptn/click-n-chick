@@ -35,9 +35,9 @@ class OrderRecordResource extends JsonResource
 
         $row = [
             'id' => $this->id,
-            'reference' => $this->reference(),
-            'queue_label' => $this->queueLabel(),
-            'order_number' => $this->order_number,
+            // Order Records goes by the order id alone (decided 2026-11-20):
+            // the daily numbers repeat every day.
+            'reference' => '#'.$this->id,
 
             'status' => $status,
             'status_label' => OrderStatus::label($status),
@@ -132,7 +132,6 @@ class OrderRecordResource extends JsonResource
             'timeline' => [
                 'placed_at' => $this->created_at?->toIso8601String(),
                 'accepted_at' => $this->accepted_at?->toIso8601String(),
-                'queued_at' => $this->queued_at?->toIso8601String(),
                 'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
                 'closed_at' => ($this->closed_at ?? $this->updated_at)?->toIso8601String(),
             ],
