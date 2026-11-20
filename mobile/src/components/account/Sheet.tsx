@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { Animated, Easing, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "../../theme/colors";
@@ -21,18 +21,50 @@ type SheetProps = {
  * A panel from the bottom of the screen, for the short forms the web shows in
  * a dialog: a password before trusting a device or turning 2FA off, and the
  * code that confirms a password change or 2FA.
+ *
+ * The dimmed backdrop fades in place while only the panel slides up (fixed
+ * 2026-11-20: the Modal's own "slide" carried the backdrop up with it).
  */
 export function Sheet({ visible, title, subtitle, onClose, busy = false, children, testID }: SheetProps) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const [progress] = useState(() => new Animated.Value(0));
+  // Stays mounted after `visible` turns false, until the panel has slid away.
+  const [mounted, setMounted] = useState(visible);
+
+  if (visible && !mounted) setMounted(true);
+
+  useEffect(() => {
+    const animation = Animated.timing(progress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? 280 : 200,
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    });
+
+    animation.start(({ finished }) => {
+      if (finished && !visible) setMounted(false);
+    });
+
+    return () => animation.stop();
+  }, [visible, progress]);
+
   const close = () => {
     if (!busy) onClose();
   };
 
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] });
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={close} statusBarTranslucent>
       <KeyboardAvoidingView behavior="padding" style={styles.root}>
-        <Pressable style={styles.backdrop} onPress={close} accessibilityLabel="Close" accessibilityRole="button" />
-        <View style={[styles.panel, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]} testID={testID}>
+        <Animated.View style={[styles.backdrop, { opacity: progress }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" accessibilityRole="button" />
+        </Animated.View>
+        <Animated.View
+          style={[styles.panel, { paddingBottom: Math.max(insets.bottom, 16) + 8, transform: [{ translateY }] }]}
+          testID={testID}
+        >
           <View style={styles.grip} />
           <View style={styles.head}>
             <View style={styles.headText}>
@@ -59,7 +91,7 @@ export function Sheet({ visible, title, subtitle, onClose, busy = false, childre
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body} bounces={false}>
             {children}
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
