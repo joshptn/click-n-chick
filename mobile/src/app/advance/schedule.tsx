@@ -388,7 +388,7 @@ export default function AdvanceSchedule() {
               </AppText>
             </View>
             <AppText family="display" size={11.5} color={colors.authHint} style={styles.center}>
-              Payable only after the store accepts. You then have 24 hours to pay.
+              Payable only after the store accepts, by the time it gives you. Unpaid by then, the store cancels it.
             </AppText>
 
             <Pressable
