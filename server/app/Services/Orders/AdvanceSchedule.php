@@ -40,7 +40,6 @@ class AdvanceSchedule
         return ['earliest' => $opens, 'latest' => $closes->subMinutes($buffer)];
     }
 
-
     public function evaluate(mixed $raw): array
     {
         if (! is_string($raw) || trim($raw) === '') {
@@ -51,7 +50,10 @@ class AdvanceSchedule
         }
 
         try {
-            $requested = CarbonImmutable::parse($raw)->setTimezone($this->store->timezone());
+            // A time without an offset ("2026-11-21T14:00:00") is read as store
+            // time, so a phone or browser set to another time zone books the
+            // time it showed (fixed 2026-11-20). One with an offset is honoured.
+            $requested = CarbonImmutable::parse($raw, $this->store->timezone())->setTimezone($this->store->timezone());
         } catch (Throwable) {
             return [null, [
                 'code' => 'SCHEDULE_INVALID',
