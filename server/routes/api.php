@@ -207,7 +207,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/agent/queue', [OrderQueueController::class, 'index']);
     Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
     Route::get('/agent/pending-orders', [OrderQueueController::class, 'pending']);
-    
+
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
 
     // Order Records (UC-OPS-007): closed orders, read-only, for both staff roles.
@@ -226,7 +226,6 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])-
     Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
 
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
-    Route::put('/order/{id}/etc', [OrderController::class, 'updateOrderETC']);
 
     Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
     Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);

@@ -441,7 +441,7 @@ class OrderTrackingTest extends TestCase
         $order = $this->order($this->customer(), 'pickup', OrderStatus::COMPLETED);
         $closed = $order->fresh()->closed_at;
 
-        $order->forceFill(['estimated_time_of_completion' => 25])->save();
+        $order->forceFill(['contact_name' => 'Someone Else'])->save();
 
         $this->assertEquals($closed, $order->fresh()->closed_at);
     }

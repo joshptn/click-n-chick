@@ -58,7 +58,6 @@ class OrderTrackingResource extends JsonResource
             'placed_at' => $this->created_at?->toIso8601String(),
             'queued_at' => $this->queued_at?->toIso8601String(),
             'closed_at' => $this->closed_at?->toIso8601String(),
-            'estimated_time_of_completion' => $this->estimated_time_of_completion,
 
             'pickup' => $this->when(! $isDelivery, fn () => [
                 'at' => $this->pickup_at?->toIso8601String(),
