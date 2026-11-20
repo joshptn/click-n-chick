@@ -14,6 +14,8 @@ Schedule::command('otp:prune')->daily();
 
 Schedule::command('advance:expire-unpaid')->everyFiveMinutes()->withoutOverlapping(10);
 
+Schedule::command('advance:remind-payment')->everyFiveMinutes()->withoutOverlapping(10);
+
 Schedule::command('advance:notify-due')->hourly();
 
 Schedule::command('stock:expire-holds')->everyFiveMinutes()->withoutOverlapping(10);
