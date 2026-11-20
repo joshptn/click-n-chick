@@ -51,6 +51,50 @@ function Chip({ tone = "slate", icon, children }) {
   );
 }
 
+/** The buttons of a paid order, by where its collection day stands. */
+function PaidActions({ order, busy, onAdvance, onCancel }) {
+  const primary =
+    "inline-flex h-[30px] w-full items-center justify-center gap-1 rounded-[8px] bg-brand-500 font-display font-semibold text-white shadow-[0_6px_14px_-6px_rgba(255,139,43,0.6)] transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-55";
+  const cancel =
+    "h-[30px] w-full rounded-[8px] bg-[#6f6b68] font-display font-semibold text-white transition-colors hover:bg-[#5f5b58] disabled:cursor-not-allowed disabled:opacity-55";
+
+  if (order.can_start_preparing) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button type="button" disabled={busy} onClick={stop(() => onAdvance(order))} data-testid="advance-start" className={primary}>
+          Start Preparing Now
+          <IconArrowRight size={13} stroke={2.4} />
+        </button>
+        <button type="button" disabled={busy} onClick={stop(() => onCancel?.(order))} data-testid="advance-card-cancel" className={cancel}>
+          Cancel this Order
+        </button>
+      </div>
+    );
+  }
+
+  if (order.can_schedule) {
+    return (
+      <button type="button" disabled={busy} onClick={stop(() => onAdvance(order))} data-testid="advance-schedule" className={primary}>
+        Schedule this Order
+      </button>
+    );
+  }
+
+  if (order.collection_day_passed) {
+    return (
+      <button type="button" disabled={busy} onClick={stop(() => onCancel?.(order))} data-testid="advance-card-cancel" className={cancel}>
+        Cancel this Order
+      </button>
+    );
+  }
+
+  return (
+    <p className="m-0 rounded-[8px] bg-[#faf6f0] px-3 py-1.5 text-center font-display text-[10.5px] text-[#8d8884]">
+      Prepared on the day · {collectionLabel(order).split(" · ")[0]}
+    </p>
+  );
+}
+
 function stop(handler) {
   return (event) => {
     event.stopPropagation();
@@ -65,8 +109,13 @@ function stop(handler) {
  * Unlike the day's board, the collection date leads, nothing carries a queue
  * number (BR-22c), and only payment moves an accepted request on (BR-16g) -
  * so the awaiting-payment card offers a reminder, never a forward step.
+ *
+ * A paid order (To Confirm, decided 2026-11-20) offers what its collection day
+ * allows: Start Preparing Now and Cancel on the day itself, Schedule for a
+ * later day, and only Cancel once the day has passed. A scheduled order (the
+ * Scheduled Orders list) is started on its day.
  */
-function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, onAdvance, onOpen }) {
+function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, onAdvance, onCancel, onOpen }) {
   const reduceMotion = useReducedMotion();
   const stage = advanceStage(order);
   const forward = stage === "kitchen" ? advanceLabel(order) : null;
@@ -95,7 +144,9 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
       data-status={order.status}
       aria-label={`Advance order ${order.reference ?? order.id}, ${order.status_label}, collecting ${collectionLabel(order)}`}
       className={`cursor-pointer rounded-[12px] border bg-white p-3 text-left shadow-[0_2px_10px_-6px_rgba(65,33,17,0.18)] outline-none transition-[border-color,box-shadow] hover:border-brand-200 hover:shadow-[0_8px_22px_-12px_rgba(65,33,17,0.3)] focus-visible:ring-2 focus-visible:ring-brand-300 ${
-        stage === "decide" || (stage === "scheduled" && order.is_due_today) ? "border-[#ffd6b3]" : "border-[#f0e9df]"
+        stage === "decide" || ((stage === "confirm" || stage === "scheduled") && order.is_due_today)
+          ? "border-[#ffd6b3]"
+          : "border-[#f0e9df]"
       }`}
     >
       <div className="flex items-center gap-1.5">
@@ -144,7 +195,7 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
         {stage === "payment" && order.last_reminded_at && (
           <Chip icon={IconBellRinging}>Reminded {formatTime(order.last_reminded_at)}</Chip>
         )}
-        {stage === "scheduled" &&
+        {(stage === "confirm" || stage === "scheduled") &&
           (order.is_due_today ? (
             <Chip tone="orange" icon={IconClock}>
               Due today
@@ -225,22 +276,13 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
               Waiting for the customer&rsquo;s payment.
             </p>
           )
-        ) : stage === "scheduled" ? (
-          order.can_start_preparing && canAct ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={stop(() => onAdvance(order))}
-              data-testid="advance-start"
-              className="inline-flex h-[30px] w-full items-center justify-center gap-1 rounded-[8px] bg-brand-500 font-display font-semibold text-white shadow-[0_6px_14px_-6px_rgba(255,139,43,0.6)] transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              Start Preparing
-              <IconArrowRight size={13} stroke={2.4} />
-            </button>
+        ) : stage === "confirm" || stage === "scheduled" ? (
+          canAct ? (
+            <PaidActions order={order} busy={busy} onAdvance={onAdvance} onCancel={onCancel} />
           ) : (
             <p className="m-0 rounded-[8px] bg-[#faf6f0] px-3 py-1.5 text-center font-display text-[10.5px] text-[#8d8884]">
-              {order.status === "confirmed"
-                ? "Payment received · being booked in"
+              {stage === "confirm"
+                ? "Paid · waiting for a Store Agent"
                 : `Prepared on the day · ${collectionLabel(order).split(" · ")[0]}`}
             </p>
           )

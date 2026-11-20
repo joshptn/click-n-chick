@@ -7,6 +7,7 @@ import {
   IconClock,
   IconHourglassHigh,
   IconPhone,
+  IconToolsKitchen2,
   IconUser,
 } from "@tabler/icons-react";
 
@@ -114,6 +115,14 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                     {order.accepted_at && ` · accepted ${formatStamp(order.accepted_at)}`}
                   </span>
                 </Line>
+                {order.preparation_time != null && (
+                  <Line icon={IconToolsKitchen2}>
+                    <span className="text-[#6f6b68]">
+                      Preparation time {order.preparation_time} min
+                      {order.pays_before_preparation && " · sets the pay-by time"}
+                    </span>
+                  </Line>
+                )}
               </div>
             </Section>
 
@@ -157,7 +166,7 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                       <span className={order.payment_overdue ? "font-semibold text-[#e5322d]" : "text-[#c98500]"}>
                         {order.payment_overdue ? "Payment overdue" : `Pay by ${formatStamp(order.payment_due_at)}`}
                       </span>
-                      <span className="text-[#8d8884]"> · unpaid after 24 hours or at the collection time, it cancels itself</span>
+                      <span className="text-[#8d8884]"> · still unpaid by then, it cancels itself</span>
                     </Line>
                   ) : (
                     <Line icon={IconHourglassHigh}>
@@ -215,16 +224,21 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                       {coolingDown ? `Remind again at ${formatTime(order.can_remind_at)}` : "Remind the customer to pay"}
                     </button>
                   )}
-                  {stage === "scheduled" && order.can_start_preparing && (
+                  {(stage === "confirm" || stage === "scheduled") && (order.can_start_preparing || order.can_schedule) && (
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => onAdvance(order)}
                       className="inline-flex h-[36px] items-center justify-center gap-1.5 rounded-[10px] bg-brand-500 font-display font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-55"
                     >
-                      Start Preparing
-                      <IconArrowRight size={14} stroke={2.4} />
+                      {order.can_start_preparing ? "Start Preparing Now" : "Schedule this Order"}
+                      {order.can_start_preparing && <IconArrowRight size={14} stroke={2.4} />}
                     </button>
+                  )}
+                  {(stage === "confirm" || stage === "scheduled") && order.collection_day_passed && (
+                    <p className="m-0 rounded-[10px] bg-[#fdecec] px-3 py-2 text-center font-display text-[12px] text-[#e5322d]">
+                      Its collection day has passed, so it can no longer be prepared. Cancel it and choose whether to refund.
+                    </p>
                   )}
                   {forward && (
                     <button

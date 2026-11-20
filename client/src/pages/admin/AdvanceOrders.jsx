@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { IconInfoCircle, IconRefresh } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import AcceptAdvanceModal from "../../components/staff/AcceptAdvanceModal";
 import AdvanceDetailDrawer from "../../components/staff/AdvanceDetailDrawer";
 import AdvanceHistoryModal from "../../components/staff/AdvanceHistoryModal";
 import AdvanceOrderCard from "../../components/staff/AdvanceOrderCard";
@@ -12,6 +13,7 @@ import LivePill from "../../components/staff/LivePill";
 import OrderBoard from "../../components/staff/OrderBoard";
 import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import ReasonModal from "../../components/staff/ReasonModal";
+import ScheduledOrdersModal from "../../components/staff/ScheduledOrdersModal";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
@@ -57,7 +59,9 @@ function AdvanceOrders() {
 
   const [search, setSearch] = useState("");
   const [activeColumn, setActiveColumn] = useState("requests");
+  const [accepting, setAccepting] = useState(null);
   const [declining, setDeclining] = useState(null);
+  const [scheduledOpen, setScheduledOpen] = useState(false);
   const [cancelling, setCancelling] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,12 +80,12 @@ function AdvanceOrders() {
     });
   }, [advance.orders, search, searching]);
 
+  // Requests only (decided 2026-11-20): the count beside the search is the
+  // requests waiting for an answer, not every card on the page.
   const awaiting = columns[0].total;
-  const shown = columns.reduce((count, column) => count + column.orders.length, 0);
-  // Open requests only: finished ones are still loaded, so a link to one opens
-  // its drawer, but they live in the history modal rather than on the board.
-  const onBoard = columns.reduce((count, column) => count + column.total, 0);
+  const shown = columns[0].orders.length;
   const dueToday = summary?.due_today ?? 0;
+  const scheduledCount = advance.orders.filter((order) => order.status === "scheduled").length;
 
   useEffect(() => {
     document.title = awaiting > 0 ? `(${awaiting}) Advance request${awaiting === 1 ? "" : "s"} · Click n Chick` : PAGE_TITLE;
@@ -114,6 +118,15 @@ function AdvanceOrders() {
     columnRefs.current[key]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   };
 
+  const confirmAccept = async (preparationTime) => {
+    try {
+      await advance.accept(accepting, preparationTime);
+      setAccepting(null);
+    } catch {
+      // The hook has already said why; the modal stays open to try again.
+    }
+  };
+
   const confirmDecline = async (reason) => {
     try {
       await advance.reject(declining, reason);
@@ -135,13 +148,13 @@ function AdvanceOrders() {
 
   const handlers = {
     canAct,
-    onAccept: advance.accept,
+    onAccept: setAccepting,
     onReject: setDeclining,
     onRemind: advance.remind,
     onAdvance: advance.advance,
   };
 
-  const cardProps = { ...handlers, isBusy: advance.isBusy, onOpen: openOrder };
+  const cardProps = { ...handlers, onCancel: setCancelling, isBusy: advance.isBusy, onOpen: openOrder };
 
   const renderCard = (order, props) => (
     <AdvanceOrderCard key={order.id} order={order} busy={props.isBusy(order.id)} {...props} />
@@ -164,15 +177,30 @@ function AdvanceOrders() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setHistoryOpen(true)}
-              data-testid="view-fulfilled"
-              className="inline-flex h-[38px] shrink-0 items-center self-start rounded-full bg-[#fff6ec] px-4 font-display font-semibold text-brand-600 ring-1 ring-inset ring-[#ffd6b3] transition-colors hover:bg-[#ffecd9] md:self-auto"
-            >
-              {/* On the span: Mantine resets type on <button> itself. */}
-              <span className="text-[13px]">View Fulfilled Orders</span>
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => setScheduledOpen(true)}
+                data-testid="view-scheduled"
+                className="inline-flex h-[38px] items-center gap-1.5 rounded-full bg-[#fff6ec] px-4 font-display font-semibold text-brand-600 ring-1 ring-inset ring-[#ffd6b3] transition-colors hover:bg-[#ffecd9]"
+              >
+                {/* On the span: Mantine resets type on <button> itself. */}
+                <span className="text-[13px]">View Scheduled Orders</span>
+                {scheduledCount > 0 && (
+                  <span className="grid h-[20px] min-w-[20px] place-items-center rounded-full bg-brand-500 px-1.5 font-display text-[11px] font-bold text-white">
+                    {scheduledCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                data-testid="view-fulfilled"
+                className="inline-flex h-[38px] items-center rounded-full bg-[#fff6ec] px-4 font-display font-semibold text-brand-600 ring-1 ring-inset ring-[#ffd6b3] transition-colors hover:bg-[#ffecd9]"
+              >
+                <span className="text-[13px]">View Fulfilled Orders</span>
+              </button>
+            </div>
           </div>
 
           <div className="mt-4">
@@ -190,7 +218,19 @@ function AdvanceOrders() {
                 <strong className="font-semibold">
                   {dueToday} advance order{dueToday === 1 ? " is" : "s are"} due today.
                 </strong>
-                {canAct && " Start preparing from the Scheduled column; from then on they follow the ordinary pickup steps here."}
+                {canAct && (
+                  <>
+                    {" Start preparing them from To Confirm or "}
+                    <button
+                      type="button"
+                      onClick={() => setScheduledOpen(true)}
+                      className="bg-transparent p-0 font-display text-[12px] font-semibold text-brand-700 underline underline-offset-2"
+                    >
+                      Scheduled Orders
+                    </button>
+                    ; from then on they follow the ordinary pickup steps here.
+                  </>
+                )}
               </span>
             </p>
           )}
@@ -207,7 +247,7 @@ function AdvanceOrders() {
             {!advance.isLoading && (
               <FilterMeta>
                 {searching && `${shown} of `}
-                {onBoard} {onBoard === 1 ? "request" : "requests"}
+                {awaiting} {awaiting === 1 ? "request" : "requests"}
               </FilterMeta>
             )}
           </FilterBar>
@@ -238,6 +278,21 @@ function AdvanceOrders() {
       </main>
 
       <AdvanceHistoryModal opened={historyOpen} onClose={() => setHistoryOpen(false)} />
+
+      <ScheduledOrdersModal
+        opened={scheduledOpen}
+        onClose={() => setScheduledOpen(false)}
+        orders={advance.orders}
+        cardProps={cardProps}
+      />
+
+      <AcceptAdvanceModal
+        order={accepting}
+        opened={Boolean(accepting)}
+        onClose={() => setAccepting(null)}
+        onConfirm={confirmAccept}
+        loading={advance.isAccepting}
+      />
 
       <AdvanceDetailDrawer
         order={selected}
