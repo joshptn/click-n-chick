@@ -109,7 +109,7 @@ function AdvanceSummary({
         </div>
 
         <p className="m-0 mt-2 text-center font-display text-[11px] leading-snug text-[#a39f9b]">
-          Payable only after the store accepts
+          Payable only after the store accepts, by the time it gives you
         </p>
 
         <Button

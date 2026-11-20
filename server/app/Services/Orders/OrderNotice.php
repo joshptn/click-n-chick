@@ -18,6 +18,14 @@ class OrderNotice
 
     public const TYPE_ADVANCE_PAYMENT = 'advance_payment';
 
+    /** The automatic payment reminders, told apart from a Store Agent's by their titles. */
+    public const DUE_SOON_TITLE = 'Payment due soon';
+
+    public const DUE_TODAY_UNPAID_TITLE = 'Payment needed today';
+
+    /** A pay-by time this close is spelled out in minutes. */
+    public const URGENT_MINUTES = 30;
+
     public function __construct(private StoreAvailability $store) {}
 
     /**
@@ -49,7 +57,7 @@ class OrderNotice
             'type' => self::TYPE_ADVANCE_REQUEST,
         ];
     }
-    
+
     /**
      * @return array{title: string, body: string, type: string}
      */
@@ -70,11 +78,12 @@ class OrderNotice
     {
         $at = $this->collection($order)?->format('g:i A') ?? 'today';
 
+        // Only paid orders are announced (advance:notify-due); an unpaid one is
+        // chased with the customer instead (customerDueTodayUnpaid).
         return [
             'title' => 'Advance order due today',
-            'body' => $order->isPaid()
-                ? "Order #{$order->id} is due for collection at {$at} today. Move it into preparing when the kitchen is ready."
-                : "Order #{$order->id} is due at {$at} today but is still unpaid, so it cannot be prepared. Contact the customer or cancel it.",
+            'body' => "Order #{$order->id} is due for collection at {$at} today. "
+                .'Start preparing it from Scheduled Orders when the kitchen is ready.',
             'type' => self::TYPE_ADVANCE_DUE,
         ];
     }
@@ -82,13 +91,41 @@ class OrderNotice
     /** @return array{title: string, body: string, type: string} */
     public function paymentReminder(Order $order): array
     {
-        $due = $order->paymentDueAt()?->setTimezone($this->store->timezone());
-
         return [
             'title' => 'Payment still needed',
-            'body' => "Your advance order for {$this->collectAt($order)} is not paid yet."
-                .($due ? " Please pay by {$due->format('g:i A, j M')}" : ' Please pay soon')
-                .' or the store will release your slot.',
+            'body' => "Your advance order for {$this->collectAt($order)} is not paid yet. "
+                .$this->payBy($order),
+            'type' => self::TYPE_ADVANCE_PAYMENT,
+        ];
+    }
+
+    /**
+     * The collection-day reminder for an order still unpaid (decided
+     * 2026-11-20), sent by advance:notify-due.
+     *
+     * @return array{title: string, body: string, type: string}
+     */
+    public function customerDueTodayUnpaid(Order $order): array
+    {
+        return [
+            'title' => self::DUE_TODAY_UNPAID_TITLE,
+            'body' => 'Your advance order is scheduled for today. Please complete your payment. '
+                .$this->payBy($order),
+            'type' => self::TYPE_ADVANCE_PAYMENT,
+        ];
+    }
+
+    /**
+     * The automatic reminder ahead of the pay-by time (decided 2026-11-20),
+     * sent by advance:remind-payment.
+     *
+     * @return array{title: string, body: string, type: string}
+     */
+    public function paymentDueSoon(Order $order): array
+    {
+        return [
+            'title' => self::DUE_SOON_TITLE,
+            'body' => "Your advance order for {$this->collectAt($order)} is not paid yet. ".$this->payBy($order),
             'type' => self::TYPE_ADVANCE_PAYMENT,
         ];
     }
@@ -156,7 +193,6 @@ class OrderNotice
             OrderStatus::COMPLETED => "Your order #{$order->id} has been completed. Thank you for ordering with us!",
             OrderStatus::DELIVERED => "Your order #{$order->id} has been delivered. Thank you for ordering with us!",
             OrderStatus::CANCELLED => $this->cancellationBody($order, "your order #{$order->id}"),
-            'update' => "Your order #{$order->id} ETC has been updated to {$order->estimated_time_of_completion} minutes.",
             default => "There is an update regarding your order #{$order->id}.",
         };
 
@@ -192,16 +228,53 @@ class OrderNotice
     private function withReason(Order $order, string $opening): string
     {
         $reason = trim((string) $order->cancellation_reason);
+
         return $reason === '' ? $opening.'.' : $opening.': '.rtrim($reason, '.').'.';
     }
 
+    /**
+     * When the customer must pay, and what happens if they do not (decided
+     * 2026-11-20). With a preparation time the reason is given, and a window
+     * of 30 minutes or less says how many minutes are left.
+     */
     private function payBy(Order $order): string
     {
         $due = $order->paymentDueAt()?->setTimezone($this->store->timezone());
 
-        return $due === null
-            ? 'Pay within 24 hours to confirm it.'
-            : "Pay by {$due->format('g:i A, j M')} to confirm it.";
+        if ($due === null) {
+            return 'Pay within 24 hours to confirm it, or the store will cancel it.';
+        }
+
+        $at = $this->moment($due);
+        $minutesLeft = (int) floor(CarbonImmutable::now()->diffInMinutes($due, false));
+
+        if ($minutesLeft <= self::URGENT_MINUTES) {
+            $left = max(0, $minutesLeft);
+
+            return "Please pay within {$left} minute".($left === 1 ? '' : 's').", by {$at}"
+                .($order->paysBeforePreparation() ? ', so the store has time to prepare it' : '')
+                .'. If it is not paid by then, the store will cancel it.';
+        }
+
+        if ($order->paysBeforePreparation()) {
+            return "The store needs {$order->preparation_time} minutes to prepare it, so please pay by {$at}. "
+                .'If it is not paid by then, the store will cancel it.';
+        }
+
+        return "Please pay by {$at} to confirm it. If it is not paid by then, the store will cancel it.";
+    }
+
+    /** "4:30 PM today", "9:00 AM tomorrow", "9:00 AM, 23 Nov". */
+    private function moment(CarbonImmutable $at): string
+    {
+        $today = CarbonImmutable::now($this->store->timezone())->startOfDay();
+        $days = (int) $today->diffInDays($at->startOfDay(), false);
+
+        return match ($days) {
+            0 => $at->format('g:i A').' today',
+            1 => $at->format('g:i A').' tomorrow',
+            default => $at->format('g:i A, j M'),
+        };
     }
 
     private function collection(Order $order): ?CarbonImmutable

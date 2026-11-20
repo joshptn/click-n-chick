@@ -177,7 +177,7 @@ class AdvanceRequestDecisionTest extends TestCase
 
         $order = $this->advanceOrder($customer);
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertOk()
             ->assertJsonPath('order.status', OrderStatus::AWAITING_PAYMENT);
 
@@ -193,9 +193,9 @@ class AdvanceRequestDecisionTest extends TestCase
 
         $order = $this->advanceOrder($customer);
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")->assertOk();
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])->assertOk();
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'ALREADY_ANSWERED');
     }
@@ -261,7 +261,7 @@ class AdvanceRequestDecisionTest extends TestCase
 
         $this->actingAs($manager)->getJson('/api/agent/advance-requests')->assertOk();
 
-        $this->actingAs($manager)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+        $this->actingAs($manager)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertForbidden();
 
         $this->actingAs($manager)->postJson("/api/agent/advance-requests/{$order->id}/reject", [
@@ -274,7 +274,7 @@ class AdvanceRequestDecisionTest extends TestCase
         $customer = $this->user(User::ROLE_CUSTOMER);
         $order = $this->advanceOrder($customer);
 
-        $this->actingAs($customer)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+        $this->actingAs($customer)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertForbidden();
     }
 
@@ -330,7 +330,7 @@ class AdvanceRequestDecisionTest extends TestCase
             'scheduled_for' => CarbonImmutable::now('Asia/Manila')->subDays(2)->setTime(12, 0),
         ]);
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'ADVANCE_EXPIRED')
             ->assertJsonPath('status', OrderStatus::CANCELLED);

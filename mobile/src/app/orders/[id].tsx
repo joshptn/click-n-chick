@@ -76,7 +76,8 @@ export default function CustomerOrder() {
   const awaitingReturn = useRef(false);
 
   const pay = useMutation({
-    mutationFn: () => paymentApi.pay({ orderId: id }),
+    // Only reached through Review Advance Order.
+    mutationFn: () => paymentApi.pay({ orderId: id }, true),
     onSuccess: async (payload) => {
       if (payload.paid || !payload.payment?.url) {
         settle({ order: payload.order });

@@ -11,6 +11,7 @@ import OrderReceipt from "../../components/orders/OrderReceipt";
 import EditOrderModal from "../../components/orders/EditOrderModal";
 import OrderStatusPanel from "../../components/orders/OrderStatusPanel";
 import PaymentPanel from "../../components/orders/PaymentPanel";
+import ReviewAdvanceModal from "../../components/orders/ReviewAdvanceModal";
 import toast from "../../components/app/Toast";
 import { checkPayment, goToPayment, payOrder } from "../../lib/payments";
 import {
@@ -66,6 +67,7 @@ function OrderTracking({ guest = false }) {
   const backLabel = guest ? "Back to the menu" : "Back to my orders";
 
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editError, setEditError] = useState(null);
 
@@ -118,7 +120,7 @@ function OrderTracking({ guest = false }) {
   });
 
   const paying = useMutation({
-    mutationFn: () => payOrder(payTarget),
+    mutationFn: ({ reviewed = false } = {}) => payOrder({ ...payTarget, reviewed }),
     onSuccess: (payload) => {
       if (payload?.payment?.url) {
         goToPayment(payload.payment.url, payTarget);
@@ -126,10 +128,12 @@ function OrderTracking({ guest = false }) {
         return;
       }
 
+      setReviewing(false);
       settle(payload);
       toast.success("Your payment has already gone through.", "Paid");
     },
     onError: (err) => {
+      setReviewing(false);
       toast.error(err?.message ?? "Payment could not be started. Please try again.", "Payment unavailable");
       queryClient.invalidateQueries({ queryKey });
     },
@@ -277,7 +281,7 @@ function OrderTracking({ guest = false }) {
               {awaitingPayment && (
                 <PaymentPanel
                   order={order}
-                  onPay={() => paying.mutate()}
+                  onPay={() => setReviewing(true)}
                   isOpening={paying.isPending || paying.isSuccess}
                   isChecking={paymentCheck.isFetching && !paymentCheck.data}
                 />
@@ -339,6 +343,14 @@ function OrderTracking({ guest = false }) {
           </div>
         )}
       </main>
+
+      <ReviewAdvanceModal
+        order={order}
+        opened={reviewing && Boolean(order)}
+        onClose={() => setReviewing(false)}
+        onContinue={() => paying.mutate({ reviewed: true })}
+        isOpening={paying.isPending || paying.isSuccess}
+      />
 
       <EditOrderModal
         order={order}

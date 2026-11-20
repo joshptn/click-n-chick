@@ -125,14 +125,16 @@ export function collectionTimes(schedule: AdvanceSchedule | null | undefined): s
   return times;
 }
 
-/** The chosen day and time as the ISO instant the API reads (the phone's time zone, as on the web). */
+/**
+ * The chosen day and time in store time, with no offset ("2026-11-21T14:00:00").
+ * The API reads it in the store's time zone, so a phone set to another zone
+ * still books the time it showed (fixed 2026-11-20: a phone on UTC turned
+ * 2:00 PM into 10:00 PM store time, past closing).
+ */
 export function toScheduleIso(date: string | null, time: string | null): string | null {
-  const day = date ? parseDate(date) : null;
-  const match = /^(\d{2}):(\d{2})$/.exec(time ?? "");
-  if (!day || !match) return null;
+  if (!date || !parseDate(date) || !/^\d{2}:\d{2}$/.test(time ?? "")) return null;
 
-  day.setHours(Number(match[1]), Number(match[2]), 0, 0);
-  return day.toISOString();
+  return `${date}T${time}:00`;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

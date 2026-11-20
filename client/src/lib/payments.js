@@ -23,11 +23,15 @@ function holding(token) {
   return { headers: { "X-Order-Token": token } };
 }
 
-/** Open the payment page again (or for the first time, for an advance order). */
-export function payOrder({ orderId, token }) {
+/**
+ * Open the payment page again (or for the first time, for an advance order).
+ * `reviewed`: the customer came through Review Advance Order, which the server
+ * records (decided 2026-11-20).
+ */
+export function payOrder({ orderId, token, reviewed = false }) {
   return token
     ? api.post("/api/guest/order/pay", undefined, holding(token))
-    : api.post(`/api/orders/${orderId}/pay`);
+    : api.post(`/api/orders/${orderId}/pay`, reviewed ? { reviewed: true } : undefined);
 }
 
 /** Where the payment stands. Asks Xendit when it is still open, so a payment shows at once. */

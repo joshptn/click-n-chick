@@ -105,9 +105,31 @@ class AdvanceRequestController extends Controller
         ]);
     }
 
+    /**
+     * Accept a request with the kitchen's preparation time (decided
+     * 2026-11-20). For a collection today or tomorrow the customer must pay by
+     * the collection time less that time, so a request whose pay-by time
+     * would already be over is refused: the agent gives a shorter time or
+     * declines it. Later dates keep the 24-hour rule.
+     */
     public function accept(Request $request, Order $order)
     {
         $this->authorize('decideAdvance', $order);
+
+        $validated = $request->validate([
+            'preparation_time' => [
+                'required',
+                'integer',
+                'min:'.Order::MIN_PREPARATION_MINUTES,
+                'max:'.Order::MAX_PREPARATION_MINUTES,
+            ],
+        ], [
+            'preparation_time.required' => 'Enter how many minutes the kitchen needs to prepare this order.',
+            'preparation_time.min' => 'The preparation time must be at least :min minutes.',
+            'preparation_time.max' => 'The preparation time can be at most :max minutes.',
+        ]);
+
+        $minutes = (int) $validated['preparation_time'];
 
         // A request left unanswered past its collection time can no longer be
         // honoured (BR-16h); it is cancelled now rather than accepted.
@@ -119,9 +141,13 @@ class AdvanceRequestController extends Controller
             return response()->json($this->alreadyAnswered($order), 422);
         }
 
+        if ($refusal = $this->payByPassed($order, $minutes)) {
+            return response()->json($refusal, 422);
+        }
+
         // Under a lock, so the sweep cannot cancel it between the check above
         // and the write below.
-        $answered = DB::transaction(function () use ($order) {
+        $answered = DB::transaction(function () use ($order, $minutes) {
             $locked = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();
 
             if ($locked->status !== OrderStatus::SUBMITTED) {
@@ -129,6 +155,7 @@ class AdvanceRequestController extends Controller
             }
 
             $locked->accepted_at = CarbonImmutable::now();
+            $locked->preparation_time = $minutes;
             $locked->status = OrderStatus::ACCEPTED;
             $locked->save();
 
@@ -249,6 +276,32 @@ class AdvanceRequestController extends Controller
             'message' => 'Reminder sent to the customer.',
             'payment_due_at' => $order->paymentDueAt()?->toIso8601String(),
         ]);
+    }
+
+    /** The refusal when, accepted now with this preparation time, the customer could no longer pay in time. */
+    private function payByPassed(Order $order, int $minutes): ?array
+    {
+        $now = CarbonImmutable::now();
+        $collect = $order->scheduled_for->toImmutable();
+
+        if (! Order::collectsSoonAfter($now, $collect)) {
+            return null;
+        }
+
+        $payBy = $collect->subMinutes($minutes);
+
+        if ($payBy->greaterThan($now)) {
+            return null;
+        }
+
+        return [
+            'message' => 'With '.$minutes.' minutes to prepare, the customer would have had to pay by '
+                .$payBy->setTimezone($this->store->timezone())->format('g:i A')
+                .', which has passed. Enter a shorter preparation time or decline the request.',
+            'error_code' => 'PAY_BY_PASSED',
+            'status' => $order->status,
+            'pay_by' => $payBy->toIso8601String(),
+        ];
     }
 
     private function alreadyAnswered(Order $order): array

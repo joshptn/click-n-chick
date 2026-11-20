@@ -58,9 +58,16 @@ export function fetchAdvanceRequests({ signal } = {}) {
   return api.get("/api/agent/advance-requests", { signal });
 }
 
-export function acceptAdvanceRequest(id) {
-  return api.post(`/api/agent/advance-requests/${id}/accept`);
+/** Accept with the kitchen's preparation time in minutes (decided 2026-11-20). */
+export function acceptAdvanceRequest(id, preparationTime) {
+  return api.post(`/api/agent/advance-requests/${id}/accept`, { preparation_time: preparationTime });
 }
+
+/** The preparation time the accept modal allows, as the API checks it. */
+export const PREPARATION_MINUTES = { min: 5, max: 480 };
+
+/** A pay-by window this short is spelled out to the customer in minutes. */
+export const URGENT_PAY_MINUTES = 30;
 
 export function rejectAdvanceRequest(id, reason) {
   return api.post(`/api/agent/advance-requests/${id}/reject`, { reason });
@@ -78,7 +85,9 @@ export function remindAdvanceRequest(id) {
 export const ADVANCE_COLUMNS = [
   { key: "requests", label: "Requests", tone: "orange", statuses: ["submitted"] },
   { key: "payment", label: "Awaiting Payment", tone: "amber", statuses: ["accepted", "awaiting_payment"] },
-  { key: "scheduled", label: "Scheduled", tone: "slate", statuses: ["confirmed", "scheduled"] },
+  // Decided 2026-11-20: paid orders wait here to be started (today) or
+  // scheduled (a later day); scheduled ones live in View Scheduled Orders.
+  { key: "confirm", label: "To Confirm", tone: "slate", statuses: ["confirmed"] },
   { key: "preparing", label: "Preparing", tone: "blue", statuses: ["preparing"] },
   { key: "ready", label: "Ready", tone: "green", statuses: ["ready_for_pickup"] },
 ];
@@ -102,6 +111,7 @@ export function advanceStage(order) {
     case "awaiting_payment":
       return "payment";
     case "confirmed":
+      return "confirm";
     case "scheduled":
       return "scheduled";
     case "preparing":
@@ -110,6 +120,41 @@ export function advanceStage(order) {
     default:
       return "closed";
   }
+}
+
+/** Scheduled orders, soonest first, split by where their collection day stands. */
+export const SCHEDULED_GROUPS = [
+  { key: "today", label: "Due today", empty: "Nothing scheduled is due today." },
+  { key: "upcoming", label: "Upcoming", empty: "No order is scheduled for the coming days." },
+  { key: "passed", label: "Date passed", empty: "No scheduled order has missed its collection day." },
+];
+
+export function scheduledGroupFor(order) {
+  const days = order?.days_until_collection ?? 0;
+
+  if (days === 0) return "today";
+
+  return days > 0 ? "upcoming" : "passed";
+}
+
+/**
+ * The customer's pay-by time if accepted now with this preparation time, as
+ * the API works it out: collection less preparation time for a collection
+ * today or tomorrow, otherwise 24 hours (never past the collection time).
+ */
+export function payByIfAccepted(order, minutes, now = Date.now()) {
+  if (!order?.scheduled_for) return null;
+
+  const collect = new Date(order.scheduled_for).getTime();
+  const soon = (order.days_until_collection ?? 99) <= 1;
+
+  if (soon) {
+    if (!Number.isFinite(minutes) || minutes <= 0) return { soon, at: null };
+
+    return { soon, at: new Date(collect - minutes * 60000) };
+  }
+
+  return { soon, at: new Date(Math.min(now + 24 * 3600000, collect)) };
 }
 
 /** Every request on the page once. `due_today` repeats part of `scheduled`. */
@@ -168,7 +213,7 @@ export function collectionCountdown(order) {
   return days === -1 ? "yesterday" : `${-days} days ago`;
 }
 
-/** "5 h left", "40 min left", "overdue" - BR-16f's 24-hour payment window. */
+/** "5 h left", "40 min left", "overdue" - the time left before the pay-by time. */
 export function paymentWindowLabel(order, now = Date.now()) {
   if (!order?.payment_due_at) return null;
   if (order.payment_overdue) return "Payment overdue";

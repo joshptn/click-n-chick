@@ -69,10 +69,9 @@ class StoreManagerReadOnlyTest extends TestCase
     {
         return [
             'order status' => ['putJson', '/api/order/%d/status', ['status' => OrderStatus::CONFIRMED], false],
-            'order estimate' => ['putJson', '/api/order/%d/etc', ['etc' => 20], false],
             'advance an order' => ['postJson', '/api/agent/orders/%d/advance', [], false],
             'cancel an order' => ['postJson', '/api/agent/orders/%d/cancel', ['reason' => 'Out of stock.'], false],
-            'accept a request' => ['postJson', '/api/agent/advance-requests/%d/accept', [], true],
+            'accept a request' => ['postJson', '/api/agent/advance-requests/%d/accept', ['preparation_time' => 30], true],
             'decline a request' => ['postJson', '/api/agent/advance-requests/%d/reject', ['reason' => 'Fully booked.'], true],
         ];
     }

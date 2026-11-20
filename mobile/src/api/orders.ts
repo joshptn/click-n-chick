@@ -25,7 +25,7 @@ export type Order = {
   scheduled_for: string | null;
   /** Open for payment now (an accepted advance order, BR-16f). */
   awaiting_payment?: boolean;
-  /** An advance order's 24-hour payment deadline. */
+  /** An advance order's pay-by time: 24 hours, or collection less preparation time for today or tomorrow. */
   payment_due_at?: string | null;
   payment_status?: string | null;
   queue: { number: number | null; label: string | null; in_line: boolean; position: number | null; ahead: number | null };
@@ -36,7 +36,6 @@ export type Order = {
   can_confirm_receipt: boolean;
   placed_at: string | null;
   closed_at: string | null;
-  estimated_time_of_completion: number | null;
   pickup?: { at: string | null };
   delivery?: { full_address: string | null; location: string | null; note: string | null };
   contact: { name: string | null; phone: string | null };

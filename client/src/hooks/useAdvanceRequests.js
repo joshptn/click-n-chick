@@ -118,14 +118,14 @@ export function useAdvanceRequests() {
   );
 
   const accept = useMutation({
-    mutationFn: (order) => acceptAdvanceRequest(order.id),
-    onMutate: (order) => mark(order.id, true),
+    mutationFn: ({ order, preparationTime }) => acceptAdvanceRequest(order.id, preparationTime),
+    onMutate: ({ order }) => mark(order.id, true),
     onSuccess: (response) => {
       if (response?.order) place(response.order);
       toast.success(response?.message ?? "Request accepted.", "Request accepted");
     },
     onError: failed("Could not accept the request"),
-    onSettled: (_response, _error, order) => {
+    onSettled: (_response, _error, { order }) => {
       mark(order.id, false);
       settle();
     },
@@ -174,7 +174,7 @@ export function useAdvanceRequests() {
 
       const previous = queryClient.getQueryData(ADVANCE_REQUESTS_KEY);
 
-      place({ ...advancedLocally(order), can_start_preparing: false });
+      place({ ...advancedLocally(order), can_start_preparing: false, can_schedule: false });
 
       return { previous };
     },
@@ -227,7 +227,8 @@ export function useAdvanceRequests() {
     error: query.error,
     refetch: query.refetch,
     isBusy: (id) => busy.has(id),
-    accept: (order) => accept.mutate(order),
+    accept: (order, preparationTime) => accept.mutateAsync({ order, preparationTime }),
+    isAccepting: accept.isPending,
     reject: (order, reason) => reject.mutateAsync({ order, reason }),
     isRejecting: reject.isPending,
     remind: (order) => remind.mutate(order),

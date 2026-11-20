@@ -213,16 +213,16 @@ class AdvanceNotificationTest extends TestCase
         $order = $this->submitRequest($customer);
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
-            ->postJson("/api/agent/advance-requests/{$order->id}/accept")
+            ->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertOk();
 
         $body = $this->bodyFor($customer->id, OrderNotice::TYPE_ADVANCE);
 
         $this->assertStringContainsString('accepted your advance order', $body);
-        // BR-16f is 24 hours from acceptance, so the deadline is a real time the
-        // customer can act on rather than "soon".
-        $this->assertStringContainsString('Pay by', $body);
-        $this->assertStringContainsString('6 Oct', $body);
+        // Collected tomorrow with 30 minutes to prepare (decided 2026-11-20): a
+        // real time the customer can act on, and why.
+        $this->assertStringContainsString('needs 30 minutes to prepare it, so please pay by 7:30 PM tomorrow', $body);
+        $this->assertStringContainsString('the store will cancel it', $body);
     }
 
     public function test_only_one_notification_is_sent_for_the_accept_transition(): void
@@ -235,7 +235,7 @@ class AdvanceNotificationTest extends TestCase
         Notification::where('user_id', $customer->id)->delete();
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
-            ->postJson("/api/agent/advance-requests/{$order->id}/accept")
+            ->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertOk();
 
         $this->assertSame(1, Notification::where('user_id', $customer->id)->count());
@@ -567,19 +567,21 @@ class AdvanceNotificationTest extends TestCase
         ]);
     }
 
-    public function test_an_unpaid_order_due_today_is_flagged_as_unpreparable(): void
+    public function test_a_customer_still_unpaid_on_the_collection_day_is_reminded_once(): void
     {
+        // Decided 2026-11-20: the customer, not the staff, is chased.
         $agent = $this->user(User::ROLE_ADMIN);
-        $this->advanceOrderAt(OrderStatus::CONFIRMED, $this->user(), dueIn: '4 hours');
+        $customer = $this->user();
+        $this->advanceOrderAt(OrderStatus::AWAITING_PAYMENT, $customer, dueIn: '4 hours');
 
         $this->artisan('advance:notify-due')->assertSuccessful();
+        $this->artisan('advance:notify-due')->assertSuccessful();
 
-        // BR-16g: the agent must not discover at the counter that they cannot
-        // legally start this one.
-        $this->assertStringContainsString(
-            'still unpaid',
-            $this->bodyFor($agent->id, OrderNotice::TYPE_ADVANCE_DUE)
-        );
+        $body = $this->bodyFor($customer->id, OrderNotice::TYPE_ADVANCE_PAYMENT);
+        $this->assertStringContainsString('Your advance order is scheduled for today. Please complete your payment.', $body);
+        $this->assertStringContainsString('the store will cancel it', $body);
+        $this->assertSame(1, Notification::where('user_id', $customer->id)->count());
+        $this->assertNull($this->bodyFor($agent->id, OrderNotice::TYPE_ADVANCE_DUE));
     }
 
     public function test_the_dry_run_sends_nothing(): void
@@ -630,7 +632,7 @@ class AdvanceNotificationTest extends TestCase
         $order = $this->submitRequest($customer);
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
-            ->postJson("/api/agent/advance-requests/{$order->id}/accept")
+            ->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertOk();
 
         $response = $this->actingAs($customer)->getJson('/api/notifications')->assertOk();
@@ -646,7 +648,7 @@ class AdvanceNotificationTest extends TestCase
         $order = $this->submitRequest($customer);
 
         $this->actingAs($this->user(User::ROLE_ADMIN))
-            ->postJson("/api/agent/advance-requests/{$order->id}/accept")
+            ->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertOk();
 
         $this->actingAs($customer)

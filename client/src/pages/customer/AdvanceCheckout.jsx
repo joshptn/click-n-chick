@@ -21,7 +21,10 @@ import { useCartState } from "../../context/useCart";
 const STEPS = [
   { id: "schedule", label: "Schedule", shortLabel: "When" },
   { id: "discount", label: "Discount", shortLabel: "Discount" },
+  { id: "review", label: "Review and Send", shortLabel: "Review" },
 ];
+
+const STEP_ORDER = STEPS.map((item) => item.id);
 
 const QUOTE_DEBOUNCE_MS = 400;
 
@@ -131,7 +134,24 @@ function AdvanceCheckout() {
     }
 
     setCompleted((prev) => (prev.includes("discount") ? prev : [...prev, "discount"]));
+    setStep("review");
   };
+
+  // Decided 2026-11-20: a finished step closes (as step 1 always did). A
+  // change in a step opens it again, with every step after it, and the
+  // request has to be confirmed again before it can be sent. Step 3, Review
+  // and Send, is the Your Request card itself: ticking "I understand..."
+  // there completes it on the stepper.
+  const reopenFrom = (id) => {
+    const index = STEP_ORDER.indexOf(id);
+
+    setCompleted((prev) => prev.filter((done) => STEP_ORDER.indexOf(done) < index));
+    setAcknowledged(false);
+    setStep(id);
+  };
+
+  const reviewed = acknowledged && completed.includes("schedule") && completed.includes("discount");
+  const stepsDone = reviewed ? [...completed, "review"] : completed;
 
   const scheduleSummary = useMemo(() => {
     const when = formatCollectionDate(quote?.schedule?.requested_at);
@@ -166,21 +186,24 @@ function AdvanceCheckout() {
 
       <main className="mx-auto w-full max-w-[1180px] px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-5">
-          <CheckoutStepper steps={STEPS} current={step} completed={completed} />
+          <CheckoutStepper steps={STEPS} current={step} completed={stepsDone} />
         </div>
 
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-w-0 flex-col gap-3.5">
             <StepCard
               index={1}
-              title="When will you collect?"
+              title="Schedule Date & Time?"
               state={stateFor("schedule")}
               summary={scheduleSummary}
               onReopen={() => setStep("schedule")}
             >
               <ScheduleStep
                 value={schedule}
-                onChange={(patch) => setSchedule((prev) => ({ ...prev, ...patch }))}
+                onChange={(patch) => {
+                  setSchedule((prev) => ({ ...prev, ...patch }));
+                  reopenFrom("schedule");
+                }}
                 quote={quote}
                 isQuoting={quoteFetching && !quoteLoading}
                 showErrors={attemptedContinue}
@@ -199,7 +222,10 @@ function AdvanceCheckout() {
               <DiscountStep
                 discount={quote?.discount ?? null}
                 applied={applyDiscount}
-                onChange={setApplyDiscount}
+                onChange={(value) => {
+                  setApplyDiscount(value);
+                  reopenFrom("discount");
+                }}
                 isQuoting={quoteFetching && !quoteLoading}
                 continueLabel="Review Request"
                 onContinue={handleDiscountContinue}
@@ -212,7 +238,7 @@ function AdvanceCheckout() {
             <AdvanceSummary
               quote={quote}
               isLoading={quoteLoading}
-              canSubmit={Boolean(quote?.can_submit)}
+              canSubmit={Boolean(quote?.can_submit) && completed.includes("schedule") && completed.includes("discount")}
               isSubmitting={submit.isPending}
               acknowledged={acknowledged}
               onAcknowledge={setAcknowledged}

@@ -121,7 +121,7 @@ function AgentOrderCard({ order, busy, canAct, onAdvance, onReject, onOpen }) {
           {order.details_confirmed_at && !isFinished && !handover && (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#ecf9f0] px-2 py-0.5 font-display text-[9.5px] font-semibold text-[#2f9e44]">
               <IconCircleCheck size={11} stroke={2.4} />
-              Details confirmed
+              Reviewed before paying
             </span>
           )}
           {longWait && (

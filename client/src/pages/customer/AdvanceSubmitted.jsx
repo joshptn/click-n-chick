@@ -22,7 +22,7 @@ const TIMELINE = [
   {
     icon: IconCreditCard,
     title: "Pay to confirm",
-    body: "Once it is accepted you have 24 hours to pay. Nothing is charged before then.",
+    body: "Once it is accepted you are told when to pay by: for a collection tomorrow, before the kitchen has to start on it; otherwise within 24 hours. Nothing is charged before then.",
     done: false,
   },
 ];

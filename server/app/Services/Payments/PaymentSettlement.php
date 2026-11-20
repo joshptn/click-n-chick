@@ -37,6 +37,9 @@ class PaymentSettlement
 
     private const DUPLICATE = 'duplicate';
 
+    /** How late after the pay-by time a payment is still taken, for the webhook's own delay. */
+    public const LATE_PAYMENT_GRACE_MINUTES = 2;
+
     public function __construct(
         private PaymentGateway $gateway,
         private StockReservation $stock,
@@ -148,9 +151,22 @@ class PaymentSettlement
             $canConfirm = in_array($status, [OrderStatus::AWAITING_PAYMENT, OrderStatus::ACCEPTED], true)
                 || ($cancelledBySystem && $order->scheduled_for !== null && $order->scheduled_for->isFuture());
 
-            return $canConfirm
-                ? $this->reopen($order, OrderStatus::CONFIRMED, self::CONFIRMED)
-                : $this->owe($order, 'Your payment arrived after this order had closed.');
+            if (! $canConfirm) {
+                return $this->owe($order, 'Your payment arrived after this order had closed.');
+            }
+
+            // Decided 2026-11-20: the pay-by time is the latest a payment is
+            // accepted, even if the sweep has not cancelled the order yet. A
+            // checkout page can outlive it (Xendit keeps one open at least ten
+            // minutes), so a payment past it is owed back rather than booking
+            // an order the kitchen can no longer make.
+            $due = $order->paymentDueAt();
+
+            if ($due !== null && CarbonImmutable::now()->greaterThan($due->addMinutes(self::LATE_PAYMENT_GRACE_MINUTES))) {
+                return $this->owe($order, 'Your payment arrived after the pay-by time, so the order could not go ahead.');
+            }
+
+            return $this->reopen($order, OrderStatus::CONFIRMED, self::CONFIRMED);
         }
 
         if ($status !== OrderStatus::AWAITING_PAYMENT && ! $cancelledBySystem) {

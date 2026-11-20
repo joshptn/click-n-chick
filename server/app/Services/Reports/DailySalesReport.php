@@ -296,7 +296,12 @@ class DailySalesReport
         $row = (clone $cancelled)
             ->toBase()
             ->selectRaw("SUM(CASE WHEN {$byStore} THEN 1 ELSE 0 END) AS by_store")
-            ->selectRaw('SUM(CASE WHEN orders.cancelled_by IS NULL AND orders.cancellation_reason IN (?, ?, ?) THEN 1 ELSE 0 END) AS expired_unpaid', AdvanceExpiry::REASONS)
+            ->selectRaw(
+                'SUM(CASE WHEN orders.cancelled_by IS NULL AND orders.cancellation_reason IN ('
+                    .implode(', ', array_fill(0, count(AdvanceExpiry::REASONS), '?'))
+                    .') THEN 1 ELSE 0 END) AS expired_unpaid',
+                AdvanceExpiry::REASONS,
+            )
             ->first();
 
         $counted = $this->countAndValue($cancelled, 'value');

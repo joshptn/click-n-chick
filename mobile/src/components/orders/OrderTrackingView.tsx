@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +29,7 @@ import {
   IconUser,
   IconUsers,
 } from "../icons";
+import { Sheet } from "../account/Sheet";
 import { ContactEditor } from "./ContactEditor";
 import { GREEN, OrderProgress } from "./OrderProgress";
 
@@ -50,8 +51,12 @@ const HERO: Record<string, Hero> = {
 const ADVANCE_HERO: Record<string, Hero> = {
   // "Request sent" itself is the request-sent screen's (decided 2026-11-19).
   submitted: { icon: IconSend, title: "Waiting for the store", body: "A Store Agent is checking whether the kitchen can make this on your date." },
-  accepted: { icon: IconCircleCheck, title: "Your request was accepted!", body: "Pay within 24 hours to lock in your collection date." },
-  awaiting_payment: { icon: IconCreditCard, title: "Ready for payment", body: "Pay within 24 hours of the store accepting to lock in your collection date." },
+  accepted: { icon: IconCircleCheck, title: "Your request was accepted!", body: "Pay by the time shown to lock in your collection date. If it is not paid by then, the store will cancel it." },
+  awaiting_payment: {
+    icon: IconCreditCard,
+    title: "Ready for payment",
+    body: "Pay by the time shown to lock in your collection date. If it is not paid by then, the store will cancel it.",
+  },
   confirmed: { icon: IconCircleCheck, title: "Payment received!", body: "Your date is booked. Nothing happens in the kitchen until then." },
   scheduled: { icon: IconCalendarEvent, title: "You're booked in", body: "We start preparing on your collection date. There is nothing to do until then." },
   rejected: { icon: IconAlertTriangle, title: "Request declined", body: "The store could not take this one on. Nothing was charged." },
@@ -89,7 +94,7 @@ type Props = {
   cancelling: boolean;
   confirmingReceipt: boolean;
   confirmingDetails?: boolean;
-  /** Pay for an accepted advance order (customers only). */
+  /** Pay for an accepted advance order (customers only), after Review Advance Order. */
   onPay?: () => void;
   paying?: boolean;
   /** Change the contact name and number (BR-21b); rejects with the API's message. */
@@ -119,6 +124,9 @@ export function OrderTrackingView({
   paying = false,
   onUpdateContact,
 }: Props) {
+  // Review Advance Order (decided 2026-11-20): on every Pay now, before Xendit.
+  const [reviewing, setReviewing] = useState(false);
+
   const back = () => (router.canGoBack() ? router.back() : router.replace(guest ? "/home" : "/notifications"));
 
   const confirmCancel = () => {
@@ -172,7 +180,36 @@ export function OrderTrackingView({
             <OrderProgress order={order} />
             <StatusCard order={order} />
 
-            {order.is_advance && order.awaiting_payment && onPay && <PayCard order={order} paying={paying} onPay={onPay} />}
+            {order.is_advance && order.awaiting_payment && onPay && (
+              <>
+                <PayCard order={order} paying={paying} onPay={() => setReviewing(true)} />
+                <Sheet visible={reviewing} title="Review Advance Order" onClose={() => setReviewing(false)} testID="review-advance-order">
+                  <View style={styles.reviewBody}>
+                    <OrderItems order={order} />
+                    <View style={styles.reviewNotice}>
+                      <IconAlertTriangle size={16} color={colors.brand800} strokeWidth={2.2} />
+                      <AppText family="display" weight="semibold" size={12.5} color={colors.brand800} style={styles.flex}>
+                        No cancellation and refund after the store confirms your payment.
+                      </AppText>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setReviewing(false);
+                        onPay();
+                      }}
+                      style={({ pressed }) => [styles.action, { backgroundColor: colors.orange }, pressed && styles.pressed]}
+                      testID="review-continue"
+                    >
+                      <IconLock size={16} color={colors.white} strokeWidth={2.2} />
+                      <AppText family="display" weight="semibold" size={13.5} color={colors.white}>
+                        Continue to Payment
+                      </AppText>
+                    </Pressable>
+                  </View>
+                </Sheet>
+              </>
+            )}
 
             {order.can_confirm_receipt && (
               <View style={[styles.card, styles.receiptCard]}>
@@ -208,7 +245,8 @@ export function OrderTrackingView({
               </View>
             )}
 
-            {order.details_confirmed_at && !order.is_terminal && (
+            {/* Since 2026-11-20 only Review Advance Order writes this, before paying. */}
+            {order.details_confirmed_at && !order.is_terminal && !order.is_advance && (
               <View style={styles.noteRow}>
                 <IconCircleCheck size={13} color={GREEN} strokeWidth={2.2} />
                 <AppText family="display" size={12} color={GREEN}>
@@ -361,6 +399,9 @@ function PayCard({ order, paying, onPay }: { order: Order; paying: boolean; onPa
           </AppText>
         </View>
       )}
+      <AppText family="display" size={12} color={colors.ink500}>
+        If it is not paid by then, the store will cancel it.
+      </AppText>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ busy: paying, disabled: paying }}
@@ -436,14 +477,6 @@ function OrderItems({ order }: { order: Order }) {
         </View>
       ) : null}
 
-      {order.estimated_time_of_completion && !order.is_terminal ? (
-        <View style={styles.whereRow}>
-          <IconClock size={14} color={colors.ink300} strokeWidth={2} />
-          <AppText family="display" size={12} color={colors.ink500}>
-            Estimated {delivery ? "arrival" : "ready"} in about {order.estimated_time_of_completion} minutes
-          </AppText>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -657,6 +690,17 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   pressed: { opacity: 0.7 },
+  reviewBody: { gap: 12 },
+  reviewNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#fff4e8",
+    borderWidth: 1,
+    borderColor: "#ffd8a8",
+  },
 });
 
 export default OrderTrackingView;

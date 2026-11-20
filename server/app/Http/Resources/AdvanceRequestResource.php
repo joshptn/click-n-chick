@@ -41,11 +41,18 @@ class AdvanceRequestResource extends JsonResource
             'is_due_today' => $collectAt?->isSameDay(now($timezone)) ?? false,
             // The collection time itself, the moment an unanswered request expires (BR-16h).
             'collection_passed' => $collectAt !== null && $collectAt->lessThanOrEqualTo(now()),
-            // UC-ADV-012 and BR-16g: on or after the collection date, and paid.
-            'can_start_preparing' => $this->status === OrderStatus::SCHEDULED
+            // Decided 2026-11-20: a paid order is started on its collection day,
+            // straight from To Confirm or from the Scheduled Orders list; one for
+            // a later day is scheduled first. Once its day has passed it can only
+            // be cancelled.
+            'can_start_preparing' => in_array($this->status, [OrderStatus::CONFIRMED, OrderStatus::SCHEDULED], true)
+                && $this->isPaid()
+                && $daysUntil === 0,
+            'can_schedule' => $this->status === OrderStatus::CONFIRMED
                 && $this->isPaid()
                 && $daysUntil !== null
-                && $daysUntil <= 0,
+                && $daysUntil > 0,
+            'collection_day_passed' => $daysUntil !== null && $daysUntil < 0,
 
             'customer' => [
                 'name' => trim(($this->user->first_name ?? '').' '.($this->user->last_name ?? '')),
@@ -70,6 +77,9 @@ class AdvanceRequestResource extends JsonResource
             'payment_status' => $this->payment_status,
             'is_paid' => $this->isPaid(),
             'accepted_at' => $this->accepted_at?->setTimezone($timezone)->toIso8601String(),
+            'preparation_time' => $this->preparation_time,
+            // Collection less preparation time, rather than the 24-hour rule.
+            'pays_before_preparation' => $this->paysBeforePreparation(),
             'payment_due_at' => $this->paymentDueAt()?->setTimezone($timezone)->toIso8601String(),
             'payment_overdue' => $this->isPaymentOverdue(),
             'last_reminded_at' => $remindedAt?->toIso8601String(),

@@ -178,7 +178,7 @@ class DailySalesReportTest extends TestCase
         $this->order(['user_id' => $customer->id, 'cancelled_by' => $customer->id, 'cancellation_reason' => AdvanceExpiry::UNANSWERED], OrderStatus::CANCELLED);
 
         $this->report()
-            ->assertJsonPath('not_sold.cancelled.expired_unpaid', 3)
+            ->assertJsonPath('not_sold.cancelled.expired_unpaid', count(AdvanceExpiry::REASONS))
             ->assertJsonPath('not_sold.cancelled.by_customer', 1);
     }
 

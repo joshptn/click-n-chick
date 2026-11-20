@@ -5,7 +5,6 @@ import {
   IconCalendarEvent,
   IconChefHat,
   IconCircleCheck,
-  IconClock,
   IconCreditCard,
   IconInfoCircle,
   IconPencil,
@@ -74,12 +73,12 @@ const ADVANCE_HERO = {
   accepted: {
     icon: IconCircleCheck,
     title: "Your request was accepted!",
-    body: "Pay within 24 hours to lock in your collection date.",
+    body: "Pay by the time shown to lock in your collection date. If it is not paid by then, the store will cancel it.",
   },
   awaiting_payment: {
     icon: IconCreditCard,
     title: "Ready for payment",
-    body: "Pay within 24 hours of the store accepting to lock in your collection date.",
+    body: "Pay by the time shown to lock in your collection date. If it is not paid by then, the store will cancel it.",
   },
   confirmed: {
     icon: IconCircleCheck,
@@ -215,7 +214,8 @@ function OrderStatusPanel({
         </section>
       )}
 
-      {order.details_confirmed_at && !order.is_terminal && (
+      {/* Since 2026-11-20 only Review Advance Order writes this, before paying. */}
+      {order.details_confirmed_at && !order.is_terminal && !order.is_advance && (
         <p className="m-0 flex items-center justify-center gap-1.5 font-display text-[12px] text-[#2f9e44]">
           <IconCircleCheck size={13} stroke={2.2} aria-hidden="true" />
           You confirmed these details. The kitchen can start any time.
@@ -267,13 +267,6 @@ function OrderStatusPanel({
         </p>
       )}
 
-      {order.estimated_time_of_completion && !order.is_terminal && (
-        <p className="m-0 flex items-center justify-center gap-1.5 font-display text-[12px] text-[#a39f9b]">
-          <IconClock size={13} stroke={2} aria-hidden="true" />
-          Estimated {order.order_type === "delivery" ? "arrival" : "ready"} in about{" "}
-          {order.estimated_time_of_completion} minutes
-        </p>
-      )}
     </div>
   );
 }

@@ -43,7 +43,6 @@ class OrderQueueResource extends JsonResource
             'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
 
             'order_type' => $this->order_type,
-            'estimated_time_of_completion' => $this->estimated_time_of_completion,
 
             // Whoever is actually collecting or receiving: the order's own
             // contact (BR-21b), which the customer may have changed since.

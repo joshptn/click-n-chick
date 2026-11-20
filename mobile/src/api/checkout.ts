@@ -136,11 +136,15 @@ export const checkoutApi = {
 };
 
 export const paymentApi = {
-  /** Open the payment page again (the same one while it is still open). */
-  pay: (target: PaymentTarget) =>
+  /**
+   * Open the payment page again (the same one while it is still open).
+   * `reviewed`: the customer came through Review Advance Order, which the
+   * API records (decided 2026-11-20).
+   */
+  pay: (target: PaymentTarget, reviewed = false) =>
     target.token
       ? api.post<PaymentStart>("/api/guest/order/pay", undefined, holding(target.token))
-      : api.post<PaymentStart>(`/api/orders/${target.orderId}/pay`),
+      : api.post<PaymentStart>(`/api/orders/${target.orderId}/pay`, reviewed ? { reviewed: true } : undefined),
 
   /** Where the payment stands; the API asks Xendit while it is still open. */
   status: (target: PaymentTarget, signal?: AbortSignal) =>

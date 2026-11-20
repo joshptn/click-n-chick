@@ -14,7 +14,6 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 
-
 class OrderSeeder extends Seeder
 {
     private const TAG = 'DEMO';
@@ -93,7 +92,6 @@ class OrderSeeder extends Seeder
             $filler->forceFill(['status' => $status, 'user_id' => $this->otherCustomer($customer)?->id])->save();
         }
 
-
         $placed = $this->make($customer, [
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -123,7 +121,6 @@ class OrderSeeder extends Seeder
             'longitude' => '120.7710',
             'delivery_fee' => 65,
             'delivery_distance_km' => 4.1,
-            'details_confirmed_at' => $now->subMinutes(20),
         ], $foods->slice(2, 2), collect(), 'preparing');
         $preparing->enterQueue($now->subMinutes(28)->utc());
 
@@ -144,11 +141,9 @@ class OrderSeeder extends Seeder
             'longitude' => '120.7802',
             'delivery_fee' => 75,
             'delivery_distance_km' => 6.8,
-            'estimated_time_of_completion' => 20,
         ], $foods->slice(3, 2), collect(), 'on-the-way');
         $onTheWay->enterQueue($now->subMinutes(55)->utc());
         $onTheWay->forceFill(['status' => OrderStatus::ON_THE_WAY])->save();
-
 
         $this->make($customer, [
             'order_type' => 'delivery',
