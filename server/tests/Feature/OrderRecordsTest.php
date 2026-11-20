@@ -196,10 +196,10 @@ class OrderRecordsTest extends TestCase
             ->assertJsonPath('data.0.cancelled_by_store', true);
     }
 
-    public function test_search_finds_a_ticket_number_an_id_a_name_a_guest_and_a_dish(): void
+    public function test_search_finds_an_id_a_name_a_guest_and_a_dish_but_not_a_daily_number(): void
     {
         $julia = $this->order();
-        $julia->enterQueue();
+        $julia->assignOrderNumber();
         $julia = $this->close($julia, OrderStatus::COMPLETED);
 
         $guest = $this->close($this->order([
@@ -214,7 +214,9 @@ class OrderRecordsTest extends TestCase
             $this->actingAs($staff, 'sanctum')->getJson('/api/agent/records?search='.urlencode($term))->assertOk()->json('data')
         )->pluck('id')->all();
 
-        $this->assertContains($julia->id, $find($julia->queueLabel()));
+        // Decided 2026-11-20: records go by the id; daily numbers repeat.
+        $this->assertSame([$julia->id], $find('#'.$julia->id));
+        $this->assertSame('#'.$julia->id, $this->actingAs($staff, 'sanctum')->getJson('/api/agent/records?search='.urlencode('#'.$julia->id))->json('data.0.reference'));
         $this->assertSame([$guest->id], $find('#'.$guest->id));
         $this->assertSame([$julia->id], $find('julia ven'));
         $this->assertSame([$guest->id], $find('lazaraga'));

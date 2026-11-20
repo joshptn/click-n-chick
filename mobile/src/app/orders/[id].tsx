@@ -10,8 +10,6 @@ import { OrderTrackingView } from "../../components/orders/OrderTrackingView";
 import { useOrderChannel } from "../../hooks/useRealtime";
 import { toast } from "../../lib/toast";
 
-/** While an order waits in line its place moves with others' orders, which no broadcast announces. */
-const IN_LINE_POLL_MS = 30 * 1000;
 
 function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -28,7 +26,6 @@ export default function CustomerOrder() {
     queryFn: ({ signal }) => ordersApi.show(id, signal),
     retry: false,
     refetchOnWindowFocus: true,
-    refetchInterval: (current) => (current.state.data?.order.queue?.in_line ? IN_LINE_POLL_MS : false),
   });
 
   const order = query.data?.order ?? null;

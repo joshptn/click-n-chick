@@ -151,10 +151,12 @@ class AdvanceNotificationTest extends TestCase
             ]);
         }
 
-        // The wording has to be actionable: which order, for when, how big.
+        // The wording has to be actionable: whose request, for when, how big.
+        // Before acceptance a request has no number, only its requestor.
         $body = $this->bodyFor($agentOne->id, OrderNotice::TYPE_ADVANCE_REQUEST);
 
-        $this->assertStringContainsString("Request #{$order->id}", $body);
+        $this->assertStringContainsString("{$customer->first_name} {$customer->last_name}'s request for", $body);
+        $this->assertStringNotContainsString("#{$order->id}", $body);
         $this->assertStringContainsString('2 item(s)', $body);
         $this->assertStringContainsString('accepting or rejecting', $body);
     }
@@ -221,7 +223,7 @@ class AdvanceNotificationTest extends TestCase
         $this->assertStringContainsString('accepted your advance order', $body);
         // Collected tomorrow with 30 minutes to prepare (decided 2026-11-20): a
         // real time the customer can act on, and why.
-        $this->assertStringContainsString('needs 30 minutes to prepare it, so please pay by 7:30 PM tomorrow', $body);
+        $this->assertStringContainsString('needs 30 minutes to prepare it, so please pay by 11:30 AM tomorrow', $body);
         $this->assertStringContainsString('the store will cancel it', $body);
     }
 
@@ -362,7 +364,7 @@ class AdvanceNotificationTest extends TestCase
 
         $body = $this->bodyFor($agent->id, OrderNotice::TYPE_ADVANCE);
 
-        $this->assertStringContainsString("The customer cancelled order #{$order->id}", $body);
+        $this->assertStringContainsString("{$customer->first_name} {$customer->last_name}'s request was cancelled by the customer", $body);
         $this->assertStringContainsString('No refund is owed', $body);
     }
 

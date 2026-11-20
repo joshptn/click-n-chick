@@ -19,7 +19,7 @@ use Tests\TestCase;
 /**
  * The Store Agent's fulfilment surface.
  *
- * UC-QUE-005 (process the next order), UC-QUE-006 (monitor the active queue),
+ * UC-QUE-006 (monitor the active queue),
  * UC-OPS-001 (incoming orders), UC-OPS-003 (reject), UC-OPS-004/005 (advance),
  * and UC-OPS-012 (at-a-glance status).
  */
@@ -44,7 +44,7 @@ class AgentQueueTest extends TestCase
         ]);
     }
 
-    /** An order already in the queue, which is the only kind the agent ever sees. */
+    /** A paid immediate order with its number, which is the only kind the board shows. */
     private function queued(string $type = 'pickup', string $status = OrderStatus::PLACED, ?CarbonImmutable $at = null): Order
     {
         $order = Order::create([
@@ -55,7 +55,11 @@ class AgentQueueTest extends TestCase
             'total_amount' => 120,
         ]);
 
-        $order->enterQueue($at);
+        if ($at !== null) {
+            $order->forceFill(['created_at' => $at->utc()])->save();
+        }
+
+        $order->assignOrderNumber();
 
         if ($status !== OrderStatus::PLACED) {
             $order->forceFill(['status' => $status])->save();
@@ -68,7 +72,7 @@ class AgentQueueTest extends TestCase
     // Reading the queue (UC-QUE-006, UC-OPS-001)
     // -----------------------------------------------------------------
 
-    public function test_the_queue_is_returned_in_entry_order_with_positions(): void
+    public function test_the_board_is_returned_in_number_order(): void
     {
         $first = $this->queued();
         $second = $this->queued('delivery', OrderStatus::CONFIRMED);
@@ -79,11 +83,14 @@ class AgentQueueTest extends TestCase
             ->assertOk();
 
         $response->assertJsonPath('line.0.id', $first->id)
-            ->assertJsonPath('line.0.queue_position', 1)
+            ->assertJsonPath('line.0.order_number', '001')
             ->assertJsonPath('line.1.id', $second->id)
-            ->assertJsonPath('line.1.queue_position', 2)
+            ->assertJsonPath('line.1.order_number', '002')
             ->assertJsonPath('line.2.id', $third->id)
-            ->assertJsonPath('line.2.queue_position', 3);
+            ->assertJsonPath('line.2.order_number', '003')
+            ->assertJsonMissingPath('line.0.queue_position')
+            ->assertJsonMissingPath('line.0.waiting_minutes')
+            ->assertJsonMissingPath('summary.longest_wait_minutes');
     }
 
     public function test_an_order_the_kitchen_has_finished_with_moves_out_of_the_line(): void
@@ -97,8 +104,7 @@ class AgentQueueTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'line')
             ->assertJsonCount(2, 'handover')
-            ->assertJsonPath('line.0.id', $cooking->id)
-            ->assertJsonPath('line.0.queue_position', 1);
+            ->assertJsonPath('line.0.id', $cooking->id);
     }
 
     public function test_finished_orders_are_out_of_both_lists(): void
@@ -135,16 +141,31 @@ class AgentQueueTest extends TestCase
             ->assertJsonPath('summary.completed_today', 2);
     }
 
-    public function test_waits_are_reported_in_whole_minutes(): void
+    public function test_unpaid_checkouts_and_advance_orders_never_reach_the_board(): void
     {
-        $this->queued('pickup', OrderStatus::PLACED, CarbonImmutable::now()->subSeconds(10 * 60 + 35));
+        // Created today but never paid: no number, so not on the board.
+        Order::create([
+            'user_id' => User::factory()->create()->id,
+            'order_type' => 'pickup',
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'total_price' => 120,
+        ]);
 
-        $response = $this->actingAs($this->staff(), 'sanctum')
+        // Decided 2026-11-20: advance orders live on their own board only.
+        Order::create([
+            'user_id' => User::factory()->create()->id,
+            'order_type' => 'pickup',
+            'status' => OrderStatus::PREPARING,
+            'scheduled_for' => now()->addHour(),
+            'advance_order_number' => '001',
+            'total_price' => 120,
+        ]);
+
+        $this->actingAs($this->staff(), 'sanctum')
             ->getJson('/api/agent/queue')
-            ->assertOk();
-
-        $this->assertSame(10, $response->json('line.0.waiting_minutes'));
-        $this->assertSame(10, $response->json('summary.longest_wait_minutes'));
+            ->assertOk()
+            ->assertJsonCount(0, 'line')
+            ->assertJsonCount(0, 'handover');
     }
 
     public function test_yesterdays_finished_orders_are_not_listed(): void
@@ -178,18 +199,55 @@ class AgentQueueTest extends TestCase
             ->assertJsonPath('line.0.payment_method', 'gcash');
     }
 
-    public function test_the_summary_reports_the_shape_of_the_day(): void
+    public function test_the_board_sends_only_what_it_reads(): void
     {
+        // Trimmed 2026-11-20: column counts come from the lists, the store's
+        // state from its own endpoint, and nothing reads the transitions.
         $this->queued('pickup', OrderStatus::PLACED);
-        $this->queued('pickup', OrderStatus::PREPARING);
-        $this->queued('pickup', OrderStatus::READY_FOR_PICKUP);
 
         $this->actingAs($this->staff(), 'sanctum')
             ->getJson('/api/agent/queue')
             ->assertOk()
-            ->assertJsonPath('summary.in_line', 2)
-            ->assertJsonPath('summary.awaiting_handover', 1)
-            ->assertJsonPath('summary.awaiting_confirmation', 1);
+            ->assertJsonMissingPath('store')
+            ->assertJsonMissingPath('summary.in_line')
+            ->assertJsonMissingPath('summary.awaiting_handover')
+            ->assertJsonMissingPath('summary.awaiting_confirmation')
+            ->assertJsonMissingPath('line.0.allowed_transitions')
+            ->assertJsonMissingPath('line.0.details_confirmed_at')
+            ->assertJsonStructure(['summary' => ['completed_today', 'cancelled_today']]);
+    }
+
+    // -----------------------------------------------------------------
+    // One order at a time (decided 2026-11-20)
+    // -----------------------------------------------------------------
+
+    public function test_one_order_comes_back_with_whether_it_is_on_the_board(): void
+    {
+        $order = $this->queued('pickup', OrderStatus::CONFIRMED);
+        $staff = $this->staff();
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('on_board', true)
+            ->assertJsonPath('order.id', $order->id)
+            ->assertJsonPath('order.reference', '001');
+
+        $yesterday = $this->queued('pickup', OrderStatus::PREPARING, CarbonImmutable::now()->subDay());
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/orders/{$yesterday->id}")
+            ->assertOk()
+            ->assertJsonPath('on_board', false);
+    }
+
+    public function test_one_order_is_staff_only(): void
+    {
+        $order = $this->queued();
+
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_CUSTOMER]), 'sanctum')
+            ->getJson("/api/agent/orders/{$order->id}")
+            ->assertForbidden();
     }
 
     public function test_yesterdays_loose_ends_stay_out_of_todays_queue(): void
@@ -230,52 +288,9 @@ class AgentQueueTest extends TestCase
             ->assertOk()
             ->assertJsonPath('line.0.items.0.food_name', 'Fried Chicken')
             ->assertJsonPath('line.0.items.0.quantity', 2)
-            ->assertJsonPath('line.0.queue_label', 'CNC-001')
+            ->assertJsonPath('line.0.reference', '001')
             ->assertJsonPath('line.0.status_label', 'Placed')
             ->assertJsonPath('line.0.next_status', OrderStatus::CONFIRMED);
-    }
-
-    public function test_the_queue_carries_the_store_state_for_the_dashboard(): void
-    {
-        $this->actingAs($this->staff(), 'sanctum')
-            ->getJson('/api/agent/queue')
-            ->assertOk()
-            ->assertJsonStructure(['store' => ['accepting_orders', 'accepting_delivery', 'opens_at', 'closes_at']]);
-    }
-
-    // -----------------------------------------------------------------
-    // The next order (UC-QUE-005)
-    // -----------------------------------------------------------------
-
-    public function test_next_returns_the_head_of_the_line(): void
-    {
-        $first = $this->queued();
-        $this->queued();
-
-        $this->actingAs($this->staff(), 'sanctum')
-            ->getJson('/api/agent/queue/next')
-            ->assertOk()
-            ->assertJsonPath('order.id', $first->id)
-            ->assertJsonPath('order.queue_position', 1);
-    }
-
-    public function test_next_skips_orders_the_kitchen_is_done_with(): void
-    {
-        $this->queued('pickup', OrderStatus::READY_FOR_PICKUP);
-        $cooking = $this->queued();
-
-        $this->actingAs($this->staff(), 'sanctum')
-            ->getJson('/api/agent/queue/next')
-            ->assertOk()
-            ->assertJsonPath('order.id', $cooking->id);
-    }
-
-    public function test_an_empty_queue_is_a_quiet_afternoon_not_an_error(): void
-    {
-        $this->actingAs($this->staff(), 'sanctum')
-            ->getJson('/api/agent/queue/next')
-            ->assertOk()
-            ->assertJsonPath('order', null);
     }
 
     // -----------------------------------------------------------------
@@ -366,7 +381,7 @@ class AgentQueueTest extends TestCase
 
         $this->actingAs($agent, 'sanctum')
             ->getJson('/api/agent/queue')
-            ->assertJsonPath('line.1.queue_position', 2);
+            ->assertJsonPath('line.1.id', $behind->id);
 
         // Onto the shelf: out of the kitchen, out of the line.
         $this->actingAs($agent, 'sanctum')
@@ -375,8 +390,7 @@ class AgentQueueTest extends TestCase
 
         $this->actingAs($agent, 'sanctum')
             ->getJson('/api/agent/queue')
-            ->assertJsonPath('line.0.id', $behind->id)
-            ->assertJsonPath('line.0.queue_position', 1);
+            ->assertJsonPath('line.0.id', $behind->id);
     }
 
     // -----------------------------------------------------------------
@@ -478,7 +492,6 @@ class AgentQueueTest extends TestCase
         $customer = User::factory()->create(['role' => User::ROLE_CUSTOMER]);
 
         $this->actingAs($customer, 'sanctum')->getJson('/api/agent/queue')->assertForbidden();
-        $this->actingAs($customer, 'sanctum')->getJson('/api/agent/queue/next')->assertForbidden();
         $this->actingAs($customer, 'sanctum')->postJson("/api/agent/orders/{$order->id}/advance")->assertForbidden();
         $this->actingAs($customer, 'sanctum')->postJson("/api/agent/orders/{$order->id}/cancel")->assertForbidden();
     }

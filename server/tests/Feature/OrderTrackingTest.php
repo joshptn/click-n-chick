@@ -18,7 +18,7 @@ use Tests\TestCase;
  *
  * The rules this pins are the ones the tracking screen would otherwise have to
  * re-implement in the browser: which step it is on, whether it may still be
- * cancelled, and how many orders are ahead of it.
+ * cancelled.
  */
 class OrderTrackingTest extends TestCase
 {
@@ -67,7 +67,7 @@ class OrderTrackingTest extends TestCase
         ]);
 
         if ($queue) {
-            $order->enterQueue();
+            $order->assignOrderNumber();
         }
 
         if ($status !== OrderStatus::PLACED) {
@@ -165,8 +165,7 @@ class OrderTrackingTest extends TestCase
             ->getJson("/api/orders/{$order->id}")
             ->assertOk()
             ->assertJsonPath('order.steps.4.state', 'done')
-            ->assertJsonPath('order.is_terminal', true)
-            ->assertJsonPath('order.queue.in_line', false);
+            ->assertJsonPath('order.is_terminal', true);
     }
 
     public function test_a_cancelled_order_lights_no_steps_at_all(): void
@@ -185,7 +184,7 @@ class OrderTrackingTest extends TestCase
         }
     }
 
-    public function test_the_tracker_reports_the_position_in_the_line(): void
+    public function test_the_tracker_names_a_paid_order_by_its_number_and_has_no_queue(): void
     {
         $customer = $this->customer();
 
@@ -196,32 +195,45 @@ class OrderTrackingTest extends TestCase
         $this->actingAs($customer, 'sanctum')
             ->getJson("/api/orders/{$mine->id}")
             ->assertOk()
-            ->assertJsonPath('order.queue.in_line', true)
-            ->assertJsonPath('order.queue.position', 3)
-            ->assertJsonPath('order.queue.ahead', 2)
-            ->assertJsonPath('order.queue.label', 'CNC-003');
+            ->assertJsonPath('order.reference', '003')
+            ->assertJsonPath('order.title', 'Order 003')
+            ->assertJsonMissingPath('order.queue');
     }
 
-    public function test_an_order_the_kitchen_is_done_with_has_no_position(): void
+    public function test_an_advance_request_is_named_by_its_collection_until_accepted(): void
     {
-        $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::READY_FOR_PICKUP);
+        $customer = $this->customer();
+        $order = Order::create([
+            'user_id' => $customer->id,
+            'order_type' => 'pickup',
+            'status' => OrderStatus::SUBMITTED,
+            'scheduled_for' => CarbonImmutable::parse('2026-11-22 03:00:00', 'Asia/Manila')->utc(),
+            'total_price' => 200,
+            'total_amount' => 200,
+        ]);
 
         $this->actingAs($customer, 'sanctum')
             ->getJson("/api/orders/{$order->id}")
             ->assertOk()
-            ->assertJsonPath('order.queue.in_line', false)
-            ->assertJsonPath('order.queue.ahead', null);
+            ->assertJsonPath('order.reference', 'Order for Sunday, November 22 at 3:00 AM')
+            ->assertJsonPath('order.title', 'Order for Sunday, November 22 at 3:00 AM');
+
+        $order->forceFill(['advance_order_number' => '007', 'status' => OrderStatus::AWAITING_PAYMENT, 'accepted_at' => now()])->save();
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}")
+            ->assertJsonPath('order.reference', 'A-007')
+            ->assertJsonPath('order.title', 'Order A-007');
     }
 
-    public function test_an_unpaid_order_is_referred_to_by_id_until_it_has_a_ticket(): void
+    public function test_an_unpaid_order_is_referred_to_by_id_until_it_has_a_number(): void
     {
         $order = $this->order($customer = $this->customer(), 'pickup', OrderStatus::PLACED, queue: false);
 
         $this->actingAs($customer, 'sanctum')
             ->getJson("/api/orders/{$order->id}")
             ->assertOk()
-            ->assertJsonPath('order.reference', '#'.$order->id)
-            ->assertJsonPath('order.queue.label', null);
+            ->assertJsonPath('order.reference', '#'.$order->id);
     }
 
     public function test_the_tracker_carries_the_items_and_the_money(): void

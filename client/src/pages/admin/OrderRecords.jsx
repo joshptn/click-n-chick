@@ -326,7 +326,9 @@ function OrderRecords() {
         {paneled && (
           <aside
             aria-label="Order details"
-            className="sticky top-0 h-dvh w-[340px] shrink-0 overflow-y-auto border-l border-[#f0e9df] bg-white"
+            // Scrolls on its own beside the page, with its bar hidden so the
+            // window's is the only one showing; nothing scrolls sideways.
+            className="sticky top-0 h-dvh w-[340px] shrink-0 overflow-y-auto overflow-x-hidden border-l border-[#f0e9df] bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {panel}
           </aside>

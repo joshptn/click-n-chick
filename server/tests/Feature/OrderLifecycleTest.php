@@ -6,18 +6,17 @@ use App\Models\Order;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * The canonical order lifecycle (BRD 3.1) and queue entry (BR-22, FR-08.1-3).
+ * The canonical order lifecycle (BRD 3.1) and the daily order number.
  *
  * Two things are being pinned here. First, that the branch is real: a pickup
  * order and a delivery order genuinely walk different chains, and neither can
- * be pushed onto the other's terminal state. Second, that a queue number is a
- * scarce resource - assigned once, never twice, and never duplicated even when
- * two payments land on an empty day at the same instant.
+ * be pushed onto the other's terminal state. Second, that an immediate order
+ * is numbered once, at payment, counting from 001 each Manila day (decided
+ * 2026-11-20; two payments at the same instant may share a number).
  */
 class OrderLifecycleTest extends TestCase
 {
@@ -193,247 +192,99 @@ class OrderLifecycleTest extends TestCase
     }
 
     // -----------------------------------------------------------------
-    // Queue entry (BR-22, FR-08.1)
+    // Daily order numbers (decided 2026-11-20)
     // -----------------------------------------------------------------
 
-    public function test_placing_an_order_does_not_enter_the_queue(): void
+    /** An immediate order created at a moment (UTC), not yet numbered. */
+    private function createdAt(string $utc): Order
     {
         $order = $this->order();
+        $order->forceFill(['created_at' => CarbonImmutable::parse($utc, 'UTC')])->save();
 
-        $this->assertNull($order->queue_number, 'BR-22: the queue is entered at successful payment, not at checkout.');
-        $this->assertNull($order->queued_at);
-        $this->assertFalse($order->hasEnteredQueue());
+        return $order->fresh();
     }
 
-    public function test_entering_the_queue_assigns_a_number_a_date_and_a_timestamp(): void
+    public function test_a_time_with_an_offset_is_stored_as_that_moment(): void
     {
+        // Fixed 2026-11-20: 3:00 PM in Manila was stored as 15:00 UTC.
         $order = $this->order();
+        $order->forceFill(['pickup_at' => '2026-11-20T15:00:00+08:00'])->save();
 
-        $this->assertTrue($order->enterQueue());
-
-        $order->refresh();
-
-        $this->assertSame(1, $order->queue_number);
-        $this->assertNotNull($order->queued_at);
-        $this->assertSame(
-            CarbonImmutable::now(config('store.timezone'))->toDateString(),
-            $order->queue_date
-        );
+        $this->assertSame('2026-11-20 07:00:00', $order->fresh()->getRawOriginal('pickup_at'));
+        $this->assertSame('3:00 PM', $order->fresh()->pickup_at->setTimezone('Asia/Manila')->format('g:i A'));
     }
 
-    public function test_numbers_are_sequential_within_a_trading_day(): void
+    public function test_placing_an_order_gives_it_no_number(): void
+    {
+        $this->assertNull($this->order()->order_number, 'The number comes with the payment, not the checkout.');
+    }
+
+    public function test_numbers_are_plain_padded_and_sequential_within_a_day(): void
     {
         $numbers = collect(range(1, 3))->map(function () {
             $order = $this->order();
-            $order->enterQueue();
+            $order->assignOrderNumber();
 
-            return $order->fresh()->queue_number;
-        });
-
-        $this->assertSame([1, 2, 3], $numbers->all(), 'FR-08.2');
-    }
-
-    public function test_entering_the_queue_twice_changes_nothing(): void
-    {
-        $order = $this->order();
-        $order->enterQueue();
-
-        $this->assertFalse($order->enterQueue(), 'A replayed payment webhook must not re-queue the order.');
-        $this->assertSame(1, $order->fresh()->queue_number);
-    }
-
-    public function test_the_number_restarts_the_next_trading_day(): void
-    {
-        $today = $this->order();
-        $today->enterQueue(CarbonImmutable::parse('2026-08-25 03:00:00', 'UTC'));
-
-        $tomorrow = $this->order();
-        $tomorrow->enterQueue(CarbonImmutable::parse('2026-08-26 03:00:00', 'UTC'));
-
-        $this->assertSame(1, $today->fresh()->queue_number);
-        $this->assertSame(1, $tomorrow->fresh()->queue_number);
-    }
-
-    public function test_the_trading_day_is_read_in_manila_not_utc(): void
-    {
-        $order = $this->order();
-
-        // 16:30 UTC is 00:30 the next morning in Manila. Reading the app clock
-        // would file this order under the wrong day and hand it number 1 in a
-        // queue that already has customers waiting in it.
-        $order->enterQueue(CarbonImmutable::parse('2026-08-25 16:30:00', 'UTC'));
-
-        $this->assertSame('2026-08-26', $order->fresh()->queue_date);
-    }
-
-    public function test_two_orders_cannot_hold_the_same_number_on_the_same_day(): void
-    {
-        $first = $this->order();
-        $first->enterQueue();
-        $first->refresh();
-
-        $second = $this->order();
-
-        $this->expectException(QueryException::class);
-
-        $second->forceFill([
-            'queue_number' => $first->queue_number,
-            'queue_date' => $first->queue_date,
-            'queued_at' => now(),
-        ])->save();
-    }
-
-    // -----------------------------------------------------------------
-    // Queue position (UC-QUE-004)
-    // -----------------------------------------------------------------
-
-    /** Queues n orders on the same day and hands back the models, in entry order. */
-    private function line(int $count, string $type = 'pickup'): array
-    {
-        return collect(range(1, $count))->map(function () use ($type) {
-            $order = $this->order($type);
-            $order->enterQueue();
-
-            return $order->fresh();
+            return $order->fresh()->order_number;
         })->all();
+
+        $this->assertSame(['001', '002', '003'], $numbers);
     }
 
-    public function test_an_order_that_has_not_paid_has_no_position(): void
+    public function test_numbering_twice_changes_nothing(): void
     {
-        $this->assertNull($this->order()->queuePosition(), 'BR-22: no payment, no place in the line.');
+        $order = $this->order();
+        $order->assignOrderNumber();
+
+        $this->assertFalse($order->assignOrderNumber(), 'A replayed payment webhook must not renumber the order.');
+        $this->assertSame('001', $order->fresh()->order_number);
     }
 
-    public function test_position_reflects_where_the_order_stands(): void
+    public function test_the_number_restarts_the_next_day(): void
     {
-        [$first, $second, $third] = $this->line(3);
+        $today = $this->createdAt('2026-08-25 03:00:00');
+        $today->assignOrderNumber();
 
-        $this->assertSame(1, $first->queuePosition());
-        $this->assertSame(2, $second->queuePosition());
-        $this->assertSame(3, $third->queuePosition());
+        $tomorrow = $this->createdAt('2026-08-26 03:00:00');
+        $tomorrow->assignOrderNumber();
 
-        $this->assertSame(0, $first->aheadInQueue());
-        $this->assertSame(2, $third->aheadInQueue());
+        $this->assertSame('001', $today->fresh()->order_number);
+        $this->assertSame('001', $tomorrow->fresh()->order_number);
     }
 
-    public function test_the_line_closes_up_as_orders_are_finished(): void
+    public function test_the_day_is_the_manila_day_the_order_was_created(): void
     {
-        [$first, $second, $third] = $this->line(3);
+        // 16:30 UTC is 00:30 the next morning in Manila: a new day's first order.
+        $earlier = $this->createdAt('2026-08-25 15:00:00');
+        $earlier->assignOrderNumber();
 
-        $this->assertSame(3, $third->queuePosition());
+        $afterMidnight = $this->createdAt('2026-08-25 16:30:00');
+        $afterMidnight->assignOrderNumber();
 
-        $first->forceFill(['status' => OrderStatus::COMPLETED])->save();
-
-        $this->assertSame(2, $third->fresh()->queuePosition());
-
-        $second->forceFill(['status' => OrderStatus::CANCELLED])->save();
-
-        $this->assertSame(1, $third->fresh()->queuePosition());
-        $this->assertSame(0, $third->fresh()->aheadInQueue());
+        $this->assertSame('001', $afterMidnight->fresh()->order_number);
     }
 
-    public function test_a_quiet_evening_order_is_first_in_line_however_high_its_number(): void
+    public function test_the_count_goes_past_nine_hundred_ninety_nine(): void
     {
-        $earlier = $this->line(8);
+        $order = $this->order();
+        $order->forceFill(['order_number' => '999'])->save();
 
-        foreach ($earlier as $order) {
-            $order->forceFill(['status' => OrderStatus::COMPLETED])->save();
-        }
+        $next = $this->order();
+        $next->assignOrderNumber();
 
-        $latest = $this->order();
-        $latest->enterQueue();
-        $latest->refresh();
-
-        // The ticket still reads 9 - it is a ticket, not a wait - but there is
-        // nobody ahead, which is the whole point of keeping the two separate.
-        $this->assertSame(9, $latest->queue_number);
-        $this->assertSame(1, $latest->queuePosition());
-        $this->assertSame(0, $latest->aheadInQueue());
+        $this->assertSame('1000', $next->fresh()->order_number);
     }
 
-    public function test_an_uncollected_order_does_not_hold_up_the_line(): void
+    public function test_an_order_is_called_by_its_number_or_its_id_until_paid(): void
     {
-        [$waiting, $behind] = $this->line(2);
+        $order = $this->order();
 
-        $this->assertSame(2, $behind->queuePosition());
+        $this->assertSame('#'.$order->id, $order->reference());
 
-        // Ready on the shelf: the kitchen is done with it, the customer is late.
-        $waiting->forceFill(['status' => OrderStatus::READY_FOR_PICKUP])->save();
+        $order->assignOrderNumber();
 
-        $this->assertSame(1, $behind->fresh()->queuePosition());
-    }
-
-    public function test_an_order_out_for_delivery_does_not_hold_up_the_line(): void
-    {
-        [$riding, $behind] = $this->line(2, 'delivery');
-
-        $riding->forceFill(['status' => OrderStatus::ON_THE_WAY])->save();
-
-        $this->assertSame(1, $behind->fresh()->queuePosition());
-    }
-
-    public function test_an_order_the_kitchen_has_finished_with_has_no_position(): void
-    {
-        [$order] = $this->line(1);
-
-        foreach ([OrderStatus::READY_FOR_PICKUP, OrderStatus::COMPLETED, OrderStatus::CANCELLED] as $status) {
-            $order->forceFill(['status' => $status])->save();
-
-            $this->assertNull($order->fresh()->queuePosition(), "no position while {$status}");
-            $this->assertNull($order->fresh()->aheadInQueue());
-        }
-    }
-
-    public function test_an_unfinished_order_from_another_day_does_not_inflate_todays_line(): void
-    {
-        $forgotten = $this->order();
-        $forgotten->enterQueue(CarbonImmutable::parse('2026-08-24 03:00:00', 'UTC'));
-        $forgotten->forceFill(['status' => OrderStatus::PREPARING])->save();
-
-        $today = $this->order();
-        $today->enterQueue(CarbonImmutable::parse('2026-08-25 03:00:00', 'UTC'));
-
-        $this->assertSame(1, $today->fresh()->queuePosition(), 'Yesterday’s loose end is yesterday’s problem.');
-    }
-
-    public function test_orders_awaiting_the_agents_confirmation_still_count(): void
-    {
-        [$first, $second] = $this->line(2);
-
-        $this->assertSame(OrderStatus::PLACED, $first->status);
-        $this->assertSame(2, $second->queuePosition(), 'Paid work in the pipe is work ahead of you.');
-    }
-
-    // -----------------------------------------------------------------
-    // The counter ticket
-    // -----------------------------------------------------------------
-
-    public function test_the_ticket_is_prefixed_so_it_cannot_be_confused_with_a_walk_in(): void
-    {
-        [$order] = $this->line(1);
-
-        $this->assertSame('CNC-001', $order->queueLabel());
-    }
-
-    public function test_the_ticket_is_padded_so_the_ninth_and_the_ninetieth_read_alike(): void
-    {
-        [$order] = $this->line(1);
-        $order->forceFill(['queue_number' => 42])->save();
-
-        $this->assertSame('CNC-042', $order->fresh()->queueLabel());
-    }
-
-    public function test_an_empty_prefix_gives_the_bare_number(): void
-    {
-        config(['store.queue.label_prefix' => '']);
-
-        [$order] = $this->line(1);
-
-        $this->assertSame('001', $order->queueLabel());
-    }
-
-    public function test_an_unpaid_order_has_no_ticket(): void
-    {
-        $this->assertNull($this->order()->queueLabel());
+        $this->assertSame('001', $order->fresh()->reference());
+        $this->assertSame('Order 001', $order->fresh()->title());
     }
 
     // -----------------------------------------------------------------

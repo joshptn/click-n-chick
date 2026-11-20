@@ -24,7 +24,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Order ${order.reference}, ${order.status_label}`}
+      accessibilityLabel={`${order.title}, ${order.status_label}`}
       onPress={open}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       testID={`order-${order.id}`}

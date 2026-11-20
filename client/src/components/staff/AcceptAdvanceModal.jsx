@@ -3,7 +3,14 @@ import { Modal, NumberInput } from "@mantine/core";
 import { IconAlertTriangle, IconCalendarEvent, IconClockHour4, IconPhone, IconUser } from "@tabler/icons-react";
 
 import Button from "../ui/Button";
-import { PREPARATION_MINUTES, URGENT_PAY_MINUTES, collectionLabel, formatStamp, payByIfAccepted } from "../../lib/agent";
+import {
+  PREPARATION_MINUTES,
+  URGENT_PAY_MINUTES,
+  advanceName,
+  collectionLabel,
+  formatStamp,
+  payByIfAccepted,
+} from "../../lib/agent";
 import { formatPeso } from "../../lib/menu";
 
 /**
@@ -52,7 +59,7 @@ function AcceptAdvanceModal({ order, opened, onClose, onConfirm, loading }) {
       radius="md"
       title={
         <span className="font-display text-[16px] font-bold text-ink">
-          Accept request {order ? (order.reference ?? `#${order.id}`) : ""}?
+          Accept {order ? `${advanceName(order)}'s request` : "request"}?
         </span>
       }
       data-testid="advance-accept-modal"
@@ -66,7 +73,7 @@ function AcceptAdvanceModal({ order, opened, onClose, onConfirm, loading }) {
                 <span className="font-semibold">{collectionLabel(order)}</span>
               </span>
               <span className="flex items-center gap-2">
-                <IconUser size={15} stroke={2} className="text-[#a39f9b]" />
+                <IconUser size={15} stroke={2} className="[overflow-wrap:anywhere] text-[#a39f9b]" />
                 {order.customer?.name || "Customer"}
               </span>
               {order.customer?.phone && (
@@ -81,7 +88,7 @@ function AcceptAdvanceModal({ order, opened, onClose, onConfirm, loading }) {
               {items.map((item) => (
                 <li key={item.id} className="flex items-start justify-between gap-3 font-display text-[12.5px]">
                   <span className="min-w-0 text-ink">
-                    <span className="font-semibold">{item.quantity}×</span> {item.food_name}
+                    <span className="[overflow-wrap:anywhere] font-semibold">{item.quantity}×</span> {item.food_name}
                     {item.addons?.length > 0 && (
                       <span className="block text-[11px] text-[#8d8884]">+ {item.addons.join(", ")}</span>
                     )}

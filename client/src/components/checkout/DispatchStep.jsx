@@ -18,6 +18,9 @@ import DeliveryMap from "./LazyDeliveryMap";
 import { preloadDeliveryMap } from "../../lib/deliveryMap";
 import Field from "../ui/Field";
 import Input from "../ui/Input";
+import PickerField from "../ui/PickerField";
+import TimeDialPicker from "../ui/TimeDialPicker";
+import { formatClock, isoToClock, timeWindow } from "../../lib/timeWindow";
 import { FULFILMENT, blockerFor, reverseGeocode } from "../../lib/checkout";
 import { formatPeso } from "../../lib/menu";
 
@@ -101,6 +104,7 @@ function DispatchStep({
   const [isLocating, setIsLocating] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [locateError, setLocateError] = useState(null);
+  const [timeOpen, setTimeOpen] = useState(false);
 
   const reverseAbort = useRef(null);
 
@@ -116,6 +120,12 @@ function DispatchStep({
   const noRouteBlocker = blockerFor(quote, "NO_ROUTE_FOUND");
 
   const whenSubmitted = (blocker) => (showFieldErrors ? blocker : null);
+
+  // Decided 2026-11-20: the clock dial offers only today's bookable times,
+  // from the quote's window (now plus the lead time, to closing less 15).
+  const pickupMin = isoToClock(quote?.pickup?.earliest);
+  const pickupMax = isoToClock(quote?.pickup?.latest);
+  const pickupOpen = Boolean(timeWindow(pickupMin, pickupMax));
 
   const timeBlocker = whenSubmitted(
     blockerFor(
@@ -457,17 +467,35 @@ function DispatchStep({
                   }
                 >
                   {(id) => (
-                    <Input
+                    <PickerField
                       id={id}
-                      type="time"
                       icon={IconClock}
-                      value={value.pickupTime}
-                      onChange={(event) => onChange({ pickupTime: event.target.value })}
+                      value={value.pickupTime ? formatClock(value.pickupTime) : ""}
+                      placeholder={quote?.pickup && !pickupOpen ? "No pick-up times left today" : "Choose a time"}
+                      onOpen={() => setTimeOpen(true)}
                       invalid={Boolean(timeBlocker)}
-                      aria-label="What time will you collect your order?"
+                      disabled={!pickupOpen}
+                      ariaLabel="What time will you collect your order?"
                     />
                   )}
                 </Field>
+
+                <TimeDialPicker
+                  opened={timeOpen}
+                  onClose={() => setTimeOpen(false)}
+                  value={value.pickupTime}
+                  min={pickupMin}
+                  max={pickupMax}
+                  title="Select pick-up time"
+                  earlyMessage={(first) =>
+                    `That time has passed or is too soon for the kitchen to prepare your order. The earliest pick-up is ${first}.`
+                  }
+                  lateMessage={(last) => `Too late: the last pick-up today is ${last}, shortly before the store closes.`}
+                  onConfirm={(pickupTime) => {
+                    onChange({ pickupTime });
+                    setTimeOpen(false);
+                  }}
+                />
               </div>
 
               <p className="m-0 flex items-start gap-2 font-display text-[12px] leading-snug text-[#8d8884]">

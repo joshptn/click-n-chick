@@ -15,6 +15,7 @@ export { default as IconCamera } from "@tabler/icons-react-native/IconCamera";
 export { default as IconCheck } from "@tabler/icons-react-native/IconCheck";
 export { default as IconChecks } from "@tabler/icons-react-native/IconChecks";
 export { default as IconChefHat } from "@tabler/icons-react-native/IconChefHat";
+export { default as IconChevronLeft } from "@tabler/icons-react-native/IconChevronLeft";
 export { default as IconChevronRight } from "@tabler/icons-react-native/IconChevronRight";
 export { default as IconCircleCheck } from "@tabler/icons-react-native/IconCircleCheck";
 export { default as IconCircleX } from "@tabler/icons-react-native/IconCircleX";

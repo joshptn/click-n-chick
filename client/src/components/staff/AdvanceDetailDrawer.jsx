@@ -14,6 +14,7 @@ import {
 import { Line, Money, Section } from "./DetailParts";
 import {
   advanceLabel,
+  advanceName,
   advanceStage,
   closedOutcome,
   collectionCountdown,
@@ -54,9 +55,11 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
       padding={0}
       title={
         order ? (
-          <span className="flex items-center gap-2.5">
-            <span className="font-display text-[15px] font-bold text-brand-600">{order.reference ?? `#${order.id}`}</span>
-            <span className="rounded-full bg-[#f4f1ec] px-2 py-0.5 font-display text-[10.5px] font-semibold text-[#5f5b58]">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className="min-w-0 truncate font-display text-[15px] font-bold text-brand-600" title={advanceName(order)}>
+              {advanceName(order)}
+            </span>
+            <span className="shrink-0 rounded-full bg-[#f4f1ec] px-2 py-0.5 font-display text-[10.5px] font-semibold text-[#5f5b58]">
               {order.status_label}
             </span>
           </span>
@@ -134,7 +137,7 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
                       {item.quantity}×
                     </span>
                     <span className="min-w-0">
-                      <span className="block font-display text-[12.5px] font-semibold text-ink">{item.food_name}</span>
+                      <span className="[overflow-wrap:anywhere] block font-display text-[12.5px] font-semibold text-ink">{item.food_name}</span>
                       {item.addons?.length > 0 && (
                         <span className="block font-display text-[11px] text-[#8d8884]">+ {item.addons.join(", ")}</span>
                       )}

@@ -11,7 +11,10 @@ export type StepState = "done" | "current" | "upcoming";
 
 export type Order = {
   id: number;
+  /** "007", "A-007", "#29" before payment, or "Order for Sunday, November 22 at 3:00 AM" for an advance request. */
   reference: string;
+  /** "Order 007", or the advance request's "Order for ..." (decided 2026-11-20). */
+  title: string;
   order_type: "delivery" | "pickup";
   status: string;
   status_label: string;
@@ -28,7 +31,6 @@ export type Order = {
   /** An advance order's pay-by time: 24 hours, or collection less preparation time for today or tomorrow. */
   payment_due_at?: string | null;
   payment_status?: string | null;
-  queue: { number: number | null; label: string | null; in_line: boolean; position: number | null; ahead: number | null };
   cancellation: { refundable?: boolean; refund_amount?: number; code?: string; message?: string } | null;
   can_cancel: boolean;
   details_confirmed_at: string | null;
@@ -147,18 +149,6 @@ export function displaySteps(order: Order): { steps: Order["steps"]; stepIndex: 
   };
 }
 
-/** "1 order ahead of you", or null when the order is not waiting in line. */
-export function queueMessage(queue: Order["queue"] | undefined) {
-  if (!queue?.in_line) return null;
-
-  const ahead = queue.ahead ?? 0;
-
-  if (ahead <= 0) return { headline: "We're starting your order now", detail: "Nobody is ahead of you." };
-  if (ahead === 1) return { headline: "1 order ahead of you", detail: "You're next after this one." };
-
-  return { headline: `${ahead} orders ahead of you`, detail: "We're working through them in order." };
-}
-
 /** "2× Chicken Inasal + 1 more". */
 export function itemsSummary(items: Order["items"] = []) {
   if (items.length === 0) return "No items";
@@ -209,8 +199,9 @@ export function cancelPrompt(order: Order | null) {
 
 /** The feedback email, with the order number filled in (as on the web). */
 export function feedbackMailto(order: Order, address = "clicknchick.feedback@gmail.com") {
-  const subject = `Feedback on order ${order.reference ?? ""}`.trim();
-  const body = `Order: ${order.reference ?? ""}\n\nTell us what went well or what we can do better:\n\n`;
+  const title = order.title ?? `Order ${order.reference ?? ""}`.trim();
+  const subject = `Feedback on ${title.replace(/^Order/, "order")}`;
+  const body = `${title}\n\nTell us what went well or what we can do better:\n\n`;
 
   return `mailto:${address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

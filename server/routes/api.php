@@ -205,8 +205,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
 
     Route::get('/agent/queue', [OrderQueueController::class, 'index']);
-    Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
     Route::get('/agent/pending-orders', [OrderQueueController::class, 'pending']);
+    // One order, so a board updates the card that changed (decided 2026-11-20).
+    Route::get('/agent/orders/{order}', [OrderQueueController::class, 'show'])->whereNumber('order');
+    Route::get('/agent/pending-orders/{order}', [OrderQueueController::class, 'pendingShow'])->whereNumber('order');
 
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
 

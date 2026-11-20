@@ -65,17 +65,6 @@ export const ORDER_FILTERS = [
   { id: "all", label: "All" },
 ];
 
-export function queueMessage(queue) {
-  if (!queue?.in_line) return null;
-
-  const ahead = queue.ahead ?? 0;
-
-  if (ahead <= 0) return { headline: "We're starting your order now", detail: "Nobody is ahead of you." };
-  if (ahead === 1) return { headline: "1 order ahead of you", detail: "You're next after this one." };
-
-  return { headline: `${ahead} orders ahead of you`, detail: "We're working through them in order." };
-}
-
 export function formatTime(iso) {
   if (!iso) return "";
 
@@ -174,8 +163,10 @@ export function cancelPrompt(order) {
 }
 
 export function feedbackMailto(order, address = "clicknchick.feedback@gmail.com") {
-  const subject = `Feedback on order ${order?.reference ?? ""}`.trim();
-  const body = `Order: ${order?.reference ?? ""}\n\nTell us what went well or what we can do better:\n\n`;
+  // "Order 007", or "Order for Sunday, November 22 at 3:00 AM" before acceptance.
+  const title = order?.title ?? `Order ${order?.reference ?? ""}`.trim();
+  const subject = `Feedback on ${title.replace(/^Order/, "order")}`;
+  const body = `${title}\n\nTell us what went well or what we can do better:\n\n`;
 
   return `mailto:${address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }

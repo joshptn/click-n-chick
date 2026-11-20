@@ -58,16 +58,38 @@ class PendingOrdersTest extends TestCase
         ]);
     }
 
-    /** A regular order on a day's queue. */
+    /** A paid immediate order created on a day, with its number. */
     private function queued(string $status, array $attributes = [], string $date = self::TODAY): Order
     {
         static $number = 0;
 
-        return $this->order($status, $attributes + [
-            'queue_date' => $date,
-            'queue_number' => ++$number,
-            'queued_at' => $this->at('09:00:00', $date),
+        $order = $this->order($status, $attributes + [
+            'order_number' => str_pad((string) ++$number, 3, '0', STR_PAD_LEFT),
         ]);
+        $order->forceFill(['created_at' => $this->at('09:00:00', $date)])->save();
+
+        return $order->fresh();
+    }
+
+    public function test_one_order_comes_back_with_its_group_or_nothing(): void
+    {
+        // Decided 2026-11-20: the page updates the row that changed.
+        $order = $this->queued(OrderStatus::CONFIRMED);
+        $finished = $this->queued(OrderStatus::COMPLETED);
+        $staff = $this->user();
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/pending-orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('group', 'now')
+            ->assertJsonPath('row.id', $order->id)
+            ->assertJsonPath('row.is_advance', false);
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/pending-orders/{$finished->id}")
+            ->assertOk()
+            ->assertJsonPath('group', null)
+            ->assertJsonPath('row', null);
     }
 
     private function ids(TestResponse $response, string $group): array

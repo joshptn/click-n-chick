@@ -11,11 +11,10 @@ import {
   IconReceipt,
   IconSend,
   IconShoppingBag,
-  IconUsers,
 } from "@tabler/icons-react";
 
 import Button from "../ui/Button";
-import { cancelPrompt, isRefused, queueMessage } from "../../lib/orders";
+import { cancelPrompt, isRefused } from "../../lib/orders";
 import { formatCollection } from "../../lib/advance";
 
 const MotionSpan = motion.span;
@@ -29,7 +28,7 @@ const HERO = {
   confirmed: {
     icon: IconCircleCheck,
     title: "Order confirmed!",
-    body: "The store has accepted your order. It joins the kitchen queue next.",
+    body: "The store has accepted your order. The kitchen starts on it next.",
   },
   preparing: {
     icon: IconChefHat,
@@ -111,7 +110,6 @@ function OrderStatusPanel({
   const hero =
     (isAdvance ? ADVANCE_HERO[order.status] : null) ?? HERO[order.status] ?? HERO.placed;
   const Icon = hero.icon;
-  const queue = queueMessage(order.queue);
 
   const cancellation = order.cancellation ?? null;
   const prompt = cancelPrompt(order);
@@ -160,15 +158,6 @@ function OrderStatusPanel({
           </div>
         )}
 
-        {queue && (
-          <div className="mx-auto mt-5 flex max-w-[360px] items-center gap-3 rounded-[12px] bg-[#faf7f3] px-4 py-3 text-left">
-            <IconUsers size={19} stroke={2} aria-hidden="true" className="shrink-0 text-brand-500" />
-            <span className="min-w-0">
-              <span className="block font-display text-[13.5px] font-bold text-ink">{queue.headline}</span>
-              <span className="block font-display text-[12px] leading-snug text-[#6f6b68]">{queue.detail}</span>
-            </span>
-          </div>
-        )}
       </section>
 
       {order.can_confirm_receipt && (

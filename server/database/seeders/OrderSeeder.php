@@ -7,6 +7,7 @@ use App\Models\Food;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use Carbon\CarbonImmutable;
@@ -16,7 +17,15 @@ use Illuminate\Support\Collection;
 
 class OrderSeeder extends Seeder
 {
-    private const TAG = 'DEMO';
+    /**
+     * Where the demo orders' ids are kept, so the next run removes exactly
+     * them. order_number held a tag for this until 2026-11-20, when it became
+     * the order's daily number.
+     */
+    private const SEEDED_KEY = 'seeding.demo_order_ids';
+
+    /** @var array<int, int> */
+    private array $seeded = [];
 
     public function run(): void
     {
@@ -43,6 +52,8 @@ class OrderSeeder extends Seeder
 
             $this->command?->info("Demo orders created for {$customer->email} - open /orders to see them.");
         }
+
+        Setting::put(self::SEEDED_KEY, implode(',', $this->seeded));
     }
 
     private function targets(): Collection
@@ -74,7 +85,11 @@ class OrderSeeder extends Seeder
 
     private function clearPrevious(): void
     {
-        Order::query()->where('order_number', 'LIKE', self::TAG.'-%')->delete();
+        $ids = array_filter(array_map('intval', explode(',', (string) Setting::get(self::SEEDED_KEY, ''))));
+
+        if ($ids !== []) {
+            Order::query()->whereKey($ids)->delete();
+        }
     }
 
     private function seedFor(User $customer, Collection $foods, Collection $addons): void
@@ -88,7 +103,7 @@ class OrderSeeder extends Seeder
                 'pickup_at' => $now->addHour(),
             ], $foods->take(1), collect(), "filler-{$index}");
 
-            $filler->enterQueue($now->subMinutes(50 - $index * 10)->utc());
+            $filler->assignOrderNumber();
             $filler->forceFill(['status' => $status, 'user_id' => $this->otherCustomer($customer)?->id])->save();
         }
 
@@ -97,7 +112,7 @@ class OrderSeeder extends Seeder
             'status' => OrderStatus::PLACED,
             'pickup_at' => $now->addMinutes(45),
         ], $foods->take(2), $addons->take(1), 'placed');
-        $placed->enterQueue($now->subMinutes(4)->utc());
+        $placed->assignOrderNumber();
 
         $confirmed = $this->make($customer, [
             'order_type' => 'delivery',
@@ -110,7 +125,7 @@ class OrderSeeder extends Seeder
             'delivery_distance_km' => 2.4,
             'delivery_note' => 'Blue gate beside the sari-sari store.',
         ], $foods->slice(1, 2), $addons->take(2), 'confirmed');
-        $confirmed->enterQueue($now->subMinutes(12)->utc());
+        $confirmed->assignOrderNumber();
 
         $preparing = $this->make($customer, [
             'order_type' => 'delivery',
@@ -122,14 +137,14 @@ class OrderSeeder extends Seeder
             'delivery_fee' => 65,
             'delivery_distance_km' => 4.1,
         ], $foods->slice(2, 2), collect(), 'preparing');
-        $preparing->enterQueue($now->subMinutes(28)->utc());
+        $preparing->assignOrderNumber();
 
         $ready = $this->make($customer, [
             'order_type' => 'pickup',
             'status' => OrderStatus::READY_FOR_PICKUP,
             'pickup_at' => $now->addMinutes(15),
         ], $foods->take(1), $addons->take(1), 'ready');
-        $ready->enterQueue($now->subMinutes(40)->utc());
+        $ready->assignOrderNumber();
         $ready->forceFill(['status' => OrderStatus::READY_FOR_PICKUP])->save();
 
         $onTheWay = $this->make($customer, [
@@ -142,7 +157,7 @@ class OrderSeeder extends Seeder
             'delivery_fee' => 75,
             'delivery_distance_km' => 6.8,
         ], $foods->slice(3, 2), collect(), 'on-the-way');
-        $onTheWay->enterQueue($now->subMinutes(55)->utc());
+        $onTheWay->assignOrderNumber();
         $onTheWay->forceFill(['status' => OrderStatus::ON_THE_WAY])->save();
 
         $this->make($customer, [
@@ -154,9 +169,7 @@ class OrderSeeder extends Seeder
             'delivery_distance_km' => 2.4,
             'closed_at' => $now->subDay()->setTime(18, 42),
             'created_at' => $now->subDay()->setTime(17, 30),
-            'queue_number' => 14,
-            'queue_date' => $now->subDay()->toDateString(),
-            'queued_at' => $now->subDay()->setTime(17, 31),
+            'order_number' => '014',
         ], $foods->take(2), $addons->take(1), 'delivered');
 
         $this->make($customer, [
@@ -165,9 +178,7 @@ class OrderSeeder extends Seeder
             'pickup_at' => $now->subDays(3)->setTime(12, 15),
             'closed_at' => $now->subDays(3)->setTime(12, 22),
             'created_at' => $now->subDays(3)->setTime(11, 40),
-            'queue_number' => 6,
-            'queue_date' => $now->subDays(3)->toDateString(),
-            'queued_at' => $now->subDays(3)->setTime(11, 41),
+            'order_number' => '006',
             'discount_rate' => 0.20,
         ], $foods->slice(1, 3), collect(), 'completed');
 
@@ -234,7 +245,6 @@ class OrderSeeder extends Seeder
 
         $order = Order::create(array_merge([
             'user_id' => $customer->id,
-            'order_number' => self::TAG.'-'.$slug.'-'.$customer->id,
             'subtotal' => round($subtotal, 2),
             'discount_amount' => $discount,
             'total_amount' => $total,
@@ -245,6 +255,8 @@ class OrderSeeder extends Seeder
         if ($createdAt !== null) {
             $order->forceFill(['created_at' => $createdAt])->save();
         }
+
+        $this->seeded[] = $order->id;
 
         foreach ($lines as $line) {
             $addonTotal = (float) $line['addons']->sum('addon_price');

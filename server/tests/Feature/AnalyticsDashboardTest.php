@@ -97,9 +97,10 @@ class AnalyticsDashboardTest extends TestCase
         return $order->fresh();
     }
 
-    private function onBoard(string $status, array $attributes = []): Order
+    /** A paid immediate order (it has its number), created today unless $createdAt says otherwise. */
+    private function onBoard(string $status, array $attributes = [], string $createdAt = '2026-11-09 17:00:00'): Order
     {
-        $order = $this->placed('2026-11-09 17:00:00', $attributes + ['queue_date' => self::TODAY, 'queued_at' => $this->at('2026-11-09 17:00:00')]);
+        $order = $this->placed($createdAt, $attributes + ['order_number' => '001']);
 
         $order->forceFill(['status' => $status])->save();
 
@@ -178,7 +179,7 @@ class AnalyticsDashboardTest extends TestCase
         $this->onBoard(OrderStatus::PREPARING, $delivery);
         $this->onBoard(OrderStatus::ON_THE_WAY, $delivery);
         $this->onBoard(OrderStatus::DELIVERED, $delivery);
-        $this->onBoard(OrderStatus::PREPARING, ['queue_date' => '2026-11-08']);
+        $this->onBoard(OrderStatus::PREPARING, [], '2026-11-08 17:00:00');
 
         $this->operations()
             ->assertJsonPath('pickup.open', 4)
@@ -220,8 +221,8 @@ class AnalyticsDashboardTest extends TestCase
         $this->onBoard(OrderStatus::CONFIRMED);
         $this->onBoard(OrderStatus::PREPARING);
         $this->onBoard(OrderStatus::ON_THE_WAY, ['order_type' => 'delivery']);
-        $this->onBoard(OrderStatus::PREPARING, ['queue_date' => '2026-11-08']);
-        $this->onBoard(OrderStatus::CONFIRMED, ['queue_date' => '2026-11-08']);
+        $this->onBoard(OrderStatus::PREPARING, [], '2026-11-08 17:00:00');
+        $this->onBoard(OrderStatus::CONFIRMED, [], '2026-11-08 17:00:00');
 
         $this->operations()
             ->assertJsonPath('preparing.count', 1)

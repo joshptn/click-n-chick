@@ -119,7 +119,7 @@ class AdvanceOrderSubmissionTest extends TestCase
         $this->assertSame(400.0, (float) $order->total_amount);
     }
 
-    public function test_an_advance_order_takes_no_queue_number(): void
+    public function test_a_new_request_takes_no_number_of_either_kind(): void
     {
         $user = $this->customer();
         $this->withAdvanceCart($user);
@@ -130,9 +130,8 @@ class AdvanceOrderSubmissionTest extends TestCase
 
         $order = Order::first();
 
-        $this->assertNull($order->queue_number);
-        $this->assertNull($order->queue_date);
-        $this->assertNull($order->queued_at);
+        $this->assertNull($order->order_number);
+        $this->assertNull($order->advance_order_number, 'Numbered only when accepted.');
     }
 
     public function test_submitting_empties_only_the_advance_cart(): void

@@ -160,7 +160,6 @@ class StoreManagerReadOnlyTest extends TestCase
 
         foreach ([
             '/api/agent/queue',
-            '/api/agent/queue/next',
             '/api/agent/advance-requests',
             "/api/agent/advance-requests/{$request->id}",
             '/api/admin/discount-claims',

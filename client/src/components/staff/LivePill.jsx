@@ -16,7 +16,7 @@ function LivePill({ showLastOrder = false }) {
       {isConnected ? "Live" : "Reconnecting…"}
       {showLastOrder && lastOrderEvent?.order && (
         <span data-testid="last-order-event" className="hidden text-[#a39f9b] sm:inline">
-          · order #{lastOrderEvent.order.id} {String(lastOrderEvent.order.status ?? "").replaceAll("_", " ")}
+          · order {lastOrderEvent.order.number ?? `#${lastOrderEvent.order.id}`} {String(lastOrderEvent.order.status ?? "").replaceAll("_", " ")}
         </span>
       )}
     </span>

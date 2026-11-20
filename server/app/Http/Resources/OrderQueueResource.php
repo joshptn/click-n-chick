@@ -7,40 +7,20 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class OrderQueueResource extends JsonResource
 {
-    private ?int $position = null;
-
-    public function withPosition(?int $position): self
-    {
-        $this->position = $position;
-
-        return $this;
-    }
-
     public function toArray($request): array
     {
         $isDelivery = $this->order_type === 'delivery';
 
         return [
             'id' => $this->id,
+            // "007" for the day's immediate orders (decided 2026-11-20).
             'order_number' => $this->order_number,
-
-            'queue_number' => $this->queue_number,
-            'queue_label' => $this->queueLabel(),
-            'queue_position' => $this->position,
-            'queued_at' => $this->queued_at?->toIso8601String(),
-            // Whole minutes: Carbon 3 returns a float here.
-            'waiting_minutes' => $this->queued_at ? (int) $this->queued_at->diffInMinutes(now()) : null,
+            'reference' => $this->number() ?? '#'.$this->id,
 
             'status' => $this->status,
             'status_label' => OrderStatus::label((string) $this->status),
             'next_status' => $this->nextStatus(),
-            'allowed_transitions' => OrderStatus::transitionsFrom((string) $this->status, $this->order_type),
             'cancellation_reason' => $this->cancellation_reason,
-
-            // The customer has checked their own details. Not a gate - the
-            // kitchen may start regardless - but it is the difference between
-            // starting on a confirmed order and one still being edited.
-            'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
 
             'order_type' => $this->order_type,
 

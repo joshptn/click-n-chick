@@ -23,6 +23,7 @@ import {
   ADVANCE_COLUMNS,
   ADVANCE_REJECTION_REASONS,
   advanceColumnFor,
+  advanceName,
   advanceStage,
   collectionLabel,
   matchesSearch,
@@ -309,7 +310,7 @@ function AdvanceOrders() {
         onConfirm={confirmDecline}
         loading={advance.isRejecting}
         resetKey={declining?.id}
-        title={declining ? `Decline request ${declining.reference ?? `#${declining.id}`}?` : ""}
+        title={declining ? `Decline ${advanceName(declining)}'s request?` : ""}
         description={
           declining
             ? `${declining.customer?.name || "The customer"} asked to collect ${collectionLabel(declining)}. They are told why; nothing has been charged.`

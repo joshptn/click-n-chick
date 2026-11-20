@@ -8,9 +8,6 @@ import {
   CONTACT_BLOCKERS,
   SCHEDULE_BLOCKERS,
   advanceApi,
-  bookableDates,
-  collectionTimes,
-  dateParts,
   formatClock,
   formatCollectionDay,
   lastCollection,
@@ -20,7 +17,8 @@ import {
 import { DISCOUNT_BLOCKERS } from "../../api/checkout";
 import { ORDERS_KEY } from "../../api/orders";
 import { AppText } from "../../components/AppText";
-import { Sheet } from "../../components/account/Sheet";
+import { CalendarPicker } from "../../components/pickers/CalendarPicker";
+import { TimeDialPicker } from "../../components/pickers/TimeDialPicker";
 import { ScreenHeader } from "../../components/account/ScreenHeader";
 import { CheckoutButton } from "../../components/checkout/CheckoutButton";
 import { DiscountStep, type DiscountChoice } from "../../components/checkout/DiscountStep";
@@ -28,6 +26,7 @@ import { Notice, StepCard, Stepper, SummaryRow } from "../../components/checkout
 import { IconCalendarEvent, IconCheck, IconChevronRight, IconClock, IconSend, IconUser } from "../../components/icons";
 import { cartKey } from "../../hooks/useCart";
 import { formatPeso } from "../../lib/money";
+import { formatCalendarDate, timeWindow } from "../../lib/timeWindow";
 import { toast } from "../../lib/toast";
 import { colors } from "../../theme/colors";
 
@@ -63,6 +62,7 @@ export default function AdvanceSchedule() {
   const [date, setDate] = useState<string | null>(null);
   const [time, setTime] = useState<string | null>(null);
   const [timeOpen, setTimeOpen] = useState(false);
+  const [dateOpen, setDateOpen] = useState(false);
   const [discountChoice, setDiscountChoice] = useState<DiscountChoice | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -95,8 +95,9 @@ export default function AdvanceSchedule() {
   // time is theirs to choose.
   if (date === null && schedule?.earliest_date) setDate(schedule.earliest_date);
 
-  const dates = bookableDates(schedule);
-  const times = collectionTimes(schedule);
+  // Decided 2026-11-20: a calendar and a clock dial that offer only what the
+  // window allows (5-minute steps), instead of date chips and a slot list.
+  const timeRange = timeWindow(schedule?.opens_at, lastCollection(schedule));
   const day = formatCollectionDay(date);
 
   const blockers = quote?.blockers ?? [];
@@ -198,35 +199,19 @@ export default function AdvanceSchedule() {
               <AppText family="display" weight="medium" size={13} color={colors.authLabel}>
                 Collection date
               </AppText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dates}>
-                {dates.map((value) => {
-                  const parts = dateParts(value);
-                  const selected = value === date;
-
-                  return (
-                    <Pressable
-                      key={value}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel={formatCollectionDay(value)}
-                      onPress={() => setDate(value)}
-                      style={[styles.date, selected && styles.chosen]}
-                      testID={`date-${value}`}
-                    >
-                      <AppText family="display" size={11} color={selected ? colors.white : colors.authMuted}>
-                        {parts.weekday}
-                      </AppText>
-                      <AppText family="display" weight="bold" size={17} color={selected ? colors.white : colors.authInk}>
-                        {parts.day}
-                      </AppText>
-                      <AppText family="display" size={11} color={selected ? colors.white : colors.authMuted}>
-                        {parts.month}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-                {dates.length === 0 && <View style={styles.dateSkeleton} />}
-              </ScrollView>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={date ? `Collection date ${formatCalendarDate(date)}. Change` : "Choose a collection date"}
+                disabled={!schedule}
+                onPress={() => setDateOpen(true)}
+                style={styles.timeField}
+                testID="collection-date"
+              >
+                <AppText family="display" size={14.5} color={date ? colors.authInk : colors.authHint} style={styles.flex}>
+                  {date ? formatCalendarDate(date) : "Choose a date"}
+                </AppText>
+                <IconCalendarEvent size={18} color={colors.authHint} strokeWidth={2} />
+              </Pressable>
               {schedule && (
                 <AppText family="display" size={12} color={colors.authHint}>
                   {day ? `${day} · ` : ""}up to {schedule.max_days_ahead} days ahead
@@ -245,7 +230,7 @@ export default function AdvanceSchedule() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={time ? `Collection time ${formatClock(time)}. Change` : "Choose a collection time"}
-                disabled={times.length === 0}
+                disabled={!timeRange}
                 onPress={() => setTimeOpen(true)}
                 style={[styles.timeField, scheduleBlocker && styles.timeFieldError]}
                 testID="collection-time"
@@ -291,32 +276,38 @@ export default function AdvanceSchedule() {
               )}
             </View>
 
-            <Sheet visible={timeOpen} title="Collection time" subtitle={day || undefined} onClose={() => setTimeOpen(false)}>
-              <View style={styles.slots}>
-                {times.map((slot) => {
-                  const selected = slot === time;
+            <CalendarPicker
+              visible={dateOpen}
+              onClose={() => setDateOpen(false)}
+              value={date}
+              min={schedule?.earliest_date}
+              max={schedule?.latest_date}
+              earlyMessage={(first) =>
+                schedule?.tomorrow_closed
+                  ? `Orders for tomorrow closed when the store did today, so the earliest date is ${first}.`
+                  : `Advance orders start from tomorrow. The earliest date is ${first}.`
+              }
+              lateMessage={(last) => `You can book up to ${schedule?.max_days_ahead ?? 30} days ahead, until ${last}.`}
+              onConfirm={(value) => {
+                setDate(value);
+                setDateOpen(false);
+              }}
+            />
 
-                  return (
-                    <Pressable
-                      key={slot}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected }}
-                      onPress={() => {
-                        setTime(slot);
-                        setTimeOpen(false);
-                      }}
-                      style={[styles.slot, selected && styles.chosen]}
-                      testID={`time-${slot}`}
-                    >
-                      {selected && <IconCheck size={13} color={colors.white} strokeWidth={3} />}
-                      <AppText family="display" weight="semibold" size={13} color={selected ? colors.white : colors.authLabel}>
-                        {formatClock(slot)}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </Sheet>
+            <TimeDialPicker
+              visible={timeOpen}
+              onClose={() => setTimeOpen(false)}
+              value={time}
+              min={schedule?.opens_at}
+              max={lastCollection(schedule)}
+              title="Select collection time"
+              earlyMessage={(first) => `The store opens at ${first}, so that is the earliest collection.`}
+              lateMessage={(last) => `The last collection is ${last}, shortly before the store closes.`}
+              onConfirm={(value) => {
+                setTime(value);
+                setTimeOpen(false);
+              }}
+            />
           </StepCard>
         )}
 
@@ -455,18 +446,6 @@ const styles = StyleSheet.create({
   caps: { letterSpacing: 0.7 },
   content: { paddingHorizontal: 16, paddingBottom: 24, gap: 14 },
   block: { gap: 8 },
-  dates: { gap: 8, paddingVertical: 2 },
-  date: {
-    width: 58,
-    alignItems: "center",
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.fieldBorder,
-    backgroundColor: colors.white,
-  },
-  dateSkeleton: { width: 280, height: 66, borderRadius: 14, backgroundColor: "#f4f1ec" },
-  chosen: { backgroundColor: colors.orange, borderColor: colors.orange },
   timeField: {
     minHeight: 48,
     flexDirection: "row",
@@ -481,19 +460,6 @@ const styles = StyleSheet.create({
   timeFieldError: { borderColor: "#f5b4b2" },
   contact: { gap: 6, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: "#f0e9df", backgroundColor: "#faf7f3" },
   contactRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  slots: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  slot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minWidth: 92,
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.fieldBorder,
-    backgroundColor: colors.white,
-  },
   collection: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 12, backgroundColor: "#fff1e6" },
   lines: { gap: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: "#f1ece6" },
   line: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },

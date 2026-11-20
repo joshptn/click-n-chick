@@ -36,7 +36,7 @@ function placeOrder() {
   return tinker(
     [
       `$u = App\\Models\\User::where("email","${CUSTOMER.email}")->first();`,
-      '$o = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"placed","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"queue_date"=>now("Asia/Manila")->toDateString(),"queued_at"=>now()]);',
+      '$o = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"placed","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"order_number"=>"001"]);',
       'foreach (range(1,5) as $i) { event(new App\\Events\\OrderBroadcast($o,"update")); }',
       'echo "ID".$o->id;',
     ].join(" ")

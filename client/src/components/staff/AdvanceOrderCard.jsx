@@ -11,6 +11,7 @@ import {
 
 import {
   advanceLabel,
+  advanceName,
   advanceStage,
   closedOutcome,
   collectionCountdown,
@@ -142,7 +143,7 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
       }}
       data-testid="advance-order-card"
       data-status={order.status}
-      aria-label={`Advance order ${order.reference ?? order.id}, ${order.status_label}, collecting ${collectionLabel(order)}`}
+      aria-label={`Advance order ${advanceName(order)}, ${order.status_label}, collecting ${collectionLabel(order)}`}
       className={`cursor-pointer rounded-[12px] border bg-white p-3 text-left shadow-[0_2px_10px_-6px_rgba(65,33,17,0.18)] outline-none transition-[border-color,box-shadow] hover:border-brand-200 hover:shadow-[0_8px_22px_-12px_rgba(65,33,17,0.3)] focus-visible:ring-2 focus-visible:ring-brand-300 ${
         stage === "decide" || ((stage === "confirm" || stage === "scheduled") && order.is_due_today)
           ? "border-[#ffd6b3]"
@@ -150,10 +151,11 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
       }`}
     >
       <div className="flex items-center gap-1.5">
-        <span className="whitespace-nowrap font-display text-[12px] font-bold text-brand-600">
-          {order.reference ?? `#${order.id}`}
+        {/* A request's customer name can be long: it gives way to the date. */}
+        <span className="min-w-0 truncate font-display text-[12px] font-bold text-brand-600" title={advanceName(order)}>
+          {advanceName(order)}
         </span>
-        <span className="ml-auto inline-flex items-center gap-1 whitespace-nowrap font-display text-[10px] font-medium text-[#6f6b68]">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-display text-[10px] font-medium text-[#6f6b68]">
           <IconCalendarEvent size={12} stroke={2} className="text-[#a39f9b]" />
           {collectionLabel(order)}
         </span>
@@ -169,7 +171,10 @@ function AdvanceOrderCard({ order, busy, canAct, onAccept, onReject, onRemind, o
         </p>
       )}
 
-      <p className="m-0 mt-0.5 truncate font-display text-[10.5px] text-[#a39f9b]">{order.customer?.name || "Customer"}</p>
+      {/* Before acceptance the name already heads the card. */}
+      {order.reference && (
+        <p className="m-0 mt-0.5 truncate font-display text-[10.5px] text-[#a39f9b]">{order.customer?.name || "Customer"}</p>
+      )}
 
       <div className="mt-2 flex items-end justify-between gap-2">
         <span className="font-display text-[10.5px] text-[#a39f9b]">{order.is_paid ? "Paid" : "Unpaid"}</span>

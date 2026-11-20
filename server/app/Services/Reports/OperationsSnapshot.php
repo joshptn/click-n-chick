@@ -108,7 +108,8 @@ class OperationsSnapshot
             ->where(fn (Builder $query) => $query
                 ->where(fn (Builder $regular) => $regular
                     ->whereNull('scheduled_for')
-                    ->where('queue_date', $now->toDateString())
+                    ->whereNotNull('order_number')
+                    ->createdOnStoreDay($now)
                     ->whereIn('status', [OrderStatus::PLACED, OrderStatus::CONFIRMED, OrderStatus::PREPARING, OrderStatus::READY_FOR_PICKUP, OrderStatus::ON_THE_WAY]))
                 ->orWhere(fn (Builder $advance) => $advance
                     ->where('scheduled_for', '>=', $start)

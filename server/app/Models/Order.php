@@ -9,13 +9,10 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 class Order extends Model
 {
-    private const QUEUE_ATTEMPTS = 3;
-
     public const ADVANCE_PAYMENT_HOURS = 24;
 
     /**
@@ -56,13 +53,11 @@ class Order extends Model
         'user_id',
         'address_id',
         'order_number',
+        'advance_order_number',
         'order_type',
         'scheduled_for',
         'pickup_at',
         'status',
-        'queue_number',
-        'queue_date',
-        'queued_at',
         'details_confirmed_at',
         'accepted_at',
         'cancellation_reason',
@@ -87,13 +82,22 @@ class Order extends Model
         'delivery_note',
     ];
 
+    /**
+     * Every date is stored as UTC (fixed 2026-11-20). Laravel writes a date's
+     * clock time as it stands, so a time carrying an offset ("15:00+08:00",
+     * as the pickup and collection times arrive) was stored as 15:00 UTC and
+     * read back eight hours late. Converting first keeps the moment.
+     */
+    public function fromDateTime($value)
+    {
+        return empty($value) ? $value : parent::fromDateTime($this->asDateTime($value)->utc());
+    }
+
     protected function casts(): array
     {
         return [
             'scheduled_for' => 'datetime',
             'pickup_at' => 'datetime',
-            'queue_number' => 'integer',
-            'queued_at' => 'datetime',
             'details_confirmed_at' => 'datetime',
             'accepted_at' => 'datetime',
             'closed_at' => 'datetime',
@@ -390,89 +394,129 @@ class Order extends Model
         return OrderStatus::isTerminal((string) $this->status);
     }
 
-    public function hasEnteredQueue(): bool
+    /**
+     * The order's number as staff and customers read it (decided 2026-11-20):
+     * "007" for an immediate order once paid, "A-007" for an advance order once
+     * accepted, null before then. Both counts restart every day and may repeat;
+     * nothing prevents two orders sharing one, and the pickup person is called
+     * by name, not by number.
+     */
+    public function number(): ?string
     {
-        return $this->queue_number !== null;
-    }
-
-    public function isInLine(): bool
-    {
-        return $this->hasEnteredQueue() && OrderStatus::isInLine((string) $this->status);
-    }
-
-    public function queueLabel(): ?string
-    {
-        if (! $this->hasEnteredQueue()) {
-            return null;
+        if ($this->isAdvance()) {
+            return $this->advance_order_number === null ? null : 'A-'.$this->advance_order_number;
         }
 
-        $prefix = trim((string) config('store.queue.label_prefix', ''));
-        $number = str_pad((string) $this->queue_number, 3, '0', STR_PAD_LEFT);
-
-        return $prefix === '' ? $number : $prefix.'-'.$number;
+        return $this->order_number;
     }
 
+    /**
+     * What the customer sees the order called: its number, "#id" for an
+     * immediate checkout not paid yet, and for an advance request not accepted
+     * yet its collection ("Order for Sunday, November 22 at 3:00 AM").
+     */
     public function reference(): string
     {
-        return $this->queueLabel() ?? '#'.$this->getKey();
-    }
+        $number = $this->number();
 
-    public function queuePosition(): ?int
-    {
-        if (! $this->isInLine()) {
-            return null;
+        if ($number !== null) {
+            return $number;
         }
 
-        return static::query()
-            ->where('queue_date', $this->queue_date)
-            ->whereIn('status', OrderStatus::inLine())
-            ->where('queue_number', '<=', $this->queue_number)
-            ->count();
+        if ($this->isAdvance()) {
+            return 'Order for '.$this->collectionPhrase();
+        }
+
+        return '#'.$this->getKey();
     }
 
-    public function aheadInQueue(): ?int
+    /** "Order 007", "Order A-007", "Order #29", "Order for Sunday, November 22 at 3:00 AM". */
+    public function title(): string
     {
-        $position = $this->queuePosition();
+        $reference = $this->reference();
 
-        return $position === null ? null : $position - 1;
+        return str_starts_with($reference, 'Order ') ? $reference : 'Order '.$reference;
     }
 
-    public function enterQueue(?CarbonInterface $at = null): bool
+    /** "Sunday, November 22 at 3:00 AM", in store time. */
+    public function collectionPhrase(): string
     {
-        if ($this->hasEnteredQueue()) {
+        $at = CarbonImmutable::parse($this->scheduled_for)
+            ->setTimezone((string) config('store.timezone', 'Asia/Manila'));
+
+        return $at->format('l, F j').' at '.$at->format('g:i A');
+    }
+
+    /** The UTC bounds of the store day holding $moment. @return array{0: CarbonImmutable, 1: CarbonImmutable} */
+    public static function storeDay(CarbonInterface $moment): array
+    {
+        $start = CarbonImmutable::parse($moment)->setTimezone((string) config('store.timezone', 'Asia/Manila'))->startOfDay();
+
+        return [$start->utc(), $start->addDay()->utc()];
+    }
+
+    /** Orders created on the store day holding $moment. */
+    public function scopeCreatedOnStoreDay(Builder $query, CarbonInterface $moment): Builder
+    {
+        [$start, $end] = self::storeDay($moment);
+
+        return $query->where('orders.created_at', '>=', $start)->where('orders.created_at', '<', $end);
+    }
+
+    /** Orders created before the store day holding $moment. */
+    public function scopeCreatedBeforeStoreDay(Builder $query, CarbonInterface $moment): Builder
+    {
+        return $query->where('orders.created_at', '<', self::storeDay($moment)[0]);
+    }
+
+    /**
+     * Give a paid immediate order the next number of the day it was created
+     * on. Nothing locks or retries (decided 2026-11-20): two payments settled
+     * at the same instant may take the same number.
+     */
+    public function assignOrderNumber(): bool
+    {
+        if ($this->isAdvance() || $this->order_number !== null) {
             return false;
         }
 
-        $moment = $at ? CarbonImmutable::parse($at) : CarbonImmutable::now();
-        $date = $moment->setTimezone((string) config('store.timezone', 'Asia/Manila'))->toDateString();
+        $last = static::query()
+            ->whereNull('scheduled_for')
+            ->whereNotNull('order_number')
+            ->createdOnStoreDay(CarbonImmutable::parse($this->created_at ?? now()))
+            ->max(DB::raw('CAST(order_number AS INTEGER)'));
 
-        for ($attempt = 1; $attempt <= self::QUEUE_ATTEMPTS; $attempt++) {
-            try {
-                DB::transaction(function () use ($moment, $date) {
-                    $last = static::query()
-                        ->where('queue_date', $date)
-                        ->orderByDesc('queue_number')
-                        ->lockForUpdate()
-                        ->value('queue_number');
+        $this->forceFill(['order_number' => self::pad((int) $last + 1)])->save();
 
-                    $this->forceFill([
-                        'queue_number' => (int) $last + 1,
-                        'queue_date' => $date,
-                        'queued_at' => $moment,
-                    ])->save();
-                });
+        return true;
+    }
 
-                return true;
-            } catch (QueryException $e) {
-                if ($attempt === self::QUEUE_ATTEMPTS) {
-                    throw $e;
-                }
-
-                $this->forceFill(['queue_number' => null, 'queue_date' => null, 'queued_at' => null]);
-            }
+    /**
+     * Give an advance order the next number of the day it is accepted on,
+     * counted apart from immediate orders. Not saved here: the caller saves it
+     * with the acceptance.
+     */
+    public function assignAdvanceOrderNumber(CarbonInterface $acceptedAt): void
+    {
+        if (! $this->isAdvance() || $this->advance_order_number !== null) {
+            return;
         }
 
-        return false;
+        [$start, $end] = self::storeDay($acceptedAt);
+
+        $last = static::query()
+            ->whereNotNull('scheduled_for')
+            ->whereNotNull('advance_order_number')
+            ->where('accepted_at', '>=', $start)
+            ->where('accepted_at', '<', $end)
+            ->max(DB::raw('CAST(advance_order_number AS INTEGER)'));
+
+        $this->advance_order_number = self::pad((int) $last + 1);
+    }
+
+    private static function pad(int $number): string
+    {
+        return str_pad((string) $number, 3, '0', STR_PAD_LEFT);
     }
 
     /** The staff member or customer who cancelled it, if it was cancelled. */

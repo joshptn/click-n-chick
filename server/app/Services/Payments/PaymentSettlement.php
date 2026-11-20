@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\StockHold;
 use App\Services\Orders\OrderAnnouncer;
+use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
 use App\Services\Stock\StockReservation;
 use Carbon\CarbonImmutable;
@@ -44,6 +45,7 @@ class PaymentSettlement
         private PaymentGateway $gateway,
         private StockReservation $stock,
         private OrderAnnouncer $announcer,
+        private OrderNotice $notice,
     ) {}
 
     /**
@@ -247,17 +249,28 @@ class PaymentSettlement
     private function announce(Order $order, string $outcome): void
     {
         match ($outcome) {
-            // Now the shop has it: into the queue, onto the staff boards, and
+            // Now the shop has it: its number for the day, onto the staff boards, and
             // the customer's "order placed" notice.
             self::PLACED => $this->placed($order),
-            self::CONFIRMED, self::REFUND => $this->announcer->statusChanged($order),
+            self::CONFIRMED => $this->confirmed($order),
+            self::REFUND => $this->announcer->statusChanged($order),
             default => null,
         };
     }
 
+    /**
+     * A paid advance order: the customer's notice, the staff boards, and the
+     * Store Agents told it waits in To Confirm (decided 2026-11-20).
+     */
+    private function confirmed(Order $order): void
+    {
+        $this->announcer->statusChanged($order);
+        $this->announcer->toStaff($order, $this->notice->staffAdvancePaid($order));
+    }
+
     private function placed(Order $order): void
     {
-        $order->enterQueue(CarbonImmutable::now());
+        $order->assignOrderNumber();
         $this->announcer->announce($order, 'create', 'create');
     }
 

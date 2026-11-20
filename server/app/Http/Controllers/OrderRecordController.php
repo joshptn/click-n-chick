@@ -182,19 +182,19 @@ class OrderRecordController extends Controller
         $needle = '%'.mb_strtolower($term).'%';
         $digits = preg_replace('/\D/', '', $term);
 
-        // "#12", "012", "BES-012": an order id or a ticket number.
+        // "#12" or "12": the order id. The daily order numbers repeat, so
+        // records are not searched by them (decided 2026-11-20).
         $number = preg_match('/^(?:[A-Za-z]+-)?#?(\d{1,9})$/', $term, $match) ? (int) $match[1] : null;
         $phoneHash = strlen($digits) >= 10 ? User::hashPhoneNumber($term) : null;
 
         $query->where(function (Builder $where) use ($needle, $number, $digits, $phoneHash) {
             if ($number !== null) {
-                $where->orWhere('orders.id', $number)->orWhere('orders.queue_number', $number);
+                $where->orWhere('orders.id', $number);
             }
 
             $where
                 ->orWhereRaw('LOWER(orders.contact_name) LIKE ?', [$needle])
                 ->orWhereRaw('LOWER(orders.guest_email) LIKE ?', [$needle])
-                ->orWhereRaw('LOWER(orders.order_number) LIKE ?', [$needle])
                 ->orWhereHas('user', fn (Builder $user) => $user
                     ->whereRaw("LOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ?", [$needle])
                     ->orWhereRaw('LOWER(email) LIKE ?', [$needle]))

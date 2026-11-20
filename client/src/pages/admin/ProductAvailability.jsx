@@ -201,7 +201,7 @@ function TableView({ foods, loading, rowProps, selection }) {
                 <Thumb food={food} />
                 <div className="min-w-0">
                   <p
-                    className={`m-0 font-display text-[13.5px] font-semibold leading-snug ${food.is_available ? "text-ink" : "text-[#a39f9b]"}`}
+                    className={`[overflow-wrap:anywhere] m-0 font-display text-[13.5px] font-semibold leading-snug ${food.is_available ? "text-ink" : "text-[#a39f9b]"}`}
                   >
                     {food.food_name}
                   </p>
@@ -251,7 +251,7 @@ function CardView({ foods, loading, rowProps, selection }) {
             )}
             <Thumb food={food} />
             <div className="min-w-0 flex-1">
-              <p className={`m-0 font-display text-[13.5px] font-semibold leading-snug ${food.is_available ? "text-ink" : "text-[#a39f9b]"}`}>
+              <p className={`[overflow-wrap:anywhere] m-0 font-display text-[13.5px] font-semibold leading-snug ${food.is_available ? "text-ink" : "text-[#a39f9b]"}`}>
                 {food.food_name}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">

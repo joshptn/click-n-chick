@@ -7,7 +7,6 @@ import {
   blockerFor,
   checkoutApi,
   isEmail,
-  pickupSlots,
   toLocalMobile,
   type CheckoutScope,
   type Fulfilment,
@@ -15,11 +14,12 @@ import {
 } from "../../api/checkout";
 import { formatPeso } from "../../lib/money";
 import { formatTime } from "../../lib/time";
+import { clockOnDay, isoToClock, timeWindow } from "../../lib/timeWindow";
 import { colors } from "../../theme/colors";
 import { AppText } from "../AppText";
-import { Sheet } from "../account/Sheet";
+import { TimeDialPicker } from "../pickers/TimeDialPicker";
 import { TextField } from "../auth/TextField";
-import { IconCheck, IconClock, IconInfoCircle, IconMapPin, IconPackage, IconScooter, IconTruckDelivery } from "../icons";
+import { IconClock, IconInfoCircle, IconMapPin, IconPackage, IconScooter, IconTruckDelivery } from "../icons";
 import { DeliveryMap, type Point } from "./DeliveryMap";
 import { Notice } from "./parts";
 
@@ -193,7 +193,12 @@ export function DispatchStep({ values, onChange, quote, quoting, scope, onMapTou
   const phoneError = values.phone.trim() !== "" && !toLocalMobile(values.phone) ? "Enter an 11-digit mobile number starting 09." : undefined;
   const emailError = guest && values.email.trim() !== "" && !isEmail(values.email) ? "That email address does not look right." : undefined;
 
-  const slots = pickupSlots(quote?.fulfilment_type === "pickup" ? quote.pickup : null);
+  // Decided 2026-11-20: the clock dial offers only today's bookable times, from
+  // the quote's window (now plus the lead time, to closing less 15).
+  const pickupWindow = quote?.fulfilment_type === "pickup" ? quote.pickup : null;
+  const pickupMin = isoToClock(pickupWindow?.earliest);
+  const pickupMax = isoToClock(pickupWindow?.latest);
+  const pickupOpen = Boolean(timeWindow(pickupMin, pickupMax));
   const showResults = delivery && search.trim().length >= 3;
 
   return (
@@ -364,13 +369,13 @@ export function DispatchStep({ values, onChange, quote, quoting, scope, onMapTou
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={values.pickupAt ? `Pick-up time ${formatTime(values.pickupAt)}. Change` : "Choose a pick-up time"}
-              disabled={slots.length === 0}
+              disabled={!pickupOpen}
               onPress={() => setTimeOpen(true)}
               style={[styles.timeField, timeBlocker && styles.timeFieldError]}
               testID="pickup-time"
             >
               <AppText family="display" size={14.5} color={values.pickupAt ? colors.authInk : colors.authHint} style={styles.flex}>
-                {values.pickupAt ? formatTime(values.pickupAt) : slots.length > 0 ? "Choose a time" : "No pick-up times left today"}
+                {values.pickupAt ? formatTime(values.pickupAt) : pickupOpen || !pickupWindow ? "Choose a time" : "No pick-up times left today"}
               </AppText>
               <IconClock size={18} color={colors.authHint} strokeWidth={2} />
             </Pressable>
@@ -392,32 +397,21 @@ export function DispatchStep({ values, onChange, quote, quoting, scope, onMapTou
             </AppText>
           </View>
 
-          <Sheet visible={timeOpen} title="Pick-up time" subtitle="Today, at BES House of Chicken" onClose={() => setTimeOpen(false)}>
-            <View style={styles.slots}>
-              {slots.map((slot) => {
-                const selected = slot === values.pickupAt;
-
-                return (
-                  <Pressable
-                    key={slot}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    onPress={() => {
-                      onChange({ pickupAt: slot });
-                      setTimeOpen(false);
-                    }}
-                    style={[styles.slot, selected && styles.slotSelected]}
-                    testID={`slot-${formatTime(slot)}`}
-                  >
-                    {selected && <IconCheck size={13} color={colors.white} strokeWidth={3} />}
-                    <AppText family="display" weight="semibold" size={13} color={selected ? colors.white : colors.authLabel}>
-                      {formatTime(slot)}
-                    </AppText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Sheet>
+          <TimeDialPicker
+            visible={timeOpen}
+            onClose={() => setTimeOpen(false)}
+            value={isoToClock(values.pickupAt)}
+            min={pickupMin}
+            max={pickupMax}
+            title="Select pick-up time"
+            earlyMessage={(first) => `That time has passed or is too soon for the kitchen to prepare your order. The earliest pick-up is ${first}.`}
+            lateMessage={(last) => `Too late: the last pick-up today is ${last}, shortly before the store closes.`}
+            onConfirm={(clock) => {
+              const pickupAt = pickupWindow?.earliest ? clockOnDay(pickupWindow.earliest, clock) : null;
+              if (pickupAt) onChange({ pickupAt });
+              setTimeOpen(false);
+            }}
+          />
         </>
       )}
     </>
@@ -454,18 +448,4 @@ const styles = StyleSheet.create({
   timeFieldError: { borderColor: "#f5b4b2" },
   infoLine: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   infoIcon: { marginTop: 2 },
-  slots: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  slot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minWidth: 92,
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.fieldBorder,
-    backgroundColor: colors.white,
-  },
-  slotSelected: { backgroundColor: colors.orange, borderColor: colors.orange },
 });

@@ -51,7 +51,7 @@ class OrderNotice
 
         return [
             'title' => 'New advance request',
-            'body' => "Request #{$order->id} for {$this->collectAt($order)} - "
+            'body' => "{$this->requestor($order)}'s request for {$this->collectAt($order)} - "
                 ."{$items} item(s), {$this->peso($order->total_amount ?? $order->total_price)}. "
                 .'It needs accepting or rejecting.',
             'type' => self::TYPE_ADVANCE_REQUEST,
@@ -67,8 +67,31 @@ class OrderNotice
 
         return [
             'title' => 'Advance order cancelled',
-            'body' => "The customer cancelled order #{$order->id}, due {$this->collectAt($order)}. "
+            'body' => "{$this->staffName($order)} was cancelled by the customer, due {$this->collectAt($order)}. "
                 .($owed > 0 ? "{$this->peso($owed)} is owed back to them." : 'No refund is owed.'),
+            'type' => self::TYPE_ADVANCE,
+        ];
+    }
+
+    /**
+     * An advance order was paid and waits in To Confirm (decided 2026-11-20,
+     * Store Agents only): started at once if it is for today, scheduled if it
+     * is for a later day. Typed advance_order, so the bell opens Advance Orders.
+     *
+     * @return array{title: string, body: string, type: string}
+     */
+    public function staffAdvancePaid(Order $order): array
+    {
+        $collect = $this->collection($order);
+        $today = $collect !== null && $collect->isSameDay(CarbonImmutable::now($this->store->timezone()));
+
+        return [
+            'title' => 'Advance order paid',
+            'body' => $today
+                ? "{$this->staffName($order)} was paid and is for today, {$collect->format('g:i A')}. "
+                    .'Start preparing it from To Confirm.'
+                : "{$this->staffName($order)} was paid for {$this->collectAt($order)}. "
+                    .'Schedule it from To Confirm.',
             'type' => self::TYPE_ADVANCE,
         ];
     }
@@ -82,7 +105,7 @@ class OrderNotice
         // chased with the customer instead (customerDueTodayUnpaid).
         return [
             'title' => 'Advance order due today',
-            'body' => "Order #{$order->id} is due for collection at {$at} today. "
+            'body' => "{$this->staffName($order)} is due for collection at {$at} today. "
                 .'Start preparing it from Scheduled Orders when the kitchen is ready.',
             'type' => self::TYPE_ADVANCE_DUE,
         ];
@@ -185,18 +208,34 @@ class OrderNotice
             : ucfirst((string) $event);
 
         $body = match ($event) {
-            'create' => "Your order #{$order->id} has been placed. We will confirm it shortly.",
-            OrderStatus::CONFIRMED => "Good news! Your order #{$order->id} has been confirmed.",
-            OrderStatus::PREPARING => "Your order #{$order->id} is being prepared now.",
-            OrderStatus::READY_FOR_PICKUP => "Your order #{$order->id} is ready for collection at the store.",
-            OrderStatus::ON_THE_WAY => "Your order #{$order->id} is on the way.",
-            OrderStatus::COMPLETED => "Your order #{$order->id} has been completed. Thank you for ordering with us!",
-            OrderStatus::DELIVERED => "Your order #{$order->id} has been delivered. Thank you for ordering with us!",
-            OrderStatus::CANCELLED => $this->cancellationBody($order, "your order #{$order->id}"),
-            default => "There is an update regarding your order #{$order->id}.",
+            'create' => "Your order {$order->reference()} has been placed. We will confirm it shortly.",
+            OrderStatus::CONFIRMED => "Good news! Your order {$order->reference()} has been confirmed.",
+            OrderStatus::PREPARING => "Your order {$order->reference()} is being prepared now.",
+            OrderStatus::READY_FOR_PICKUP => "Your order {$order->reference()} is ready for collection at the store.",
+            OrderStatus::ON_THE_WAY => "Your order {$order->reference()} is on the way.",
+            OrderStatus::COMPLETED => "Your order {$order->reference()} has been completed. Thank you for ordering with us!",
+            OrderStatus::DELIVERED => "Your order {$order->reference()} has been delivered. Thank you for ordering with us!",
+            OrderStatus::CANCELLED => $this->cancellationBody($order, "your order {$order->reference()}"),
+            default => "There is an update regarding your order {$order->reference()}.",
         };
 
         return ['title' => 'Order '.$label, 'body' => $body];
+    }
+
+    /** The customer's name, or "A customer" (decided 2026-11-20: a request is known by its requestor). */
+    private function requestor(Order $order): string
+    {
+        $name = trim(($order->user->first_name ?? '').' '.($order->user->last_name ?? ''));
+
+        return $name === '' ? 'A customer' : $name;
+    }
+
+    /** "Order A-007" once accepted, otherwise "Juan Dela Cruz's request". */
+    private function staffName(Order $order): string
+    {
+        $number = $order->number();
+
+        return $number !== null ? "Order {$number}" : "{$this->requestor($order)}'s request";
     }
 
     private function cancellationBody(Order $order, string $subject): string

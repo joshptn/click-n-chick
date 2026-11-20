@@ -141,7 +141,7 @@ class AdvanceRequestDecisionTest extends TestCase
             ->assertJsonPath('summary.due_today', 1);
     }
 
-    public function test_an_advance_request_carries_no_queue_number(): void
+    public function test_a_request_has_no_number_until_accepted_then_its_own_daily_count(): void
     {
         $customer = $this->user(User::ROLE_CUSTOMER);
         $agent = $this->user(User::ROLE_ADMIN);
@@ -150,9 +150,21 @@ class AdvanceRequestDecisionTest extends TestCase
 
         $this->actingAs($agent)->getJson("/api/agent/advance-requests/{$order->id}")
             ->assertOk()
-            ->assertJsonMissingPath('order.queue_number')
+            ->assertJsonPath('order.reference', null)
             ->assertJsonPath('order.is_paid', false)
             ->assertJsonPath('order.item_count', 2);
+
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
+            ->assertOk()
+            ->assertJsonPath('order.advance_order_number', '001')
+            ->assertJsonPath('order.reference', 'A-001');
+
+        $second = $this->advanceOrder($this->user(User::ROLE_CUSTOMER));
+
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$second->id}/accept", ['preparation_time' => 30])
+            ->assertJsonPath('order.reference', 'A-002');
+
+        $this->assertNull($order->fresh()->order_number, 'The immediate count is kept apart.');
     }
 
     public function test_an_immediate_order_is_not_an_advance_request(): void

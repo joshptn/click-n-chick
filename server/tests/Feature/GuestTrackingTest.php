@@ -314,7 +314,7 @@ class GuestTrackingTest extends TestCase
         $payload = (new OrderBroadcast($order, 'update'))->broadcastWith();
 
         $this->assertSame(
-            ['event' => 'update', 'order' => ['id' => $order->id, 'status' => OrderStatus::PLACED]],
+            ['event' => 'update', 'order' => ['id' => $order->id, 'status' => OrderStatus::PLACED, 'number' => $order->number()]],
             $payload
         );
 

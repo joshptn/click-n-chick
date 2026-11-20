@@ -50,7 +50,7 @@ export function ActiveOrderCard() {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Order ${order.reference}. ${line(order)}`}
+      accessibilityLabel={`${order.title}. ${line(order)}`}
       onPress={open}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       testID="active-order"
@@ -60,7 +60,7 @@ export function ActiveOrderCard() {
       </View>
       <View style={styles.text}>
         <AppText family="display" weight="semibold" size={14} color={colors.white}>
-          Order {order.reference}
+          {order.title}
         </AppText>
         <AppText family="display" size={11.5} color="rgba(255,255,255,0.9)" numberOfLines={1}>
           {line(order)}

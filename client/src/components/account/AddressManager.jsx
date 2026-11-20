@@ -151,7 +151,7 @@ function AddressRow({ address, onEdit, onDelete, onMakeDefault, isBusy }) {
               </span>
             )}
           </p>
-          <p className="m-0 mt-0.5 font-display text-[12.5px] leading-snug text-[#6f6b68]">
+          <p className="[overflow-wrap:anywhere] m-0 mt-0.5 font-display text-[12.5px] leading-snug text-[#6f6b68]">
             {address.full_address}
           </p>
           {address.delivery_note && (

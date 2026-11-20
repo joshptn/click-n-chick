@@ -432,5 +432,15 @@ class AdvancePreparationRuleTest extends TestCase
             ->postJson('/api/advance-orders/quote', ['scheduled_for' => '2026-10-06T14:00:00'])
             ->assertOk()
             ->assertJsonPath('can_submit', true);
+
+        // And it is stored as that moment: 2:00 PM in Manila is 06:00 UTC.
+        $this->actingAs($customer)
+            ->postJson('/api/advance-orders', ['scheduled_for' => '2026-10-06T14:00:00'])
+            ->assertCreated();
+
+        $this->assertSame(
+            '2026-10-06 14:00',
+            Order::query()->latest('id')->first()->scheduled_for->setTimezone('Asia/Manila')->format('Y-m-d H:i')
+        );
     }
 }

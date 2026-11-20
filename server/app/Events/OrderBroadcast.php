@@ -15,8 +15,7 @@ class OrderBroadcast implements LiveBroadcast
     public function __construct(
         public Order $order,
         public string $eventName,
-    ) {
-    }
+    ) {}
 
     public function broadcastOn(): array
     {
@@ -70,6 +69,9 @@ class OrderBroadcast implements LiveBroadcast
             'order' => [
                 'id' => $this->order->id,
                 'status' => $this->order->status,
+                // "007" / "A-007" for the staff toast (2026-11-20); not
+                // personal, so safe on a guest's public channel too.
+                'number' => $this->order->number(),
             ],
         ];
     }

@@ -7,8 +7,14 @@ import {
   IconUser,
 } from "@tabler/icons-react";
 
+import { useState } from "react";
+
 import Button from "../ui/Button";
+import CalendarPicker from "../ui/CalendarPicker";
+import PickerField from "../ui/PickerField";
+import TimeDialPicker from "../ui/TimeDialPicker";
 import { daysFromToday } from "../../lib/advance";
+import { formatCalendarDate, formatClock, toMinutes } from "../../lib/timeWindow";
 
 const SCHEDULE_CODES = [
   "SCHEDULE_REQUIRED",
@@ -66,6 +72,14 @@ function ScheduleStep({
 
   const lead = daysFromToday(value.date);
 
+  // Decided 2026-11-20: our own calendar and clock dial, which only offer
+  // what the window allows (the browser's boxes accepted anything typed).
+  const [openPicker, setOpenPicker] = useState(null);
+  // The day's last collection; a closing time past midnight ends the list
+  // before midnight, since a collection is checked against its own day.
+  const lastTime =
+    schedule && toMinutes(schedule.closes_at) > toMinutes(schedule.opens_at) ? schedule.closes_at : "23:55";
+
   return (
     <div className="flex flex-col gap-5">
       <p className="m-0 flex items-start gap-2 rounded-[12px] bg-[#faf7f3] px-3.5 py-3 font-display text-[12.5px] leading-snug text-[#6f6b68]">
@@ -80,55 +94,37 @@ function ScheduleStep({
           htmlFor="advance-date"
           hint={
             schedule
-              ? `From ${schedule.earliest_date} to ${schedule.latest_date}`
+              ? `${formatCalendarDate(schedule.earliest_date)} to ${formatCalendarDate(schedule.latest_date)}`
               : "Tomorrow onwards"
           }
         >
-          <div className="relative">
-            <IconCalendarEvent
-              size={16}
-              stroke={2}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a39f9b]"
-            />
-
-            <input
-              id="advance-date"
-              type="date"
-              value={value.date}
-              min={schedule?.earliest_date}
-              max={schedule?.latest_date}
-              onChange={(event) => onChange({ date: event.target.value })}
-              className={`h-[46px] w-full rounded-[10px] border bg-white pl-10 pr-3 font-display text-[13.5px] text-ink outline-none transition-colors focus:border-brand-400 ${
-                scheduleError ? "border-[#e5322d]" : "border-[#ece7e0]"
-              }`}
-            />
-          </div>
+          <PickerField
+            id="advance-date"
+            icon={IconCalendarEvent}
+            value={value.date ? formatCalendarDate(value.date) : ""}
+            placeholder="Choose a date"
+            onOpen={() => setOpenPicker("date")}
+            invalid={Boolean(scheduleError)}
+            disabled={!schedule}
+            ariaLabel={value.date ? `Collection date ${formatCalendarDate(value.date)}. Change` : "Choose a collection date"}
+          />
         </Field>
 
         <Field
           label="Collection time"
           htmlFor="advance-time"
-          hint={schedule ? `We are open ${schedule.opens_at} to ${schedule.closes_at}` : null}
+          hint={schedule ? `From ${formatClock(schedule.opens_at)} to ${formatClock(lastTime)}` : null}
         >
-          <div className="relative">
-            <IconClock
-              size={16}
-              stroke={2}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a39f9b]"
-            />
-
-            <input
-              id="advance-time"
-              type="time"
-              value={value.time}
-              onChange={(event) => onChange({ time: event.target.value })}
-              className={`h-[46px] w-full rounded-[10px] border bg-white pl-10 pr-3 font-display text-[13.5px] text-ink outline-none transition-colors focus:border-brand-400 ${
-                scheduleError ? "border-[#e5322d]" : "border-[#ece7e0]"
-              }`}
-            />
-          </div>
+          <PickerField
+            id="advance-time"
+            icon={IconClock}
+            value={value.time ? formatClock(value.time) : ""}
+            placeholder="Choose a time"
+            onOpen={() => setOpenPicker("time")}
+            invalid={Boolean(scheduleError)}
+            disabled={!schedule}
+            ariaLabel={value.time ? `Collection time ${formatClock(value.time)}. Change` : "Choose a collection time"}
+          />
         </Field>
       </div>
 
@@ -159,7 +155,7 @@ function ScheduleStep({
         </p>
 
         <p className="m-0 flex items-center gap-2 font-display text-[13px] text-ink">
-          <IconUser size={15} stroke={2} aria-hidden="true" className="shrink-0 text-brand-500" />
+          <IconUser size={15} stroke={2} aria-hidden="true" className="[overflow-wrap:anywhere] shrink-0 text-brand-500" />
           {contact?.name || "—"}
           {contact?.phone && <span className="text-[#8d8884]">· {contact.phone}</span>}
         </p>
@@ -196,6 +192,39 @@ function ScheduleStep({
           <IconChevronRight size={16} stroke={2.6} aria-hidden="true" />
         </Button>
       </div>
+
+      <CalendarPicker
+        opened={openPicker === "date"}
+        onClose={() => setOpenPicker(null)}
+        value={value.date}
+        min={schedule?.earliest_date}
+        max={schedule?.latest_date}
+        earlyMessage={(first) =>
+          schedule?.tomorrow_closed
+            ? `Orders for tomorrow closed when the store did today, so the earliest date is ${first}.`
+            : `Advance orders start from tomorrow. The earliest date is ${first}.`
+        }
+        lateMessage={(last) => `You can book up to ${schedule?.max_days_ahead ?? 30} days ahead, until ${last}.`}
+        onConfirm={(date) => {
+          onChange({ date });
+          setOpenPicker(null);
+        }}
+      />
+
+      <TimeDialPicker
+        opened={openPicker === "time"}
+        onClose={() => setOpenPicker(null)}
+        value={value.time}
+        min={schedule?.opens_at}
+        max={lastTime}
+        title="Select collection time"
+        earlyMessage={(first) => `The store opens at ${first}, so that is the earliest collection.`}
+        lateMessage={(last) => `The last collection is ${last}, shortly before the store closes.`}
+        onConfirm={(time) => {
+          onChange({ time });
+          setOpenPicker(null);
+        }}
+      />
     </div>
   );
 }

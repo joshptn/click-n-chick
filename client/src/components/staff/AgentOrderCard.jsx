@@ -1,14 +1,11 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { IconArrowRight, IconCircleCheck, IconCircleCheckFilled, IconClock } from "@tabler/icons-react";
+import { IconArrowRight, IconCircleCheck, IconCircleCheckFilled, } from "@tabler/icons-react";
 
 import { advanceLabel, handoverLabel, kitchenSummary, paymentLabel } from "../../lib/agent";
 import { formatPeso } from "../../lib/menu";
 import { formatTime } from "../../lib/orders";
 
 const MotionArticle = motion.article;
-
-/** A wait worth flagging: the line is first-come, first-served. */
-const LONG_WAIT_MINUTES = 15;
 
 function TypePill({ type }) {
   const delivery = type === "delivery";
@@ -47,10 +44,8 @@ function AgentOrderCard({ order, busy, canAct, onAdvance, onReject, onOpen }) {
   const isFinished = order.status === "completed" || order.status === "delivered";
   const handover = handoverLabel(order);
   const forward = advanceLabel(order);
-  const longWait =
-    ["placed", "confirmed", "preparing"].includes(order.status) && (order.waiting_minutes ?? 0) >= LONG_WAIT_MINUTES;
 
-  const time = isFinished ? order.closed_at ?? order.created_at : order.queued_at ?? order.created_at;
+  const time = isFinished ? order.closed_at ?? order.created_at : order.created_at;
 
   return (
     <MotionArticle
@@ -71,14 +66,14 @@ function AgentOrderCard({ order, busy, canAct, onAdvance, onReject, onOpen }) {
       }}
       data-testid="agent-order-card"
       data-status={order.status}
-      aria-label={`Order ${order.queue_label ?? order.id}, ${order.status_label}`}
+      aria-label={`Order ${order.reference ?? order.id}, ${order.status_label}`}
       className={`cursor-pointer rounded-[12px] border bg-white p-3 text-left shadow-[0_2px_10px_-6px_rgba(65,33,17,0.18)] outline-none transition-[border-color,box-shadow] hover:border-brand-200 hover:shadow-[0_8px_22px_-12px_rgba(65,33,17,0.3)] focus-visible:ring-2 focus-visible:ring-brand-300 ${
         isNew ? "border-[#ffd6b3]" : "border-[#f0e9df]"
       }`}
     >
       <div className="flex items-center gap-1.5">
         <span className="whitespace-nowrap font-display text-[12px] font-bold text-brand-600">
-          {order.queue_label ?? `#${order.id}`}
+          {order.reference ?? `#${order.id}`}
         </span>
         <TypePill type={order.order_type} />
         <span className="ml-auto whitespace-nowrap font-display text-[10px] text-[#a39f9b]">{formatTime(time)}</span>
@@ -111,23 +106,11 @@ function AgentOrderCard({ order, busy, canAct, onAdvance, onReject, onOpen }) {
         </span>
       </div>
 
-      {(handover || longWait || (order.details_confirmed_at && !isFinished)) && (
+      {handover && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {handover && (
             <span className="rounded-full bg-[#eef4ff] px-2 py-0.5 font-display text-[9.5px] font-semibold text-[#2563eb]">
               {handover}
-            </span>
-          )}
-          {order.details_confirmed_at && !isFinished && !handover && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#ecf9f0] px-2 py-0.5 font-display text-[9.5px] font-semibold text-[#2f9e44]">
-              <IconCircleCheck size={11} stroke={2.4} />
-              Reviewed before paying
-            </span>
-          )}
-          {longWait && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#fff8e1] px-2 py-0.5 font-display text-[9.5px] font-semibold text-[#c98500]">
-              <IconClock size={11} stroke={2.4} />
-              Waiting {order.waiting_minutes} min
             </span>
           )}
         </div>

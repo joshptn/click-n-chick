@@ -37,7 +37,7 @@ const TIMELINE: { Icon: ComponentType<IconProps>; title: string; body: string; d
  */
 export default function AdvanceSent() {
   const params = useLocalSearchParams<{ id: string; scheduled_for?: string; total?: string; items?: string }>();
-  const collectAt = params.scheduled_for ? `${formatCollectionDay(params.scheduled_for)}, ${formatTime(params.scheduled_for)}` : null;
+  const collectAt = params.scheduled_for ? `${formatCollectionDay(params.scheduled_for)} at ${formatTime(params.scheduled_for)}` : null;
   const items = Number(params.items ?? 0);
 
   return (
@@ -54,8 +54,8 @@ export default function AdvanceSent() {
               Your request is with the store
             </AppText>
             <AppText family="display" size={13} color="rgba(255,255,255,0.88)" style={styles.center}>
-              Request #{params.id}
-              {collectAt ? ` · for ${collectAt}` : ""}
+              {/* No number until the store accepts (decided 2026-11-20). */}
+              {collectAt ? `Order for ${collectAt}` : "Your advance order"}
             </AppText>
           </View>
 

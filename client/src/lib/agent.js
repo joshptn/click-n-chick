@@ -38,6 +38,35 @@ export const CLAIM_REJECTION_REASONS = [
   "This is not a Senior Citizen or PWD ID.",
 ];
 
+/** Keyed under "orders"; the page updates one row at a time on order events. */
+export const PENDING_ORDERS_KEY = ["orders", "pending"];
+
+/** One order as Today's Orders shows it, and whether it is on today's board. */
+export function fetchAgentOrder(id, { signal } = {}) {
+  return api.get(`/api/agent/orders/${id}`, { signal });
+}
+
+/** One order as Pending Orders shows it: { group, row }, both null when off the page. */
+export function fetchPendingOrder(id, { signal } = {}) {
+  return api.get(`/api/agent/pending-orders/${id}`, { signal });
+}
+
+/** One advance order as Advance Orders shows it. */
+export function fetchAdvanceRequest(id, { signal } = {}) {
+  return api.get(`/api/agent/advance-requests/${id}`, { signal });
+}
+
+/**
+ * Whether a live order event can concern an advance order: an advance order
+ * has no number until accepted, then "A-007"; an immediate one is numbered
+ * before it is ever announced.
+ */
+export function maybeAdvanceEvent(payload) {
+  const number = payload?.order?.number;
+
+  return number == null || String(number).startsWith("A-");
+}
+
 export function fetchAgentQueue({ signal } = {}) {
   return api.get("/api/agent/queue", { signal });
 }
@@ -184,6 +213,14 @@ export const ADVANCE_CANCEL_REASONS = [
   "We could not reach the customer.",
   "The kitchen cannot fulfil it on the day.",
 ];
+
+/**
+ * What staff call an advance order (decided 2026-11-20): "A-007" once
+ * accepted; before that it has no number and goes by its customer's name.
+ */
+export function advanceName(order) {
+  return order?.reference ?? (order?.customer?.name || "Customer");
+}
 
 /** "Tomorrow · 12:00 PM", "Fri, Nov 7 · 3:30 PM" - when the customer collects. */
 export function collectionLabel(order) {
@@ -422,9 +459,7 @@ export function matchesSearch(order, term) {
   if (!needle) return true;
 
   const haystack = [
-    order.queue_label,
     order.reference,
-    order.order_number,
     order.customer?.name,
     order.customer?.phone,
     ...(order.items ?? []).flatMap((item) => [item.food_name, ...(item.addons ?? [])]),
