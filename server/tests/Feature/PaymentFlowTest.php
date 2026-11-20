@@ -182,7 +182,7 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(10, $food->fresh()->stock_quantity);
         $this->assertSame(8, $food->fresh()->available_quantity);
         $this->assertSame(0, CartItem::count());
-        $this->assertNull($order->queue_number);
+        $this->assertNull($order->order_number);
         Event::assertNotDispatched(OrderBroadcast::class);
         $this->assertSame(0, Notification::count());
         $this->assertFalse($this->staffSees($order));
@@ -252,7 +252,7 @@ class PaymentFlowTest extends TestCase
 
         $this->assertSame(OrderStatus::PLACED, $order->status);
         $this->assertTrue($order->isPaid());
-        $this->assertSame(1, $order->queue_number);
+        $this->assertSame('001', $order->order_number);
         $this->assertSame(Payment::STATUS_PAID, $payment->payment_status);
         $this->assertSame('QRPH', $payment->payment_method);
         $this->assertNotNull($payment->paid_at);
@@ -422,7 +422,7 @@ class PaymentFlowTest extends TestCase
         $this->assertTrue($order->isPaid());
         $this->assertNull($order->closed_at);
         $this->assertNull($order->cancellation_reason);
-        $this->assertNotNull($order->queue_number);
+        $this->assertNotNull($order->order_number);
         $this->assertSame(8, $food->fresh()->stock_quantity);
         $this->assertTrue($this->staffSees($order));
     }
@@ -450,7 +450,7 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $order->status);
         $this->assertTrue($order->isPaid());
         $this->assertSame(700.0, (float) $order->refund_owed);
-        $this->assertNull($order->queue_number);
+        $this->assertNull($order->order_number);
 
         // Money is owed back, so the staff can see it now.
         $this->assertTrue($this->staffSees($order));
@@ -554,7 +554,7 @@ class PaymentFlowTest extends TestCase
         $order->refresh();
         $this->assertSame(OrderStatus::CONFIRMED, $order->status);
         $this->assertTrue($order->isPaid());
-        $this->assertNull($order->queue_number, 'An advance order takes no queue number.');
+        $this->assertNull($order->order_number, 'An advance order takes no immediate number.');
     }
 
     public function test_an_expiring_advance_request_closes_its_payment_page(): void

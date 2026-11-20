@@ -156,6 +156,8 @@ class AdvanceRequestController extends Controller
 
             $locked->accepted_at = CarbonImmutable::now();
             $locked->preparation_time = $minutes;
+            // The advance count of the day it is accepted (decided 2026-11-20).
+            $locked->assignAdvanceOrderNumber($locked->accepted_at);
             $locked->status = OrderStatus::ACCEPTED;
             $locked->save();
 

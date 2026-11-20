@@ -247,7 +247,7 @@ class PaymentSettlement
     private function announce(Order $order, string $outcome): void
     {
         match ($outcome) {
-            // Now the shop has it: into the queue, onto the staff boards, and
+            // Now the shop has it: its number for the day, onto the staff boards, and
             // the customer's "order placed" notice.
             self::PLACED => $this->placed($order),
             self::CONFIRMED, self::REFUND => $this->announcer->statusChanged($order),
@@ -257,7 +257,7 @@ class PaymentSettlement
 
     private function placed(Order $order): void
     {
-        $order->enterQueue(CarbonImmutable::now());
+        $order->assignOrderNumber();
         $this->announcer->announce($order, 'create', 'create');
     }
 
