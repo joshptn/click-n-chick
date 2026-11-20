@@ -58,16 +58,17 @@ class PendingOrdersTest extends TestCase
         ]);
     }
 
-    /** A regular order on a day's queue. */
+    /** A paid immediate order created on a day, with its number. */
     private function queued(string $status, array $attributes = [], string $date = self::TODAY): Order
     {
         static $number = 0;
 
-        return $this->order($status, $attributes + [
-            'queue_date' => $date,
-            'queue_number' => ++$number,
-            'queued_at' => $this->at('09:00:00', $date),
+        $order = $this->order($status, $attributes + [
+            'order_number' => str_pad((string) ++$number, 3, '0', STR_PAD_LEFT),
         ]);
+        $order->forceFill(['created_at' => $this->at('09:00:00', $date)])->save();
+
+        return $order->fresh();
     }
 
     private function ids(TestResponse $response, string $group): array

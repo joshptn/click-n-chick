@@ -205,7 +205,6 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     Route::get('/orders/all', [OrderController::class, 'allOrders']);
 
     Route::get('/agent/queue', [OrderQueueController::class, 'index']);
-    Route::get('/agent/queue/next', [OrderQueueController::class, 'next']);
     Route::get('/agent/pending-orders', [OrderQueueController::class, 'pending']);
 
     Route::get('/agent/advance-requests', [AdvanceRequestController::class, 'index']);
