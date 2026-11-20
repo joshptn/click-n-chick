@@ -71,6 +71,27 @@ class PendingOrdersTest extends TestCase
         return $order->fresh();
     }
 
+    public function test_one_order_comes_back_with_its_group_or_nothing(): void
+    {
+        // Decided 2026-11-20: the page updates the row that changed.
+        $order = $this->queued(OrderStatus::CONFIRMED);
+        $finished = $this->queued(OrderStatus::COMPLETED);
+        $staff = $this->user();
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/pending-orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('group', 'now')
+            ->assertJsonPath('row.id', $order->id)
+            ->assertJsonPath('row.is_advance', false);
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/pending-orders/{$finished->id}")
+            ->assertOk()
+            ->assertJsonPath('group', null)
+            ->assertJsonPath('row', null);
+    }
+
     private function ids(TestResponse $response, string $group): array
     {
         return array_column($response->json("groups.{$group}"), 'id');

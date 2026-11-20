@@ -174,7 +174,7 @@ function AdminDashboard() {
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
           {!canAct && <ReadOnlyNotice>Orders are moved by the Store Agent. You are viewing this board read-only.</ReadOnlyNotice>}
 
-          <StoreNotice store={storeStatus ?? board.queue?.store} />
+          <StoreNotice store={storeStatus} />
 
           <FilterBar
             search={{

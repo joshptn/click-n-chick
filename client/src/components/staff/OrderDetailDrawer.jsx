@@ -1,7 +1,6 @@
 import { Drawer } from "@mantine/core";
 import {
   IconArrowRight,
-  IconCircleCheck,
   IconClock,
   IconMapPin,
   IconNote,
@@ -72,13 +71,6 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
                     <a href={`tel:${order.customer.phone}`} className="text-brand-600 no-underline hover:underline">
                       {order.customer.phone}
                     </a>
-                  </Line>
-                )}
-                {/* "Details are correct" is hidden for now (2026-11-17); since
-                    2026-11-20 only Review Advance Order writes this, before paying. */}
-                {order.details_confirmed_at && (
-                  <Line icon={IconCircleCheck}>
-                    <span className="text-[#2f9e44]">Customer reviewed the order before paying</span>
                   </Line>
                 )}
               </div>

@@ -557,6 +557,63 @@ class PaymentFlowTest extends TestCase
         $this->assertNull($order->order_number, 'An advance order takes no immediate number.');
     }
 
+    /** An accepted advance order collected at $collectAt, paid through the gateway. */
+    private function payAdvance(CarbonImmutable $collectAt): Order
+    {
+        $customer = $this->user();
+        $order = Order::create([
+            'user_id' => $customer->id,
+            'order_type' => 'pickup',
+            'scheduled_for' => $collectAt,
+            'accepted_at' => now(),
+            'advance_order_number' => '004',
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'payment_status' => Order::PAYMENT_UNPAID,
+            'subtotal' => 400,
+            'discount_amount' => 0,
+            'total_amount' => 400,
+            'total_price' => 400,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/pay")->assertOk();
+        $session = $this->gateway->latest()->id;
+        $this->gateway->pay($session);
+        $this->webhook('payment_session.completed', ['payment_session_id' => $session])->assertOk();
+
+        return $order->fresh();
+    }
+
+    public function test_store_agents_are_told_a_paid_advance_order_waits_to_be_scheduled(): void
+    {
+        // Decided 2026-11-20: Store Agents only, not the Store Manager.
+        $agent = $this->user(User::ROLE_ADMIN);
+        $manager = $this->user(User::ROLE_SUPER_ADMIN);
+
+        $order = $this->payAdvance(CarbonImmutable::now()->addDays(3));
+
+        $this->assertSame(OrderStatus::CONFIRMED, $order->status);
+
+        $notice = Notification::where('user_id', $agent->id)->where('title', 'Advance order paid')->first();
+        $this->assertNotNull($notice);
+        $this->assertSame('advance_order', $notice->notification_type);
+        $this->assertSame($order->id, $notice->order_id);
+        $this->assertStringContainsString('Order A-004 was paid for', $notice->body);
+        $this->assertStringContainsString('Schedule it from To Confirm.', $notice->body);
+
+        $this->assertSame(0, Notification::where('user_id', $manager->id)->count());
+    }
+
+    public function test_a_paid_advance_order_for_today_is_to_be_started(): void
+    {
+        $agent = $this->user(User::ROLE_ADMIN);
+
+        $this->payAdvance(CarbonImmutable::now()->addHours(3));
+
+        $body = Notification::where('user_id', $agent->id)->where('title', 'Advance order paid')->value('body');
+        $this->assertStringContainsString('was paid and is for today', $body);
+        $this->assertStringContainsString('Start preparing it from To Confirm.', $body);
+    }
+
     public function test_an_expiring_advance_request_closes_its_payment_page(): void
     {
         $customer = $this->user();

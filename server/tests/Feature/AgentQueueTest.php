@@ -56,7 +56,7 @@ class AgentQueueTest extends TestCase
         ]);
 
         if ($at !== null) {
-            $order->forceFill(['created_at' => $at])->save();
+            $order->forceFill(['created_at' => $at->utc()])->save();
         }
 
         $order->assignOrderNumber();
@@ -199,18 +199,55 @@ class AgentQueueTest extends TestCase
             ->assertJsonPath('line.0.payment_method', 'gcash');
     }
 
-    public function test_the_summary_reports_the_shape_of_the_day(): void
+    public function test_the_board_sends_only_what_it_reads(): void
     {
+        // Trimmed 2026-11-20: column counts come from the lists, the store's
+        // state from its own endpoint, and nothing reads the transitions.
         $this->queued('pickup', OrderStatus::PLACED);
-        $this->queued('pickup', OrderStatus::PREPARING);
-        $this->queued('pickup', OrderStatus::READY_FOR_PICKUP);
 
         $this->actingAs($this->staff(), 'sanctum')
             ->getJson('/api/agent/queue')
             ->assertOk()
-            ->assertJsonPath('summary.in_line', 2)
-            ->assertJsonPath('summary.awaiting_handover', 1)
-            ->assertJsonPath('summary.awaiting_confirmation', 1);
+            ->assertJsonMissingPath('store')
+            ->assertJsonMissingPath('summary.in_line')
+            ->assertJsonMissingPath('summary.awaiting_handover')
+            ->assertJsonMissingPath('summary.awaiting_confirmation')
+            ->assertJsonMissingPath('line.0.allowed_transitions')
+            ->assertJsonMissingPath('line.0.details_confirmed_at')
+            ->assertJsonStructure(['summary' => ['completed_today', 'cancelled_today']]);
+    }
+
+    // -----------------------------------------------------------------
+    // One order at a time (decided 2026-11-20)
+    // -----------------------------------------------------------------
+
+    public function test_one_order_comes_back_with_whether_it_is_on_the_board(): void
+    {
+        $order = $this->queued('pickup', OrderStatus::CONFIRMED);
+        $staff = $this->staff();
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('on_board', true)
+            ->assertJsonPath('order.id', $order->id)
+            ->assertJsonPath('order.reference', '001');
+
+        $yesterday = $this->queued('pickup', OrderStatus::PREPARING, CarbonImmutable::now()->subDay());
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson("/api/agent/orders/{$yesterday->id}")
+            ->assertOk()
+            ->assertJsonPath('on_board', false);
+    }
+
+    public function test_one_order_is_staff_only(): void
+    {
+        $order = $this->queued();
+
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_CUSTOMER]), 'sanctum')
+            ->getJson("/api/agent/orders/{$order->id}")
+            ->assertForbidden();
     }
 
     public function test_yesterdays_loose_ends_stay_out_of_todays_queue(): void
@@ -254,14 +291,6 @@ class AgentQueueTest extends TestCase
             ->assertJsonPath('line.0.reference', '001')
             ->assertJsonPath('line.0.status_label', 'Placed')
             ->assertJsonPath('line.0.next_status', OrderStatus::CONFIRMED);
-    }
-
-    public function test_the_queue_carries_the_store_state_for_the_dashboard(): void
-    {
-        $this->actingAs($this->staff(), 'sanctum')
-            ->getJson('/api/agent/queue')
-            ->assertOk()
-            ->assertJsonStructure(['store' => ['accepting_orders', 'accepting_delivery', 'opens_at', 'closes_at']]);
     }
 
     // -----------------------------------------------------------------

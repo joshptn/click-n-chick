@@ -8,8 +8,11 @@ import {
   advancedLocally,
   boardOrders,
   cancelAgentOrder,
+  fetchAgentOrder,
   fetchAgentQueue,
+  maybeAdvanceEvent,
 } from "../lib/agent";
+import { useOrderEvents } from "../lib/orderEvents";
 
 const LINE = ["placed", "confirmed", "preparing"];
 const HANDOVER = ["ready_for_pickup", "on_the_way"];
@@ -18,41 +21,55 @@ const DONE = ["completed", "delivered"];
 /** The day's number, then the id: numbers may repeat (decided 2026-11-20). */
 const byQueueNumber = (a, b) => Number(a.order_number ?? 0) - Number(b.order_number ?? 0) || a.id - b.id;
 
-/** The queue payload with one order moved to wherever its status now puts it. */
-function withOrder(queue, updated) {
-  const strip = (list = []) => list.filter((order) => order.id !== updated.id);
+const strip = (list = [], id) => list.filter((order) => order.id !== id);
 
-  let line = strip(queue.line);
-  let handover = strip(queue.handover);
-  let completed = strip(queue.completed);
+/**
+ * The board with one order put wherever its status now puts it, or taken off
+ * when it no longer belongs (`onBoard` false). The day's finished and
+ * cancelled counts move with it, counted only when the card was on the board
+ * before, so the same change arriving twice counts once.
+ */
+function patchBoard(queue, updated, onBoard = true) {
+  const before = boardOrders(queue).find((order) => order.id === updated.id) ?? null;
 
-  if (LINE.includes(updated.status)) line = [...line, updated].sort(byQueueNumber);
-  else if (HANDOVER.includes(updated.status)) handover = [...handover, updated].sort(byQueueNumber);
-  else if (DONE.includes(updated.status)) completed = [updated, ...completed];
-
-  return { ...queue, line, handover, completed };
-}
-
-function withoutOrder(queue, id) {
-  const strip = (list = []) => list.filter((order) => order.id !== id);
-
-  return {
+  const next = {
     ...queue,
-    line: strip(queue.line),
-    handover: strip(queue.handover),
-    completed: strip(queue.completed),
-    summary: { ...queue.summary, cancelled_today: (queue.summary?.cancelled_today ?? 0) + 1 },
+    line: strip(queue.line, updated.id),
+    handover: strip(queue.handover, updated.id),
+    completed: strip(queue.completed, updated.id),
   };
+
+  if (!onBoard) return next;
+
+  if (LINE.includes(updated.status)) next.line = [...next.line, updated].sort(byQueueNumber);
+  else if (HANDOVER.includes(updated.status)) next.handover = [...next.handover, updated].sort(byQueueNumber);
+  else if (DONE.includes(updated.status)) next.completed = [updated, ...next.completed];
+
+  if (before) {
+    const summary = { ...queue.summary };
+
+    if (!DONE.includes(before.status) && DONE.includes(updated.status)) {
+      summary.completed_today = (summary.completed_today ?? 0) + 1;
+    }
+
+    if (updated.status === "cancelled") {
+      summary.cancelled_today = (summary.cancelled_today ?? 0) + 1;
+    }
+
+    next.summary = summary;
+  }
+
+  return next;
 }
 
 /**
  * Today's board, and the two things an agent does to it.
  *
  * Both actions update the cache optimistically - a card that waits a round trip
- * to move feels broken at a busy counter - then settle on the server's answer.
- * The admin.orders broadcast refetches the same key, so another agent's moves
- * arrive here without a reload; the interval is only a floor for a dropped
- * socket.
+ * to move feels broken at a busy counter - then take the server's answer.
+ * Decided 2026-11-20: an order event (another agent's move, a new payment)
+ * fetches just that order and updates its card; the whole board reloads only
+ * on the 30-second interval, on focus, and when the live connection returns.
  */
 export function useAgentBoard() {
   const queryClient = useQueryClient();
@@ -77,7 +94,34 @@ export function useAgentBoard() {
     staleTime: 5 * 1000,
   });
 
-  const settle = useCallback(() => queryClient.invalidateQueries({ queryKey: AGENT_QUEUE_KEY }), [queryClient]);
+  const patch = useCallback(
+    (order, onBoard = true) =>
+      queryClient.setQueryData(AGENT_QUEUE_KEY, (current) => (current ? patchBoard(current, order, onBoard) : current)),
+    [queryClient]
+  );
+
+  // One card at a time. An advance order never sits on this board, so an
+  // event that can only be one is skipped without a request.
+  const refreshOne = useCallback(
+    async (id) => {
+      if (!queryClient.getQueryData(AGENT_QUEUE_KEY)) return;
+
+      try {
+        const answer = await fetchAgentOrder(id);
+
+        if (answer?.order) patch(answer.order, Boolean(answer.on_board));
+      } catch {
+        // The interval reload catches up.
+      }
+    },
+    [patch, queryClient]
+  );
+
+  useOrderEvents((payload) => {
+    if (payload?.order?.id && !maybeAdvanceEvent(payload)) refreshOne(payload.order.id);
+  });
+
+  const reload = useCallback(() => queryClient.invalidateQueries({ queryKey: AGENT_QUEUE_KEY }), [queryClient]);
 
   const advance = useMutation({
     mutationFn: (order) => advanceAgentOrder(order.id),
@@ -87,9 +131,7 @@ export function useAgentBoard() {
 
       const previous = queryClient.getQueryData(AGENT_QUEUE_KEY);
 
-      if (previous) {
-        queryClient.setQueryData(AGENT_QUEUE_KEY, withOrder(previous, advancedLocally(order)));
-      }
+      if (previous) queryClient.setQueryData(AGENT_QUEUE_KEY, patchBoard(previous, advancedLocally(order)));
 
       return { previous };
     },
@@ -97,30 +139,26 @@ export function useAgentBoard() {
       if (context?.previous) queryClient.setQueryData(AGENT_QUEUE_KEY, context.previous);
 
       toast.error(error.message, "Could not move the order");
+      reload();
     },
     onSuccess: (response) => {
-      if (response?.order) {
-        queryClient.setQueryData(AGENT_QUEUE_KEY, (current) => (current ? withOrder(current, response.order) : current));
-      }
+      if (response?.order) patch(response.order);
     },
-    onSettled: (_response, _error, order) => {
-      mark(order.id, false);
-      settle();
-    },
+    onSettled: (_response, _error, order) => mark(order.id, false),
   });
 
   const cancel = useMutation({
     mutationFn: ({ order, reason, refund }) => cancelAgentOrder(order.id, { reason, refund }),
     onMutate: ({ order }) => mark(order.id, true),
     onSuccess: (response, { order }) => {
-      queryClient.setQueryData(AGENT_QUEUE_KEY, (current) => (current ? withoutOrder(current, order.id) : current));
+      patch({ ...order, status: "cancelled" });
       toast.success(response?.message ?? "Order cancelled.", "Order cancelled");
     },
-    onError: (error) => toast.error(error.message, "Could not cancel the order"),
-    onSettled: (_response, _error, { order }) => {
-      mark(order.id, false);
-      settle();
+    onError: (error) => {
+      toast.error(error.message, "Could not cancel the order");
+      reload();
     },
+    onSettled: (_response, _error, { order }) => mark(order.id, false),
   });
 
   const orders = useMemo(() => boardOrders(query.data), [query.data]);

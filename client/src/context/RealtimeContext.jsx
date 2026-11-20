@@ -8,6 +8,11 @@ import { ROLES } from "../lib/roles";
 import { disconnectEcho, getEcho, isRealtimeConfigured } from "../lib/echo";
 import { analyticsRefresher } from "../lib/analytics";
 import { STORE_STATUS_KEY } from "../lib/store";
+import { ADVANCE_REQUESTS_KEY, AGENT_QUEUE_KEY, PENDING_ORDERS_KEY } from "../lib/agent";
+import { emitOrderEvent } from "../lib/orderEvents";
+
+/** Boards that fetch the one changed order instead of reloading. */
+const CARD_UPDATED_KEYS = [AGENT_QUEUE_KEY, PENDING_ORDERS_KEY, ADVANCE_REQUESTS_KEY];
 import { endSession, sessionDeviceId } from "../lib/session";
 
 const RealtimeContext = createContext(null);
@@ -199,13 +204,19 @@ export function RealtimeProvider({ children }) {
         .subscribed(() => markSubscribed("admin.orders"))
         .listen(".order", (payload) => {
         setLastOrderEvent(payload);
-        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        // The three boards update just the changed card (decided 2026-11-20);
+        // every other order list still refetches.
+        queryClient.invalidateQueries({
+          queryKey: ["orders"],
+          predicate: (query) => !CARD_UPDATED_KEYS.some((key) => key.every((part, index) => query.queryKey[index] === part)),
+        });
+        emitOrderEvent(payload);
         analytics.order(payload?.order?.status);
 
         // A new advance request is announced by its own staff notification
-        // ("New advance request"); this toast is for orders joining the line.
+        // ("New advance request"); this toast is for new paid orders.
         if (payload?.event === "create" && payload?.order?.status !== "submitted") {
-          toast.info(`Order #${payload?.order?.id} just came in.`, "New order");
+          toast.info(`Order ${payload?.order?.number ?? `#${payload?.order?.id}`} just came in.`, "New order");
         }
       });
 

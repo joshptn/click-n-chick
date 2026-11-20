@@ -73,6 +73,29 @@ class OrderNotice
         ];
     }
 
+    /**
+     * An advance order was paid and waits in To Confirm (decided 2026-11-20,
+     * Store Agents only): started at once if it is for today, scheduled if it
+     * is for a later day. Typed advance_order, so the bell opens Advance Orders.
+     *
+     * @return array{title: string, body: string, type: string}
+     */
+    public function staffAdvancePaid(Order $order): array
+    {
+        $collect = $this->collection($order);
+        $today = $collect !== null && $collect->isSameDay(CarbonImmutable::now($this->store->timezone()));
+
+        return [
+            'title' => 'Advance order paid',
+            'body' => $today
+                ? "{$this->staffName($order)} was paid and is for today, {$collect->format('g:i A')}. "
+                    .'Start preparing it from To Confirm.'
+                : "{$this->staffName($order)} was paid for {$this->collectAt($order)}. "
+                    .'Schedule it from To Confirm.',
+            'type' => self::TYPE_ADVANCE,
+        ];
+    }
+
     /** @return array{title: string, body: string, type: string} */
     public function staffDueToday(Order $order): array
     {
