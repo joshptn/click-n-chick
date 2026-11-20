@@ -28,7 +28,7 @@ function createConfirmedOrder({ broadcast = false } = {}) {
   return tinker(
     [
       `$u = App\\Models\\User::where("email","${CUSTOMER.email}")->first();`,
-      '$o = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"delivery","status"=>"confirmed","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"queue_date"=>now("Asia/Manila")->toDateString(),"queue_number"=>rand(5000,9000),"queued_at"=>now()]);',
+      '$o = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"delivery","status"=>"confirmed","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"order_number"=>"001"]);',
       broadcast ? 'event(new App\\Events\\OrderBroadcast($o,"update"));' : "",
       'echo "ID".$o->id;',
     ].join(" ")
@@ -39,7 +39,7 @@ function createYesterdaysOrders() {
   const [regular, advance] = tinker(
     [
       `$u = App\\Models\\User::where("email","${CUSTOMER.email}")->first();`,
-      '$r = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"preparing","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"queue_date"=>now("Asia/Manila")->subDay()->toDateString(),"queue_number"=>rand(5000,9000),"queued_at"=>now()->subDay()]);',
+      '$r = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"preparing","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"order_number"=>"001"]); $r->forceFill(["created_at"=>now()->subDay()])->save();',
       '$a = App\\Models\\Order::create(["user_id"=>$u->id,"order_type"=>"pickup","status"=>"scheduled","payment_status"=>"paid","subtotal"=>250,"total_price"=>250,"total_amount"=>250,"scheduled_for"=>now()->subDay()]);',
       'echo "IDS".$r->id."-".$a->id;',
     ].join(" ")
