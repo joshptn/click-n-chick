@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { IconCalendarPlus, IconSearch, IconShoppingBag, IconX } from "@tabler/icons-react";
+import { IconCalendarPlus, IconSearch, IconShoppingBag, IconToolsKitchen2, IconX } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import AccountMenu from "./AccountMenu";
@@ -28,6 +28,8 @@ function AppHeader({
 
   const canOrderInAdvance =
     user?.role === ROLES.CUSTOMER && !pathname.startsWith("/advance-order");
+  // The way back to today's menu from the advance pages (decided 2026-11-20).
+  const canOrderToday = user?.role === ROLES.CUSTOMER && pathname.startsWith("/advance-order");
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#f0e9df] bg-white/95 backdrop-blur-md">
@@ -76,6 +78,25 @@ function AppHeader({
         )}
 
         <div className={`flex shrink-0 items-center gap-2 sm:gap-3 ${showSearch ? "" : "ml-auto"}`}>
+          {canOrderToday && (
+            <>
+              <Link
+                to="/home"
+                data-testid="order-today-entry"
+                className="hidden h-[38px] shrink-0 items-center rounded-full border border-brand-500 bg-transparent px-4 font-display text-[13px] font-semibold text-brand-600 no-underline transition-colors hover:bg-brand-50 sm:inline-flex"
+              >
+                Order Today
+              </Link>
+
+              <Link
+                to="/home"
+                aria-label="Order today"
+                className="grid h-10 w-10 place-items-center rounded-full bg-transparent text-brand-600 no-underline transition-colors hover:bg-brand-50 sm:hidden"
+              >
+                <IconToolsKitchen2 size={21} stroke={1.9} />
+              </Link>
+            </>
+          )}
 
           <span
             data-testid="store-status"
