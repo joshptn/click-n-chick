@@ -40,6 +40,10 @@ class AmendmentPolicy
     /**
      * "Details are correct" (UC-ORD-009) is hidden for now, pending the
      * client's decision (2026-11-17). Nothing about it is removed.
+     *
+     * Keep it off: since 2026-11-20 details_confirmed_at belongs to the
+     * advance order's Review step alone (OrderPaymentController::pay), and
+     * nothing else may write it until the client says otherwise.
      */
     public function canConfirmDetails(Order $order): bool
     {

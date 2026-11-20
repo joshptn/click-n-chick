@@ -35,7 +35,11 @@ class OrderPaymentController extends Controller
 
     public function pay(Request $request, Order $order)
     {
-        return $this->startPayment($this->owned($request, $order), NativeApp::isNative($request));
+        return $this->startPayment(
+            $this->owned($request, $order),
+            NativeApp::isNative($request),
+            $request->boolean('reviewed'),
+        );
     }
 
     public function status(Request $request, Order $order)
@@ -53,7 +57,13 @@ class OrderPaymentController extends Controller
         return $this->report($request->attributes->get(ResolveGuestOrder::ATTRIBUTE));
     }
 
-    private function startPayment(Order $order, bool $toApp)
+    /**
+     * @param  bool  $reviewed  The customer came through the Review Advance
+     *                          Order step (decided 2026-11-20). Its time is
+     *                          kept in details_confirmed_at, rewritten on each
+     *                          review; nothing else writes that column.
+     */
+    private function startPayment(Order $order, bool $toApp, bool $reviewed = false)
     {
         if ($refusal = $this->enforce($order)) {
             return response()->json($refusal, 422);
@@ -73,6 +83,10 @@ class OrderPaymentController extends Controller
                 'error_code' => 'NOT_AWAITING_PAYMENT',
                 'status' => $order->status,
             ], 422);
+        }
+
+        if ($reviewed && $order->isAdvance()) {
+            $order->forceFill(['details_confirmed_at' => now()])->save();
         }
 
         try {
