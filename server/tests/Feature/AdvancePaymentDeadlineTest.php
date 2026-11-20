@@ -105,7 +105,7 @@ class AdvancePaymentDeadlineTest extends TestCase
 
         $this->assertNull($order->accepted_at);
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")->assertOk();
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])->assertOk();
 
         $fresh = $order->fresh();
 
@@ -414,7 +414,7 @@ class AdvancePaymentDeadlineTest extends TestCase
             'scheduled_for' => CarbonImmutable::now()->subHour(),
         ]);
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])
             ->assertStatus(422)
             ->assertJsonPath('error_code', AdvanceExpiry::ERROR_CODE)
             ->assertJsonPath('status', OrderStatus::CANCELLED);
@@ -568,7 +568,7 @@ class AdvancePaymentDeadlineTest extends TestCase
             'scheduled_for' => CarbonImmutable::now()->addHour(),
         ]);
 
-        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept")->assertOk();
+        $this->actingAs($agent)->postJson("/api/agent/advance-requests/{$order->id}/accept", ['preparation_time' => 30])->assertOk();
 
         $this->assertSame(OrderStatus::AWAITING_PAYMENT, $order->fresh()->status);
     }

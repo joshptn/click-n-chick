@@ -149,6 +149,11 @@ final class OrderStatus
             $options[] = self::REJECTED;
         }
 
+        // A paid order for today skips scheduled (decided 2026-11-20).
+        if ($from === self::CONFIRMED) {
+            $options[] = self::PREPARING;
+        }
+
         $options[] = self::CANCELLED;
 
         return $options;

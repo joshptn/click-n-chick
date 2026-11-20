@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\DB;
  *
  * A request is cancelled by the system when it is still unpaid and either:
  *
- *   - it was accepted and its 24-hour payment deadline has passed, or
+ *   - it was accepted and its payment deadline has passed: 24 hours after
+ *     acceptance, or, for a collection today or tomorrow, the collection time
+ *     less the preparation time the Store Agent gave (decided 2026-11-20), or
  *   - its collection time has passed, whether or not it was ever answered.
  *
  * Paid orders are never touched: the order is re-read under a row lock and
@@ -46,9 +48,16 @@ final class AdvanceExpiry
 
     public const PAYMENT_BEFORE_COLLECTION = 'Payment was not received before the collection time.';
 
+    public const PAYMENT_BEFORE_PREPARATION = 'Payment was not received before the store had to start preparing it.';
+
     public const UNANSWERED = 'The store did not answer this request before the collection time.';
 
-    public const REASONS = [self::PAYMENT_DEADLINE, self::PAYMENT_BEFORE_COLLECTION, self::UNANSWERED];
+    public const REASONS = [
+        self::PAYMENT_DEADLINE,
+        self::PAYMENT_BEFORE_COLLECTION,
+        self::PAYMENT_BEFORE_PREPARATION,
+        self::UNANSWERED,
+    ];
 
     /** The statuses an unpaid advance request rests in. */
     public const UNPAID_STATUSES = [OrderStatus::SUBMITTED, OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT];
@@ -61,7 +70,7 @@ final class AdvanceExpiry
             && in_array($reason, self::REASONS, true);
     }
 
-    /** @return Collection<int, Order> Requests that look due. Each is checked again before it is cancelled. */
+    /** @return Collection<int, Order> Requests that are due. Each is checked again before it is cancelled. */
     public function due(?CarbonImmutable $now = null): Collection
     {
         $now ??= CarbonImmutable::now();
@@ -72,9 +81,18 @@ final class AdvanceExpiry
                 ->orWhere(fn (Builder $accepted) => $accepted
                     ->whereIn('status', [OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT])
                     ->whereNotNull('accepted_at')
-                    ->where('accepted_at', '<=', $now->subHours(Order::ADVANCE_PAYMENT_HOURS))))
+                    ->where(fn (Builder $deadline) => $deadline
+                        ->where('accepted_at', '<=', $now->subHours(Order::ADVANCE_PAYMENT_HOURS))
+                        // Collection less preparation time: anything collected
+                        // within the longest preparation time is a candidate,
+                        // and reasonFor() decides.
+                        ->orWhere(fn (Builder $preparing) => $preparing
+                            ->whereNotNull('preparation_time')
+                            ->where('scheduled_for', '<=', $now->addMinutes(Order::MAX_PREPARATION_MINUTES))))))
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->filter(fn (Order $order) => $this->reasonFor($order, $now) !== null)
+            ->values();
     }
 
     /** Why this order should be cancelled now, or null if it should not. */
@@ -87,22 +105,24 @@ final class AdvanceExpiry
         }
 
         $collect = $order->scheduled_for->toImmutable();
-        $deadline = $order->status === OrderStatus::SUBMITTED ? null : $order->paymentDueAt();
-        $collectionPassed = $collect->lessThanOrEqualTo($now);
-        $deadlinePassed = $deadline !== null && $deadline->lessThanOrEqualTo($now);
 
-        if (! $collectionPassed && ! $deadlinePassed) {
+        if ($order->status === OrderStatus::SUBMITTED) {
+            return $collect->lessThanOrEqualTo($now) ? self::UNANSWERED : null;
+        }
+
+        // Never later than the collection time (Order::paymentDueAt).
+        $deadline = $order->paymentDueAt() ?? $collect;
+
+        if ($deadline->greaterThan($now)) {
             return null;
         }
 
-        if ($order->status === OrderStatus::SUBMITTED) {
-            return self::UNANSWERED;
+        if ($order->paysBeforePreparation()) {
+            return self::PAYMENT_BEFORE_PREPARATION;
         }
 
         // Whichever came first is what actually ended it.
-        return $deadlinePassed && (! $collectionPassed || $deadline->lessThanOrEqualTo($collect))
-            ? self::PAYMENT_DEADLINE
-            : self::PAYMENT_BEFORE_COLLECTION;
+        return $deadline->lessThan($collect) ? self::PAYMENT_DEADLINE : self::PAYMENT_BEFORE_COLLECTION;
     }
 
     /** Cancel one request if it is still due. Returns the cancelled order, or null. */

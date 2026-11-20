@@ -210,6 +210,21 @@ class OrderQueueController extends Controller
             ], 422);
         }
 
+        // Decided 2026-11-20: once its collection day has passed, a paid
+        // advance order is neither scheduled nor prepared; it can only be
+        // cancelled, with the refund choice.
+        if ($order->isAdvance()
+            && in_array($to, [OrderStatus::SCHEDULED, OrderStatus::PREPARING], true)
+            && ($order->collectionDaysAway() ?? 0) < 0) {
+            $collect = $order->scheduled_for->toImmutable()->setTimezone($this->store->timezone());
+
+            return response()->json([
+                'message' => 'This order was for '.$collect->format('j M').' and its collection day has passed. Cancel it instead.',
+                'error_code' => 'ADVANCE_DATE_PASSED',
+                'status' => $order->status,
+            ], 422);
+        }
+
         // UC-ADV-012: a scheduled order is prepared on its collection date.
         if ($to === OrderStatus::PREPARING && $order->isAdvance() && $this->collectsAfterToday($order)) {
             $collect = $order->scheduled_for->toImmutable()->setTimezone($this->store->timezone());

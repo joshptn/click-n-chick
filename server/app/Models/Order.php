@@ -18,6 +18,19 @@ class Order extends Model
 
     public const ADVANCE_PAYMENT_HOURS = 24;
 
+    /**
+     * Decided 2026-11-20: an advance order collected today or tomorrow (counted
+     * from the day the store accepts it) must be paid by its collection time
+     * less the preparation time the Store Agent gave. Later dates keep the
+     * 24-hour rule.
+     */
+    public const PREPARATION_RULE_DAYS = 1;
+
+    /** The preparation time a Store Agent may give when accepting, in minutes. */
+    public const MIN_PREPARATION_MINUTES = 5;
+
+    public const MAX_PREPARATION_MINUTES = 480;
+
     /** An immediate order not paid this long after checkout is cancelled (FR-04.5). */
     public const PAYMENT_WINDOW_MINUTES = StockReservation::PAYMENT_HOLD_MINUTES;
 
@@ -63,7 +76,7 @@ class Order extends Model
         'delivery_distance_km',
         'total_amount',
         'payment_status',
-        'estimated_time_of_completion',
+        'preparation_time',
         'contact_name',
         'contact_phone',
         'guest_email',
@@ -84,6 +97,7 @@ class Order extends Model
             'details_confirmed_at' => 'datetime',
             'accepted_at' => 'datetime',
             'closed_at' => 'datetime',
+            'preparation_time' => 'integer',
             'refund_owed' => 'decimal:2',
             'delivery_distance_km' => 'decimal:2',
             'total_price' => 'decimal:2',
@@ -260,8 +274,15 @@ class Order extends Model
     }
 
     /**
-     * When the customer must have paid by. An advance order has 24 hours from
-     * acceptance (BR-16f); an immediate one 10 minutes from checkout (FR-04.5).
+     * When the customer must have paid by.
+     *
+     * An immediate order: 10 minutes from checkout (FR-04.5).
+     *
+     * An advance order, once accepted (decided 2026-11-20):
+     *   - collected today or tomorrow, counted from the day it was accepted,
+     *     with a preparation time: the collection time less that time;
+     *   - otherwise 24 hours after acceptance (BR-16f), and never later than
+     *     the collection time itself (BR-16h).
      */
     public function paymentDueAt(): ?CarbonImmutable
     {
@@ -275,8 +296,40 @@ class Order extends Model
             return null;
         }
 
-        return CarbonImmutable::parse($this->accepted_at)
-            ->addHours(self::ADVANCE_PAYMENT_HOURS);
+        $collect = CarbonImmutable::parse($this->scheduled_for);
+
+        if ($this->paysBeforePreparation()) {
+            return $collect->subMinutes((int) $this->preparation_time);
+        }
+
+        $dayAfterAcceptance = CarbonImmutable::parse($this->accepted_at)->addHours(self::ADVANCE_PAYMENT_HOURS);
+
+        return $dayAfterAcceptance->lessThan($collect) ? $dayAfterAcceptance : $collect;
+    }
+
+    /**
+     * Whether this advance order's deadline is its collection time less the
+     * preparation time, rather than the 24-hour rule.
+     */
+    public function paysBeforePreparation(?CarbonInterface $acceptedAt = null): bool
+    {
+        $acceptedAt ??= $this->accepted_at;
+
+        if (! $this->isAdvance() || $acceptedAt === null || $this->preparation_time === null) {
+            return false;
+        }
+
+        return self::collectsSoonAfter(CarbonImmutable::parse($acceptedAt), CarbonImmutable::parse($this->scheduled_for));
+    }
+
+    /** Whether a collection falls on the same day as, or the day after, $from in store time. */
+    public static function collectsSoonAfter(CarbonImmutable $from, CarbonImmutable $collect): bool
+    {
+        $timezone = (string) config('store.timezone', 'Asia/Manila');
+        $days = $from->setTimezone($timezone)->startOfDay()
+            ->diffInDays($collect->setTimezone($timezone)->startOfDay(), false);
+
+        return $days <= self::PREPARATION_RULE_DAYS;
     }
 
     public function isPaymentOverdue(?CarbonInterface $at = null): bool
@@ -299,9 +352,30 @@ class Order extends Model
 
     public function nextStatus(): ?string
     {
-        return $this->isAdvance()
-            ? OrderStatus::advanceNext((string) $this->status)
-            : OrderStatus::next((string) $this->status, $this->order_type);
+        if (! $this->isAdvance()) {
+            return OrderStatus::next((string) $this->status, $this->order_type);
+        }
+
+        // Decided 2026-11-20: a paid order for today goes straight into the
+        // kitchen; one for a later day is scheduled first.
+        if ($this->status === OrderStatus::CONFIRMED && $this->collectionDaysAway() === 0) {
+            return OrderStatus::PREPARING;
+        }
+
+        return OrderStatus::advanceNext((string) $this->status);
+    }
+
+    /** Whole days from today to the collection date in store time: 0 today, negative once passed. */
+    public function collectionDaysAway(): ?int
+    {
+        if ($this->scheduled_for === null) {
+            return null;
+        }
+
+        $timezone = (string) config('store.timezone', 'Asia/Manila');
+
+        return (int) CarbonImmutable::now($timezone)->startOfDay()
+            ->diffInDays($this->scheduled_for->toImmutable()->setTimezone($timezone)->startOfDay(), false);
     }
 
     public function canTransitionTo(string $status): bool
