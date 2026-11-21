@@ -12,8 +12,7 @@ use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
- * Another code for a sign-in challenge already issued (2FA or the reCAPTCHA
- * step-up): POST /api/2fa/resend.
+ * Another code for a 2FA sign-in challenge already issued: POST /api/2fa/resend.
  */
 class TwoFactorResendTest extends TestCase
 {

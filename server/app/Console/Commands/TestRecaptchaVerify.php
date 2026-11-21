@@ -2,8 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Services\Recaptcha\RecaptchaAction;
-use App\Services\Recaptcha\RecaptchaResult;
 use App\Services\Recaptcha\RecaptchaService;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
@@ -14,17 +12,17 @@ use Throwable;
  * Live check against the real Google siteverify endpoint.
  *
  * Answers the question the faked test suite cannot: is the secret key in .env
- * actually a valid v3 secret, and does a request that fails reCAPTCHA get
- * refused end to end?
+ * actually valid, and does a request that fails reCAPTCHA get refused end to
+ * end?
  *
- * It works by submitting a deliberately invalid token. Google's error code
+ * Without --token it submits a deliberately invalid token. Google's error code
  * then distinguishes the two failures that look identical from the outside:
  *
  *   invalid-input-secret   -> the SECRET is wrong. Nothing will ever verify.
  *   invalid-input-response -> the secret was ACCEPTED and the token rejected.
  *
- * The second is the success condition here - it is exactly what happens to
- * someone who does not pass. Costs nothing and sends nothing to a user.
+ * With --token (one taken from the browser) it verifies that token, which
+ * proves the site key and the secret belong together. Neither key is printed.
  */
 class TestRecaptchaVerify extends Command
 {
@@ -35,13 +33,9 @@ class TestRecaptchaVerify extends Command
 
     public function handle(RecaptchaService $recaptcha): int
     {
-        $siteKey = (string) config('services.recaptcha.site_key');
-        $secret = (string) config('services.recaptcha.secret_key');
-
         $this->line('  RECAPTCHA_ENABLED    : '.(config('services.recaptcha.enabled') ? 'true' : 'false'));
-        $this->line('  RECAPTCHA_SITE_KEY   : '.($siteKey === '' ? '(empty)' : substr($siteKey, 0, 12).'...'));
-        $this->line('  RECAPTCHA_SECRET_KEY : '.($secret === '' ? '(empty)' : substr($secret, 0, 12).'...'));
-        $this->line('  RECAPTCHA_MIN_SCORE  : '.$recaptcha->minScore());
+        $this->line('  RECAPTCHA_SITE_KEY   : '.(filled(config('services.recaptcha.site_key')) ? 'set' : '(empty)'));
+        $this->line('  RECAPTCHA_SECRET_KEY : '.(filled(config('services.recaptcha.secret_key')) ? 'set' : '(empty)'));
         $this->newLine();
 
         if (! $recaptcha->isEnabled()) {
@@ -51,18 +45,22 @@ class TestRecaptchaVerify extends Command
             return self::FAILURE;
         }
 
-        $token = (string) ($this->option('token') ?: 'deliberately-invalid-token-'.bin2hex(random_bytes(8)));
-        $usingRealToken = (bool) $this->option('token');
+        $usingRealToken = filled($this->option('token'));
+        $token = $usingRealToken
+            ? (string) $this->option('token')
+            : 'deliberately-invalid-token-'.bin2hex(random_bytes(8));
 
         // -----------------------------------------------------------------
         // 1. Is the secret real?
         // -----------------------------------------------------------------
-        $this->components->task('Contacting Google siteverify', function () use (&$body, $secret, $token) {
+        $body = null;
+
+        $this->components->task('Contacting Google siteverify', function () use (&$body, $recaptcha, $token) {
             try {
                 $response = Http::asForm()
                     ->timeout((int) config('services.recaptcha.timeout', 5))
                     ->post($recaptcha->verifyUrl(), [
-                        'secret' => $secret,
+                        'secret' => (string) config('services.recaptcha.secret_key'),
                         'response' => $token,
                     ]);
 
@@ -83,26 +81,28 @@ class TestRecaptchaVerify extends Command
             return self::FAILURE;
         }
 
-        $this->newLine();
-        $this->line('--- raw response body ---');
-        $this->line(json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        $this->newLine();
-
         $errors = (array) ($body['error-codes'] ?? []);
 
         if (in_array('invalid-input-secret', $errors, true) || in_array('missing-input-secret', $errors, true)) {
             $this->error('SECRET KEY REJECTED. Google does not recognise RECAPTCHA_SECRET_KEY.');
             $this->line('  - Confirm you copied the SECRET key, not the site key.');
-            $this->line('  - Confirm the key is reCAPTCHA v3, not v2.');
             $this->line('  - Run php artisan config:clear after editing .env.');
 
             return self::FAILURE;
         }
 
-        if ($usingRealToken && ($body['success'] ?? false) === true) {
+        if ($usingRealToken) {
+            if (($body['success'] ?? false) !== true) {
+                $this->error('SECRET ACCEPTED, but Google rejected this token: '.(implode(', ', $errors) ?: '(no error code)'));
+                $this->line('  - timeout-or-duplicate: the token is over two minutes old or was already used.');
+                $this->line('  - invalid-input-response: the token came from another site key than this secret.');
+
+                return self::FAILURE;
+            }
+
             $this->info('SECRET ACCEPTED and this token verified.');
-            $this->line('  action : '.($body['action'] ?? '(none - this is a v2 token)'));
-            $this->line('  score  : '.($body['score'] ?? '(none - this is a v2 token)'));
+            $this->line('  hostname     : '.($body['hostname'] ?? '(none)'));
+            $this->line('  challenge_ts : '.($body['challenge_ts'] ?? '(none)'));
         } else {
             $this->info('SECRET ACCEPTED. Google processed the request and rejected the token, which is correct.');
             $this->line('  error-codes : '.(implode(', ', $errors) ?: '(none)'));
@@ -114,14 +114,10 @@ class TestRecaptchaVerify extends Command
         $this->newLine();
         $this->line('Checking that a failing request is actually refused...');
 
-        $result = $recaptcha->verify('deliberately-invalid-token-'.bin2hex(random_bytes(8)), RecaptchaAction::LOGIN);
+        $result = $recaptcha->verify('deliberately-invalid-token-'.bin2hex(random_bytes(8)));
 
         if ($result->passed) {
-            $this->error('RecaptchaService ALLOWED an invalid token (reason: '.$result->reason.').');
-
-            if ($result->reason === RecaptchaResult::UNREACHABLE) {
-                $this->line('It failed open because Google could not be reached. See the log for the cause.');
-            }
+            $this->error('RecaptchaService ALLOWED an invalid token (reason: '.$result->reason.'). See the log for the cause.');
 
             return self::FAILURE;
         }

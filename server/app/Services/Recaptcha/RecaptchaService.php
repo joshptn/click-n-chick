@@ -2,17 +2,21 @@
 
 namespace App\Services\Recaptcha;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * reCAPTCHA v3 verification.
+ * reCAPTCHA v2 Invisible verification (decided 2026-11-22).
  *
- * v3 is scored rather than challenge-based: the browser produces a token
- * silently and the score, not a puzzle, decides. That means every guarded
- * endpoint needs its own action name so a token minted on the login form
- * cannot be replayed against the password-reset endpoint.
+ * Google decides in the browser: most people pass without seeing anything, and
+ * anyone it is unsure about gets its image puzzle there. A token only exists
+ * once the person has passed, so the verdict here is pass or fail - there is no
+ * score, no action name and no low-score handling of our own.
+ *
+ * The site address in the verdict is not checked here: the key's domain list in
+ * Google's console does that (decided 2026-11-22).
  */
 class RecaptchaService
 {
@@ -25,6 +29,9 @@ class RecaptchaService
      * to turn the protection off, so the endpoint is hardcoded here as well.
      */
     private const DEFAULT_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
+
+    /** Google's error for a token that is over two minutes old or was already used. */
+    private const EXPIRED_ERROR = 'timeout-or-duplicate';
 
     public function verifyUrl(): string
     {
@@ -45,18 +52,13 @@ class RecaptchaService
         return $this->isEnabled() ? (string) config('services.recaptcha.site_key') : null;
     }
 
-    public function minScore(): float
-    {
-        return (float) config('services.recaptcha.min_score', 0.5);
-    }
-
     /**
-     * Verify a token against Google, checking success, action and score.
+     * Verify a token against Google.
      *
      * Skips entirely while unconfigured, which is what keeps every guarded
      * flow working before credentials exist.
      */
-    public function verify(?string $token, string $action, ?string $ip = null): RecaptchaResult
+    public function verify(?string $token, ?string $ip = null): RecaptchaResult
     {
         if (! $this->isEnabled()) {
             return RecaptchaResult::pass(RecaptchaResult::SKIPPED);
@@ -69,18 +71,20 @@ class RecaptchaService
         try {
             $response = Http::asForm()
                 ->timeout((int) config('services.recaptcha.timeout', 5))
+                // One more try when the connection itself failed (a reset or a
+                // refused handshake, seen on flaky networks), before failing
+                // open below. Never on an answer: a token is single-use.
+                ->retry(2, 200, fn (Throwable $e) => $e instanceof ConnectionException, throw: false)
                 ->post($this->verifyUrl(), array_filter([
                     'secret' => (string) config('services.recaptcha.secret_key'),
                     'response' => trim($token),
                     'remoteip' => $ip,
                 ]));
         } catch (Throwable $e) {
-            // Fail open. A Google outage or an egress block must not take
-            // registration and sign-in down with it - the rate limiters remain
-            // in force either way. Logged so the gap is visible rather than
-            // silent.
+            // Fail open (kept 2026-11-22). A Google outage or an egress block
+            // must not take sign-up and sign-in down with it - the rate limiters
+            // remain in force either way. Logged so the gap is visible.
             Log::warning('reCAPTCHA verification unreachable; allowing the request.', [
-                'action' => $action,
                 'error' => $e->getMessage(),
             ]);
 
@@ -89,7 +93,6 @@ class RecaptchaService
 
         if (! $response->successful()) {
             Log::warning('reCAPTCHA verification returned a non-2xx response; allowing the request.', [
-                'action' => $action,
                 'status' => $response->status(),
             ]);
 
@@ -98,30 +101,14 @@ class RecaptchaService
 
         $body = $response->json();
 
-        if (! is_array($body) || ($body['success'] ?? false) !== true) {
-            return RecaptchaResult::fail(RecaptchaResult::INVALID);
+        if (is_array($body) && ($body['success'] ?? false) === true) {
+            return RecaptchaResult::pass();
         }
 
-        // v3 only. A v2 token verifies without an action, which would otherwise
-        // sail through this check.
-        if (($body['action'] ?? null) !== $action) {
-            return RecaptchaResult::fail(RecaptchaResult::ACTION_MISMATCH);
-        }
+        $errors = is_array($body) ? (array) ($body['error-codes'] ?? []) : [];
 
-        // A v3 verdict always carries a score. One without is a v2 token or a
-        // malformed response, and it is NOT the same thing as a real browser
-        // that scored badly - which matters now that a low score earns an OTP
-        // step-up (FR-01.15) and this must not.
-        if (! isset($body['score']) || ! is_numeric($body['score'])) {
-            return RecaptchaResult::fail(RecaptchaResult::INVALID);
-        }
-
-        $score = (float) $body['score'];
-
-        if ($score < $this->minScore()) {
-            return RecaptchaResult::fail(RecaptchaResult::LOW_SCORE, $score);
-        }
-
-        return RecaptchaResult::pass(RecaptchaResult::OK, $score);
+        return RecaptchaResult::fail(
+            in_array(self::EXPIRED_ERROR, $errors, true) ? RecaptchaResult::EXPIRED : RecaptchaResult::INVALID
+        );
     }
 }

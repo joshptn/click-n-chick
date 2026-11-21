@@ -382,7 +382,6 @@ class GuestCheckoutTest extends TestCase
         config()->set('services.recaptcha.enabled', true);
         config()->set('services.recaptcha.site_key', 'test-site-key');
         config()->set('services.recaptcha.secret_key', 'test-secret-key');
-        config()->set('services.recaptcha.min_score', 0.5);
     }
 
     public function test_a_guest_order_without_a_recaptcha_token_is_refused(): void
@@ -405,49 +404,40 @@ class GuestCheckoutTest extends TestCase
         Http::assertNothingSent();
     }
 
-    /**
-     * FR-02.12 / BR-35. The OTP step-up needs a verified channel to challenge and
-     * a guest has none, so the copy has to point at an account rather than invite
-     * a retry that will score exactly the same.
-     */
-    public function test_a_guest_who_scores_low_is_sent_to_sign_in_rather_than_an_otp(): void
+    /** A guest who did not pass Google's check is asked to finish it, not to sign in. */
+    public function test_a_guest_order_with_a_rejected_token_is_refused(): void
     {
         $token = $this->guestCart();
 
         $this->enableRecaptcha();
         Http::fake([
             'https://www.google.com/recaptcha/api/siteverify' => Http::response([
-                'success' => true,
-                'score' => 0.1,
-                'action' => 'place_order',
+                'success' => false,
+                'error-codes' => ['invalid-input-response'],
             ], 200),
         ]);
 
         $this->asGuest($token)
-            ->postJson('/api/guest/orders', $this->body(['recaptcha_token' => 'looks-automated']))
+            ->postJson('/api/guest/orders', $this->body(['recaptcha_token' => 'forged']))
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'RECAPTCHA_FAILED')
-            ->assertJsonPath('reason', 'low_score')
-            ->assertJsonPath('message', 'This request looked automated. Please sign in to continue.');
+            ->assertJsonPath('reason', 'invalid')
+            ->assertJsonPath('message', 'Please complete the security check and try again.');
 
         $this->assertSame(0, Order::count());
     }
 
-    public function test_a_guest_order_with_a_good_score_goes_through(): void
+    public function test_a_guest_order_with_a_passing_token_goes_through(): void
     {
         $token = $this->guestCart();
 
         $this->enableRecaptcha();
         Http::fake([
-            'https://www.google.com/recaptcha/api/siteverify' => Http::response([
-                'success' => true,
-                'score' => 0.9,
-                'action' => 'place_order',
-            ], 200),
+            'https://www.google.com/recaptcha/api/siteverify' => Http::response(['success' => true], 200),
         ]);
 
         $this->asGuest($token)
-            ->postJson('/api/guest/orders', $this->body(['recaptcha_token' => 'looks-human']))
+            ->postJson('/api/guest/orders', $this->body(['recaptcha_token' => 'passed']))
             ->assertCreated();
 
         $this->assertSame(1, Order::count());

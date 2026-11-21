@@ -12,6 +12,8 @@ import CancellationNotice from "../../components/checkout/CancellationNotice";
 import OrderSummary from "../../components/checkout/OrderSummary";
 import StepCard from "../../components/checkout/StepCard";
 import toast from "../../components/app/Toast";
+import SecurityCheck from "../../components/ui/SecurityCheck";
+import useRecaptcha from "../../hooks/useRecaptcha";
 import {
   FULFILMENT,
   fetchAddresses,
@@ -46,6 +48,8 @@ function Checkout() {
   const [placing, setPlacing] = useState(false);
   const { user, token } = useContext(AuthContext);
   const signedIn = Boolean(token);
+  // Only a guest's order is checked (decided 2026-11-22).
+  const captcha = useRecaptcha({ enabled: !signedIn });
   const steps = signedIn ? STEPS : GUEST_STEPS;
   const stepNumber = (id) => steps.findIndex((entry) => entry.id === id) + 1;
   const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCartState();
@@ -211,18 +215,25 @@ function Checkout() {
   };
 
   // The order is created waiting for payment and the browser goes to Xendit's
-  // page. Nothing reaches the shop until it is paid (FR-04.5).
-  const handlePlaceOrder = async () => {
+  // page. Nothing reaches the shop until it is paid (FR-04.5). A guest passes
+  // the security check first; "Opening payment…" starts once it has.
+  const handlePlaceOrder = () => {
     if (placing || step !== "payment" || !acknowledgedTerms || !quote?.can_place) return;
 
+    const payload = {
+      ...quoteInput,
+      full_address: dispatchState.destination?.full_address ?? null,
+      location: dispatchState.destination?.locality ?? null,
+    };
+
+    captcha.run((recaptchaToken) => submitOrder(payload, recaptchaToken));
+  };
+
+  const submitOrder = async (payload, recaptchaToken) => {
     setPlacing(true);
 
     try {
-      const result = await placeOrder({
-        ...quoteInput,
-        full_address: dispatchState.destination?.full_address ?? null,
-        location: dispatchState.destination?.locality ?? null,
-      });
+      const result = await placeOrder(payload, recaptchaToken);
 
       // The cart is not refetched here: it is now empty, and the empty-cart
       // redirect would race the browser leaving for the payment page. The app
@@ -379,6 +390,8 @@ function Checkout() {
               acknowledged={acknowledgedTerms}
               onAcknowledge={setAcknowledgedTerms}
             />
+
+            <SecurityCheck captcha={captcha} action="Place Order & Pay" className="px-1" />
 
             <CancellationNotice quote={quote} />
           </div>

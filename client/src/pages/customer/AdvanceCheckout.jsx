@@ -15,7 +15,6 @@ import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
 import { fetchAdvanceQuote, formatCollectionDate, submitAdvanceOrder, toScheduleIso } from "../../lib/advance";
 import { formatPeso } from "../../lib/menu";
-import { primeRecaptcha } from "../../lib/recaptcha";
 import { useCartState } from "../../context/useCart";
 
 const STEPS = [
@@ -63,10 +62,6 @@ function AdvanceCheckout() {
 
     return () => window.clearTimeout(timer);
   }, [quoteInput]);
-
-  useEffect(() => {
-    primeRecaptcha();
-  }, []);
 
   const {
     data: quote,

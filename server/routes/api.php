@@ -34,19 +34,18 @@ use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VerificationChannelController;
 use App\Http\Controllers\XenditWebhookController;
-use App\Services\Recaptcha\RecaptchaAction;
 use Illuminate\Support\Facades\Route;
 
 // Public
-Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:register', 'throttle:otp-send', 'recaptcha:'.RecaptchaAction::REGISTER]);
+Route::post('/register', [AuthController::class, 'register'])->middleware(['throttle:register', 'throttle:otp-send', 'recaptcha']);
 
-Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::OTP_VERIFY]);
-Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::OTP_RESEND]);
-Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware(['throttle:login', 'recaptcha:'.RecaptchaAction::LOGIN.',step-up']);
-Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware(['throttle:password-reset', 'recaptcha:'.RecaptchaAction::PASSWORD_FORGOT]);
-Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_RESET]);
-Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_CHALLENGE]);
-Route::post('/2fa/resend', [TwoFactorController::class, 'resend'])->middleware(['throttle:challenge-resend', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_RESEND]);
+Route::post('/otp/verify', [OtpController::class, 'verify'])->middleware('throttle:otp-verify');
+Route::post('/otp/resend', [OtpController::class, 'resend'])->middleware(['throttle:otp-send', 'recaptcha']);
+Route::post('/login', [AuthController::class, 'login'])->name('login')->middleware(['throttle:login', 'recaptcha']);
+Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware(['throttle:password-reset', 'recaptcha']);
+Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware('throttle:otp-verify');
+Route::post('/2fa/challenge', [TwoFactorController::class, 'challenge'])->middleware('throttle:otp-verify');
+Route::post('/2fa/resend', [TwoFactorController::class, 'resend'])->middleware('throttle:challenge-resend');
 Route::get('/verification/channels', [VerificationChannelController::class, 'index']);
 Route::get('/config/recaptcha', [RecaptchaConfigController::class, 'show']);
 
@@ -83,7 +82,7 @@ Route::prefix('guest')->group(function () {
         ->middleware('throttle:guest-geocode');
 
     Route::post('/orders', [GuestOrderController::class, 'store'])
-        ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
+        ->middleware(['throttle:place-order', 'recaptcha']);
 
     Route::middleware('guest-order')->group(function () {
         Route::get('/order', [GuestOrderController::class, 'show']);
@@ -106,7 +105,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::put('/user/update', [AuthController::class, 'updateUser'])->middleware('throttle:user-update');
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::TWO_FACTOR_ENABLE]);
+    Route::post('/2fa/enable', [TwoFactorController::class, 'enable'])->middleware('throttle:otp-send');
     Route::post('/2fa/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:otp-verify');
 
     Route::post('/2fa/disable', [TwoFactorController::class, 'disable'])->middleware('throttle:two-factor-disable');
@@ -119,8 +118,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::delete('/user/devices/{device}', [DeviceSessionController::class, 'destroy'])
         ->middleware('throttle:user-update');
 
-    Route::post('/user/password/request-code', [PasswordChangeController::class, 'requestCode'])->middleware(['throttle:otp-send', 'recaptcha:'.RecaptchaAction::PASSWORD_CHANGE]);
-    Route::post('/user/password', [PasswordChangeController::class, 'update'])->middleware(['throttle:otp-verify', 'recaptcha:'.RecaptchaAction::PASSWORD_CHANGE]);
+    Route::post('/user/password/request-code', [PasswordChangeController::class, 'requestCode'])->middleware('throttle:otp-send');
+    Route::post('/user/password', [PasswordChangeController::class, 'update'])->middleware('throttle:otp-verify');
 
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update'])->middleware('throttle:user-update');
@@ -168,7 +167,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
         ->middleware('throttle:geocode');
 
     Route::post('/order/place', [OrderController::class, 'placeOrder'])
-        ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
+        ->middleware('throttle:place-order');
     Route::get('/orders', [OrderTrackingController::class, 'index']);
     Route::get('/orders/{order}', [OrderTrackingController::class, 'show'])->whereNumber('order');
     Route::post('/orders/{order}/confirm-details', [OrderTrackingController::class, 'confirmDetails'])
@@ -191,7 +190,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
 
     Route::post('/advance-orders/quote', [AdvanceOrderController::class, 'quote']);
     Route::post('/advance-orders', [AdvanceOrderController::class, 'submit'])
-        ->middleware(['throttle:place-order', 'recaptcha:'.RecaptchaAction::PLACE_ORDER]);
+        ->middleware('throttle:place-order');
 });
 
 // Both staff roles. The operational pages are read here by the Store Manager too;

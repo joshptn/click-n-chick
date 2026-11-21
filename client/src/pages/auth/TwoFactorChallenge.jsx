@@ -10,7 +10,6 @@ import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { ROLES } from "../../lib/roles";
 import { CHANNELS } from "../../lib/verificationChannels";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
 import toast from "../../components/app/Toast";
 
 const ROLE_DESTINATIONS = {
@@ -27,13 +26,7 @@ function TwoFactorChallenge() {
   const location = useLocation();
   const { adoptSession } = useContext(AuthContext);
 
-  const { challengeToken, channel, identifier, reason, from } = location.state ?? {};
-
-  // The same screen serves two challenges. A step-up is issued because this
-  // browser scored badly on reCAPTCHA (FR-01.15 / BR-35), not because the
-  // account has 2FA on - telling the user "two-step verification" there would
-  // be describing a setting they never enabled.
-  const isStepUp = reason === "recaptcha_step_up";
+  const { challengeToken, channel, identifier, from } = location.state ?? {};
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -72,12 +65,7 @@ function TwoFactorChallenge() {
       const response = await fetch(`${url}/api/2fa/challenge`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
-        body: JSON.stringify(
-          await withRecaptcha(
-            { challenge_token: challengeToken, code: e.target.code.value.trim() },
-            RECAPTCHA_ACTIONS.TWO_FACTOR_CHALLENGE
-          )
-        ),
+        body: JSON.stringify({ challenge_token: challengeToken, code: e.target.code.value.trim() }),
         credentials: "include",
       });
 
@@ -109,9 +97,7 @@ function TwoFactorChallenge() {
       const response = await fetch(`${url}/api/2fa/resend`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
-        body: JSON.stringify(
-          await withRecaptcha({ challenge_token: challengeToken }, RECAPTCHA_ACTIONS.TWO_FACTOR_RESEND)
-        ),
+        body: JSON.stringify({ challenge_token: challengeToken }),
         credentials: "include",
       });
 
@@ -139,7 +125,7 @@ function TwoFactorChallenge() {
 
   return (
     <AuthLayout
-      eyebrow={isStepUp ? "Extra security check for" : "Two-step verification for"}
+      eyebrow="Two-step verification for"
       heading="Enter your code"
       footer={
         <p className="text-center font-display text-[13px] text-[#6f6b68]">
@@ -162,12 +148,6 @@ function TwoFactorChallenge() {
             <p className="font-display text-[13px] leading-snug text-[#e5322d]">{error}</p>
           </div>
         </div>
-      )}
-
-      {isStepUp && (
-        <p className="mb-4 rounded-[12px] border border-[#ffe6a8] bg-[#fff9e8] px-4 py-3 font-display text-[13px] leading-snug text-[#7a5620]">
-          This sign-in looked unusual to our bot check, so we need to confirm it is really you.
-        </p>
       )}
 
       <p className="mb-5 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">

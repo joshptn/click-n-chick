@@ -1,7 +1,7 @@
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { RECAPTCHA_ACTIONS, withRecaptcha } from '../lib/recaptcha';
 import { disconnectEcho } from '../lib/echo';
 import { deviceHeader } from '../lib/deviceId';
+import { withToken } from '../lib/recaptcha';
 import { clearStoredSession } from '../lib/session';
 import { queryClient } from '../lib/queryClient';
 
@@ -143,14 +143,11 @@ export function AuthProvider({children}) {
         return data;
     }, []);
 
-    const loginUser = useCallback(async (e) => {
-        e.preventDefault();
+    /** `recaptchaToken` comes from the sign-in form's security check (useRecaptcha). */
+    const loginUser = useCallback(async ({ login, password, recaptchaToken = null }) => {
         const url = import.meta.env.VITE_API_URL;
 
-        const body = await withRecaptcha({
-            login: e.target.login.value,
-            password: e.target.password.value,
-        }, RECAPTCHA_ACTIONS.LOGIN);
+        const body = withToken({ login, password }, recaptchaToken);
 
         const response = await fetch(url + '/api/login', {
             method: 'POST',

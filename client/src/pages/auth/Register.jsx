@@ -10,7 +10,9 @@ import toast from "../../components/app/Toast";
 import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
 import PasswordChecklist from "../../components/auth/PasswordChecklist";
 import { unmetPasswordRules } from "../../lib/passwordRules";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
+import SecurityCheck from "../../components/ui/SecurityCheck";
+import useRecaptcha from "../../hooks/useRecaptcha";
+import { withToken } from "../../lib/recaptcha";
 
 /** The same shape the server uses to tell a phone number from an email address. */
 function channelFor(identifier) {
@@ -23,7 +25,9 @@ function Register() {
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState("");
 
-  const RegisterUser = async (e) => {
+  const captcha = useRecaptcha();
+
+  const RegisterUser = (e) => {
     e.preventDefault();
     setError("");
 
@@ -36,26 +40,31 @@ function Register() {
       return;
     }
 
-    setLoading(true);
+    const body = {
+      first_name: e.target.first_name.value,
+      last_name: e.target.last_name.value,
+      identifier,
+      password: e.target.password.value,
+      password_confirmation: e.target.password_confirmation.value,
+    };
 
+    captcha.run((recaptchaToken) => signUp(body, recaptchaToken));
+  };
+
+  const signUp = async (body, recaptchaToken) => {
+    const { identifier } = body;
     const url = import.meta.env.VITE_API_URL;
 
-    try {
-      const body = {
-        first_name: e.target.first_name.value,
-        last_name: e.target.last_name.value,
-        identifier,
-        password: e.target.password.value,
-        password_confirmation: e.target.password_confirmation.value,
-      };
+    setLoading(true);
 
+    try {
       const response = await fetch(`${url}/api/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify(await withRecaptcha(body, RECAPTCHA_ACTIONS.REGISTER)),
+        body: JSON.stringify(withToken(body, recaptchaToken)),
         credentials: "include",
       });
 
@@ -211,6 +220,8 @@ function Register() {
           Sign Up
         </Button>
       </form>
+
+      <SecurityCheck captcha={captcha} action="Sign Up" />
     </AuthLayout>
   );
 }
