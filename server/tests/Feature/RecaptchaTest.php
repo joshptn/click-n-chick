@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\Recaptcha\RecaptchaAction;
 use App\Support\NativeApp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
@@ -13,11 +12,11 @@ use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
- * reCAPTCHA v3 gating.
+ * reCAPTCHA v2 Invisible gating (decided 2026-11-22).
  *
- * Structural only. Every exchange with Google is faked - no live siteverify
- * call is made and no real key is used, because none exists yet. These assert
- * how the application treats a verdict, never that Google produced one.
+ * Every exchange with Google is faked. These assert how the application treats
+ * a verdict, never that Google produced one; `php artisan recaptcha:test-verify`
+ * is the live check.
  */
 class RecaptchaTest extends TestCase
 {
@@ -27,13 +26,24 @@ class RecaptchaTest extends TestCase
 
     private const VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
 
+    /**
+     * The routes that need no account and send a code or create something.
+     * Everything else was dropped on 2026-11-22.
+     */
+    private const GUARDED = [
+        'POST api/register',
+        'POST api/otp/resend',
+        'POST api/login',
+        'POST api/password/forgot',
+        'POST api/guest/orders',
+    ];
+
     /** Credentials the way a provisioned account would supply them. */
-    private function enableRecaptcha(float $minScore = 0.5): void
+    private function enableRecaptcha(): void
     {
         config()->set('services.recaptcha.enabled', true);
         config()->set('services.recaptcha.site_key', 'test-site-key');
         config()->set('services.recaptcha.secret_key', 'test-secret-key');
-        config()->set('services.recaptcha.min_score', $minScore);
     }
 
     private function fakeVerdict(array $body): void
@@ -78,8 +88,6 @@ class RecaptchaTest extends TestCase
 
     public function test_guarded_routes_pass_through_while_recaptcha_is_unconfigured(): void
     {
-        // No RECAPTCHA_* keys in the test environment, which is the state the
-        // application is in today.
         Http::fake();
 
         $this->login()->assertOk()->assertJsonStructure(['user', 'token']);
@@ -110,22 +118,16 @@ class RecaptchaTest extends TestCase
     {
         $this->getJson('/api/config/recaptcha')
             ->assertOk()
-            ->assertJsonPath('enabled', false)
-            ->assertJsonPath('site_key', null);
+            ->assertExactJson(['enabled' => false, 'site_key' => null]);
     }
 
-    public function test_the_config_endpoint_publishes_the_site_key_and_actions_once_configured(): void
+    public function test_the_config_endpoint_publishes_only_the_site_key_once_configured(): void
     {
         $this->enableRecaptcha();
 
         $response = $this->getJson('/api/config/recaptcha')
             ->assertOk()
-            ->assertJsonPath('enabled', true)
-            ->assertJsonPath('site_key', 'test-site-key');
-
-        // The browser reads its action names from here rather than hardcoding
-        // them, so a route and its form cannot drift apart.
-        $this->assertSame(RecaptchaAction::all(), $response->json('actions'));
+            ->assertExactJson(['enabled' => true, 'site_key' => 'test-site-key']);
 
         // The secret must never leave the server.
         $this->assertStringNotContainsString('test-secret-key', $response->getContent());
@@ -143,7 +145,8 @@ class RecaptchaTest extends TestCase
         $this->login()
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'RECAPTCHA_FAILED')
-            ->assertJsonPath('reason', 'missing');
+            ->assertJsonPath('reason', 'missing')
+            ->assertJsonPath('message', 'Please complete the security check and try again.');
 
         // Rejected before Google is consulted - a missing token needs no call.
         Http::assertNothingSent();
@@ -196,19 +199,6 @@ class RecaptchaTest extends TestCase
             ->assertJsonPath('error_code', 'RECAPTCHA_FAILED');
     }
 
-    public function test_the_native_app_is_never_stepped_up_and_cannot_seed_a_low_score(): void
-    {
-        $this->enableRecaptcha();
-        Http::fake();
-
-        // A client-sent attribute name must not survive into the controller.
-        $this->withHeader(NativeApp::HEADER, NativeApp::ANDROID)
-            ->login(['recaptcha.low_score' => true])
-            ->assertOk()
-            ->assertJsonMissingPath('two_factor_required')
-            ->assertJsonStructure(['token']);
-    }
-
     public function test_the_native_app_shows_by_name_in_the_device_list(): void
     {
         $this->withHeaders([
@@ -222,10 +212,11 @@ class RecaptchaTest extends TestCase
         $this->assertSame('Android', $device->platform);
     }
 
-    public function test_a_valid_token_lets_the_request_through(): void
+    public function test_a_passing_token_lets_the_request_through(): void
     {
         $this->enableRecaptcha();
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN, 'score' => 0.9]);
+        // What v2 answers: no score and no action, only whether it passed.
+        $this->fakeVerdict(['success' => true, 'challenge_ts' => now()->toIso8601String(), 'hostname' => 'localhost']);
 
         $this->login(['recaptcha_token' => 'good-token'])
             ->assertOk()
@@ -235,7 +226,7 @@ class RecaptchaTest extends TestCase
     public function test_the_token_may_also_arrive_as_a_header(): void
     {
         $this->enableRecaptcha();
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN, 'score' => 0.9]);
+        $this->fakeVerdict(['success' => true]);
 
         $this->withHeader('X-Recaptcha-Token', 'good-token')->login()->assertOk();
     }
@@ -247,85 +238,51 @@ class RecaptchaTest extends TestCase
 
         $this->login(['recaptcha_token' => 'forged'])
             ->assertStatus(422)
+            ->assertJsonPath('error_code', 'RECAPTCHA_FAILED')
+            ->assertJsonPath('reason', 'invalid')
+            ->assertJsonPath('message', 'Please complete the security check and try again.');
+    }
+
+    /** Tokens are single-use and last two minutes; the browser gets a new one on the next tap. */
+    public function test_an_expired_or_reused_token_says_so(): void
+    {
+        $this->enableRecaptcha();
+        $this->fakeVerdict(['success' => false, 'error-codes' => ['timeout-or-duplicate']]);
+
+        $this->login(['recaptcha_token' => 'used-token'])
+            ->assertStatus(422)
+            ->assertJsonPath('reason', 'expired')
+            ->assertJsonPath('message', 'The security check expired. Please try again.');
+    }
+
+    public function test_an_unreadable_answer_is_refused(): void
+    {
+        $this->enableRecaptcha();
+        Http::fake([self::VERIFY_URL => Http::response('not json', 200)]);
+
+        $this->login(['recaptcha_token' => 'good-token'])
+            ->assertStatus(422)
             ->assertJsonPath('reason', 'invalid');
     }
 
-    /**
-     * Asserted on password recovery rather than login.
-     *
-     * Login is the one route where a low score is deliberately NOT refused -
-     * it answers with an OTP step-up instead (FR-01.15 / BR-35), which
-     * RecaptchaStepUpTest owns. Everywhere else a low score is still turned
-     * away, and this is what pins that.
-     */
-    public function test_a_token_scoring_below_the_threshold_is_refused(): void
-    {
-        $this->enableRecaptcha(0.5);
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::PASSWORD_FORGOT, 'score' => 0.1]);
-
-        $this->postJson('/api/password/forgot', [
-            'identifier' => $this->user->email,
-            'recaptcha_token' => 'bot-token',
-        ])
-            ->assertStatus(422)
-            ->assertJsonPath('reason', 'low_score');
-    }
-
-    public function test_the_score_threshold_is_configurable(): void
-    {
-        $this->enableRecaptcha(0.05);
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN, 'score' => 0.1]);
-
-        $this->login(['recaptcha_token' => 'borderline'])->assertOk();
-    }
-
-    public function test_a_token_minted_for_another_action_cannot_be_replayed(): void
+    /** Low-score handling went with v3: sign-in never answers with a code challenge of its own. */
+    public function test_sign_in_never_steps_up(): void
     {
         $this->enableRecaptcha();
+        $this->fakeVerdict(['success' => true, 'score' => 0.1, 'action' => 'login']);
 
-        // A perfectly valid, high-scoring token - but issued on the register
-        // form. Without the action check it would open the login endpoint too.
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::REGISTER, 'score' => 0.9]);
-
-        $this->login(['recaptcha_token' => 'wrong-form-token'])
-            ->assertStatus(422)
-            ->assertJsonPath('reason', 'action_mismatch');
-    }
-
-    public function test_a_v2_style_token_carrying_no_action_is_refused(): void
-    {
-        $this->enableRecaptcha();
-        $this->fakeVerdict(['success' => true, 'score' => 0.9]);
-
-        $this->login(['recaptcha_token' => 'v2-token'])
-            ->assertStatus(422)
-            ->assertJsonPath('reason', 'action_mismatch');
-    }
-
-    /**
-     * A scoreless verdict is 'invalid', not 'low_score'.
-     *
-     * Only v2 tokens and malformed responses arrive without a score, and since
-     * a low score now earns an OTP step-up at login (FR-01.15), calling this
-     * one "low score" would hand that concession to something that was never
-     * scored as a human at all.
-     */
-    public function test_a_verdict_with_no_score_is_refused(): void
-    {
-        $this->enableRecaptcha();
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN]);
-
-        $this->login(['recaptcha_token' => 'scoreless'])
-            ->assertStatus(422)
-            ->assertJsonPath('reason', 'invalid');
+        $this->login(['recaptcha_token' => 'good-token'])
+            ->assertOk()
+            ->assertJsonMissingPath('two_factor_required')
+            ->assertJsonStructure(['token']);
     }
 
     public function test_the_secret_and_caller_ip_are_sent_to_google_and_the_secret_never_returns(): void
     {
         $this->enableRecaptcha();
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN, 'score' => 0.9]);
+        $this->fakeVerdict(['success' => true]);
 
-        $this->login(['recaptcha_token' => 'good-token'])->assertOk();
+        $response = $this->login(['recaptcha_token' => 'good-token'])->assertOk();
 
         Http::assertSent(function ($request) {
             return $request->url() === self::VERIFY_URL
@@ -333,6 +290,8 @@ class RecaptchaTest extends TestCase
                 && $request['response'] === 'good-token'
                 && ! empty($request['remoteip']);
         });
+
+        $this->assertStringNotContainsString('test-secret-key', $response->getContent());
     }
 
     // -----------------------------------------------------------------
@@ -347,9 +306,25 @@ class RecaptchaTest extends TestCase
             throw new ConnectionException('Connection timed out');
         });
 
-        // Deliberate: an outage at Google must not take sign-in down with it.
-        // The rate limiters stay in force regardless.
+        // Kept 2026-11-22: an outage at Google must not take sign-in down with
+        // it. The rate limiters stay in force regardless.
         $this->login(['recaptcha_token' => 'good-token'])->assertOk();
+    }
+
+    /** A dropped connection is tried once more, so a flaky network does not switch the check off. */
+    public function test_a_dropped_connection_is_tried_again_before_failing_open(): void
+    {
+        $this->enableRecaptcha();
+
+        Http::fakeSequence(self::VERIFY_URL)
+            ->pushFailedConnection()
+            ->push(['success' => false, 'error-codes' => ['invalid-input-response']]);
+
+        $this->login(['recaptcha_token' => 'forged'])
+            ->assertStatus(422)
+            ->assertJsonPath('reason', 'invalid');
+
+        Http::assertSentCount(2);
     }
 
     public function test_verification_fails_open_on_a_server_error_from_google(): void
@@ -376,91 +351,63 @@ class RecaptchaTest extends TestCase
     }
 
     // -----------------------------------------------------------------
-    // Coverage of the flows named in the requirement
+    // Which routes are guarded
     // -----------------------------------------------------------------
 
-    public function test_every_required_flow_endpoint_carries_the_recaptcha_middleware(): void
+    public function test_exactly_the_five_routes_carry_the_check(): void
     {
-        $expected = [
-            'POST api/register' => RecaptchaAction::REGISTER,
-            'POST api/login' => RecaptchaAction::LOGIN,
-            'POST api/otp/resend' => RecaptchaAction::OTP_RESEND,
-            // Redeeming the registration code hands back a Sanctum token, which
-            // makes it an authentication endpoint like login - guarded for the
-            // same reason, and so it is not the one unwatched door in the set.
-            'POST api/otp/verify' => RecaptchaAction::OTP_VERIFY,
-            'POST api/2fa/challenge' => RecaptchaAction::TWO_FACTOR_CHALLENGE,
-            'POST api/2fa/resend' => RecaptchaAction::TWO_FACTOR_RESEND,
-            'POST api/2fa/enable' => RecaptchaAction::TWO_FACTOR_ENABLE,
-            'POST api/password/forgot' => RecaptchaAction::PASSWORD_FORGOT,
-            'POST api/password/reset' => RecaptchaAction::PASSWORD_RESET,
-            'POST api/user/password/request-code' => RecaptchaAction::PASSWORD_CHANGE,
-            'POST api/user/password' => RecaptchaAction::PASSWORD_CHANGE,
-            // FR-02.11 - final order submission.
-            'POST api/order/place' => RecaptchaAction::PLACE_ORDER,
-            // Sending an advance request is the same kind of submission: it
-            // creates an order the kitchen has to answer, so it is guarded like
-            // one even though no money moves yet.
-            'POST api/advance-orders' => RecaptchaAction::PLACE_ORDER,
-            // UC-GUEST-005. The one guarded endpoint with no session behind it,
-            // which is also why it is the one that cannot offer a step-up.
-            'POST api/guest/orders' => RecaptchaAction::PLACE_ORDER,
-        ];
-
         $actual = [];
-        $stepUp = [];
 
         foreach (Route::getRoutes() as $route) {
             foreach ($route->gatherMiddleware() as $middleware) {
-                if (! is_string($middleware) || ! str_starts_with($middleware, 'recaptcha:')) {
-                    continue;
-                }
-
-                $key = $route->methods()[0].' '.$route->uri();
-                // The parameter is `action` or `action,mode`.
-                $parameters = explode(',', substr($middleware, strlen('recaptcha:')));
-
-                $actual[$key] = $parameters[0];
-
-                if (($parameters[1] ?? null) === 'step-up') {
-                    $stepUp[] = $key;
+                if (is_string($middleware) && ($middleware === 'recaptcha' || str_starts_with($middleware, 'recaptcha:'))) {
+                    $actual[] = $route->methods()[0].' '.$route->uri();
                 }
             }
         }
 
-        ksort($expected);
-        ksort($actual);
+        $expected = self::GUARDED;
+        sort($expected);
+        sort($actual);
 
         $this->assertSame($expected, $actual);
-
-        // FR-01.15 / BR-35 is a login-only concession. Anywhere else, a low
-        // score must still be refused outright - and in particular the OTP
-        // endpoints must never grant a way to demand more OTPs.
-        $this->assertSame(['POST api/login'], $stepUp, 'Step-up leaked onto a route that should refuse a low score.');
     }
 
-    public function test_each_route_enforces_its_own_action_not_a_shared_one(): void
+    public function test_every_guarded_route_refuses_a_request_with_no_token(): void
     {
         $this->enableRecaptcha();
+        Http::fake();
 
-        // A valid, high-scoring token - but minted on the login form. Recovery
-        // must not accept it.
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::LOGIN, 'score' => 0.9]);
+        foreach ([
+            '/api/register' => ['identifier' => 'new@example.test', 'first_name' => 'A', 'last_name' => 'B', 'password' => self::PASSWORD, 'password_confirmation' => self::PASSWORD],
+            '/api/otp/resend' => ['identifier' => 'new@example.test'],
+            '/api/login' => ['login' => $this->user->email, 'password' => self::PASSWORD],
+            '/api/password/forgot' => ['identifier' => $this->user->email],
+            '/api/guest/orders' => [],
+        ] as $uri => $body) {
+            $this->postJson($uri, $body)
+                ->assertStatus(422)
+                ->assertJsonPath('error_code', 'RECAPTCHA_FAILED');
+        }
 
-        $this->postJson('/api/password/forgot', [
-            'identifier' => $this->user->email,
-            'recaptcha_token' => 'login-token',
-        ])->assertStatus(422)->assertJsonPath('reason', 'action_mismatch');
+        Http::assertNothingSent();
     }
 
-    public function test_a_route_accepts_a_token_minted_under_its_own_action(): void
+    /** The routes where a code is typed: the code is the proof, so no token is asked for. */
+    public function test_entering_a_code_needs_no_token(): void
     {
         $this->enableRecaptcha();
-        $this->fakeVerdict(['success' => true, 'action' => RecaptchaAction::PASSWORD_FORGOT, 'score' => 0.9]);
+        Http::fake();
 
-        $this->postJson('/api/password/forgot', [
-            'identifier' => $this->user->email,
-            'recaptcha_token' => 'forgot-token',
-        ])->assertOk();
+        foreach ([
+            '/api/otp/verify' => ['identifier' => 'new@example.test', 'code' => '123456'],
+            '/api/password/reset' => ['identifier' => $this->user->email, 'code' => '123456', 'password' => self::PASSWORD, 'password_confirmation' => self::PASSWORD],
+            '/api/2fa/challenge' => ['challenge_token' => 'unknown', 'code' => '123456'],
+            '/api/2fa/resend' => ['challenge_token' => 'unknown'],
+        ] as $uri => $body) {
+            $this->assertNotSame('RECAPTCHA_FAILED', $this->postJson($uri, $body)->json('error_code'), $uri);
+        }
+
+        Http::assertNothingSent();
     }
 }

@@ -11,7 +11,9 @@ import Input from "../../components/ui/Input";
 import PasswordChecklist from "../../components/auth/PasswordChecklist";
 import { ROLES } from "../../lib/roles";
 import { unmetPasswordRules } from "../../lib/passwordRules";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
+import SecurityCheck from "../../components/ui/SecurityCheck";
+import useRecaptcha from "../../hooks/useRecaptcha";
+import { withToken } from "../../lib/recaptcha";
 import toast from "../../components/app/Toast";
 
 const ROLE_DESTINATIONS = {
@@ -32,6 +34,8 @@ function ResetPassword() {
   const [password, setPassword] = useState("");
   const [cooldown, setCooldown] = useState(resendAvailableIn ?? 0);
   const codeRef = useRef(null);
+  // Only Resend is checked: it sends a code. Entering the code needs no check.
+  const captcha = useRecaptcha();
 
   useEffect(() => {
     if (!identifier) {
@@ -76,17 +80,12 @@ function ResetPassword() {
       const response = await fetch(`${url}/api/password/reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
-        body: JSON.stringify(
-          await withRecaptcha(
-            {
-              identifier,
-              code: e.target.code.value.trim(),
-              password: newPassword,
-              password_confirmation: confirmation,
-            },
-            RECAPTCHA_ACTIONS.PASSWORD_RESET
-          )
-        ),
+        body: JSON.stringify({
+          identifier,
+          code: e.target.code.value.trim(),
+          password: newPassword,
+          password_confirmation: confirmation,
+        }),
         credentials: "include",
       });
 
@@ -120,14 +119,17 @@ function ResetPassword() {
     }
   };
 
-  const handleResend = async () => {
+  const handleResend = () => {
     setError("");
+    captcha.run(resend);
+  };
 
+  const resend = async (recaptchaToken) => {
     try {
       const response = await fetch(`${url}/api/password/forgot`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...deviceHeader() },
-        body: JSON.stringify(await withRecaptcha({ identifier }, RECAPTCHA_ACTIONS.PASSWORD_FORGOT)),
+        body: JSON.stringify(withToken({ identifier }, recaptchaToken)),
         credentials: "include",
       });
 
@@ -249,6 +251,8 @@ function ResetPassword() {
           {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
         </button>
       </form>
+
+      <SecurityCheck captcha={captcha} action="Resend code" />
     </AuthLayout>
   );
 }

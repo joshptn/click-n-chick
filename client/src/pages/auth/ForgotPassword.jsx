@@ -7,7 +7,9 @@ import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
 import { CHANNELS, fetchVerificationChannels } from "../../lib/verificationChannels";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "../../lib/recaptcha";
+import SecurityCheck from "../../components/ui/SecurityCheck";
+import useRecaptcha from "../../hooks/useRecaptcha";
+import { withToken } from "../../lib/recaptcha";
 
 function ForgotPassword() {
   const nav = useNavigate();
@@ -16,6 +18,7 @@ function ForgotPassword() {
   const [loading, setLoading] = useState(false);
 
   const [smsNote, setSmsNote] = useState(null);
+  const captcha = useRecaptcha();
 
   useEffect(() => {
     let cancelled = false;
@@ -32,19 +35,25 @@ function ForgotPassword() {
     };
   }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
     const identifier = e.target.identifier.value.trim();
+
+    captcha.run((recaptchaToken) => sendCode(identifier, recaptchaToken));
+  };
+
+  const sendCode = async (identifier, recaptchaToken) => {
     const url = import.meta.env.VITE_API_URL;
+
+    setLoading(true);
 
     try {
       const response = await fetch(`${url}/api/password/forgot`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(await withRecaptcha({ identifier }, RECAPTCHA_ACTIONS.PASSWORD_FORGOT)),
+        body: JSON.stringify(withToken({ identifier }, recaptchaToken)),
         credentials: "include",
       });
 
@@ -132,6 +141,8 @@ function ForgotPassword() {
           Send reset code
         </Button>
       </form>
+
+      <SecurityCheck captcha={captcha} action="Send reset code" />
     </AuthLayout>
   );
 }

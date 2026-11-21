@@ -7,6 +7,8 @@ import AuthLayout from "../../components/auth/AuthLayout";
 import Button from "../../components/ui/Button";
 import Field from "../../components/ui/Field";
 import Input from "../../components/ui/Input";
+import SecurityCheck from "../../components/ui/SecurityCheck";
+import useRecaptcha from "../../hooks/useRecaptcha";
 import { ROLES } from "../../lib/roles";
 import { CHANNELS, routeForChannel } from "../../lib/verificationChannels";
 import { pages, preloadWhenIdle } from "../../lib/pages";
@@ -31,6 +33,7 @@ function Login() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const captcha = useRecaptcha();
 
   const notice = REASONS[searchParams.get("reason")] ?? null;
   // The page a guard sent the visitor here from; they go back to it after signing in.
@@ -39,12 +42,21 @@ function Login() {
   // Most sign-ins land on the menu; fetch its code while the form is filled in.
   useEffect(() => preloadWhenIdle([pages.Home]), []);
 
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     setError("");
+
+    const values = { login: e.target.login.value, password: e.target.password.value };
+
+    // "Signing In..." starts once the security check has passed, inside signIn:
+    // a puzzle closed half-way must not leave the button spinning.
+    captcha.run((recaptchaToken) => signIn(values, recaptchaToken));
+  };
+
+  const signIn = async (values, recaptchaToken) => {
     setLoading(true);
     try {
-      const data = await loginUser(e);
+      const data = await loginUser({ ...values, recaptchaToken });
 
       if (data?.two_factor_required) {
         nav("/two-factor", {
@@ -52,9 +64,6 @@ function Login() {
             challengeToken: data.challenge_token,
             channel: data.two_factor_channel,
             identifier: data.identifier,
-            // "two_factor" or "recaptcha_step_up" - the screen words itself
-            // differently for each.
-            reason: data.reason,
             from,
           },
         });
@@ -77,7 +86,7 @@ function Login() {
 
         nav(routeForChannel(channel), {
           state: {
-            identifier: e.target.login.value.trim(),
+            identifier: values.login.trim(),
             maskedIdentifier: err.payload.identifier,
             resendAvailableIn: err.payload.resend_available_in,
             from,
@@ -170,6 +179,8 @@ function Login() {
           Sign In
         </Button>
       </form>
+
+      <SecurityCheck captcha={captcha} action="Sign In" />
     </AuthLayout>
   );
 }

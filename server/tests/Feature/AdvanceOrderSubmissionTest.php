@@ -9,7 +9,6 @@ use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
-use App\Services\Recaptcha\RecaptchaAction;
 use App\Services\Verification\Channel;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -339,24 +338,20 @@ class AdvanceOrderSubmissionTest extends TestCase
     }
 
     // -----------------------------------------------------------------
-    // reCAPTCHA (FR-02.11)
+    // reCAPTCHA: not asked for here (dropped 2026-11-22)
     // -----------------------------------------------------------------
     //
-    // RecaptchaTest proves the route carries the middleware. These prove what
-    // that means once credentials exist, which is where a real submission
-    // failed: the browser sent no token and every request was refused. The
-    // suite could not see it because reCAPTCHA is unconfigured in testing, so
-    // the guard skips - these turn it on for the duration.
+    // A signed-in customer already passed the check at sign-up and sign-in, so
+    // sending a request needs no token even while reCAPTCHA is on.
 
     private function enableRecaptcha(): void
     {
         config()->set('services.recaptcha.enabled', true);
         config()->set('services.recaptcha.site_key', 'test-site-key');
         config()->set('services.recaptcha.secret_key', 'test-secret-key');
-        config()->set('services.recaptcha.min_score', 0.5);
     }
 
-    public function test_a_submission_without_a_token_is_refused_once_recaptcha_is_configured(): void
+    public function test_a_submission_needs_no_token_while_recaptcha_is_on(): void
     {
         $user = $this->customer();
         $this->withAdvanceCart($user);
@@ -366,66 +361,10 @@ class AdvanceOrderSubmissionTest extends TestCase
 
         $this->actingAs($user)->postJson('/api/advance-orders', [
             'scheduled_for' => $this->tomorrowAtNoon(),
-        ])->assertStatus(422)
-            ->assertJsonPath('error_code', 'RECAPTCHA_FAILED')
-            ->assertJsonPath('reason', 'missing');
-
-        // Refused before the order exists - a rejected request must not leave a
-        // half-made order behind, and must not empty the cart either.
-        $this->assertSame(0, Order::count());
-        $this->assertSame(1, Cart::where('user_id', $user->id)->where('cart_status', Cart::STATUS_ADVANCE)->count());
-    }
-
-    public function test_a_token_minted_under_place_order_is_accepted(): void
-    {
-        $user = $this->customer();
-        $this->withAdvanceCart($user);
-
-        $this->enableRecaptcha();
-        Http::fake([
-            'https://www.google.com/recaptcha/api/siteverify' => Http::response([
-                'success' => true,
-                'action' => RecaptchaAction::PLACE_ORDER,
-                'score' => 0.9,
-            ], 200),
-        ]);
-
-        $this->actingAs($user)->postJson('/api/advance-orders', [
-            'scheduled_for' => $this->tomorrowAtNoon(),
-            'recaptcha_token' => 'good-token',
         ])->assertCreated()
             ->assertJsonPath('order.status', OrderStatus::SUBMITTED);
-    }
 
-    /**
-     * The immediate checkout's token cannot be spent here.
-     *
-     * Both routes declare PLACE_ORDER, so this passes by design rather than by
-     * accident - the point is that the action the browser mints under has to be
-     * the one the route declares, which is what makes the client's action name
-     * a thing that must stay correct and not merely present.
-     */
-    public function test_a_token_minted_for_another_action_is_refused(): void
-    {
-        $user = $this->customer();
-        $this->withAdvanceCart($user);
-
-        $this->enableRecaptcha();
-        Http::fake([
-            'https://www.google.com/recaptcha/api/siteverify' => Http::response([
-                'success' => true,
-                'action' => RecaptchaAction::LOGIN,
-                'score' => 0.9,
-            ], 200),
-        ]);
-
-        $this->actingAs($user)->postJson('/api/advance-orders', [
-            'scheduled_for' => $this->tomorrowAtNoon(),
-            'recaptcha_token' => 'login-token',
-        ])->assertStatus(422)
-            ->assertJsonPath('reason', 'action_mismatch');
-
-        $this->assertSame(0, Order::count());
+        Http::assertNothingSent();
     }
 
     public function test_quoting_is_not_gated_so_the_summary_still_prices_while_scripting_is_suspected(): void
@@ -436,9 +375,7 @@ class AdvanceOrderSubmissionTest extends TestCase
         $this->enableRecaptcha();
         Http::fake();
 
-        // Quoting reveals nothing and creates nothing; making the customer
-        // solve for a price they can already read in the cart would be a worse
-        // trade than the one FR-02.11 asks for.
+        // Quoting reveals nothing and creates nothing.
         $this->actingAs($user)->postJson('/api/advance-orders/quote', [
             'scheduled_for' => $this->tomorrowAtNoon(),
         ])->assertOk()->assertJsonPath('can_submit', true);

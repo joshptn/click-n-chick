@@ -1,5 +1,5 @@
 import { api, authToken } from "./api";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "./recaptcha";
+import { withToken } from "./recaptcha";
 
 /**
  * Paying through Xendit's hosted checkout (FR-04.2, decided 2026-11-17).
@@ -12,11 +12,14 @@ import { RECAPTCHA_ACTIONS, withRecaptcha } from "./recaptcha";
 
 const RETURN_KEY = "payment_return";
 
-/** Place the order and get its payment page. Signed in or as a guest. */
-export async function placeOrder(payload) {
-  const path = authToken() ? "/api/order/place" : "/api/guest/orders";
-
-  return api.post(path, await withRecaptcha(payload, RECAPTCHA_ACTIONS.PLACE_ORDER));
+/**
+ * Place the order and get its payment page. Signed in or as a guest; only a
+ * guest's order carries the security check's token (decided 2026-11-22).
+ */
+export function placeOrder(payload, recaptchaToken = null) {
+  return authToken()
+    ? api.post("/api/order/place", payload)
+    : api.post("/api/guest/orders", withToken(payload, recaptchaToken));
 }
 
 function holding(token) {

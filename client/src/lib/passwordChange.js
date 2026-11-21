@@ -12,27 +12,17 @@
  */
 
 import api from "./api";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "./recaptcha";
 
 /** Send the confirmation code to `channel` ("sms" | "email"). */
-export async function requestPasswordChangeCode(channel) {
-  return api.post(
-    "/api/user/password/request-code",
-    await withRecaptcha({ channel }, RECAPTCHA_ACTIONS.PASSWORD_CHANGE)
-  );
+export function requestPasswordChangeCode(channel) {
+  return api.post("/api/user/password/request-code", { channel });
 }
 
-export async function changePassword({ currentPassword, password, passwordConfirmation, code }) {
-  return api.post(
-    "/api/user/password",
-    await withRecaptcha(
-      {
-        current_password: currentPassword,
-        password,
-        password_confirmation: passwordConfirmation,
-        code: code.trim(),
-      },
-      RECAPTCHA_ACTIONS.PASSWORD_CHANGE
-    )
-  );
+export function changePassword({ currentPassword, password, passwordConfirmation, code }) {
+  return api.post("/api/user/password", {
+    current_password: currentPassword,
+    password,
+    password_confirmation: passwordConfirmation,
+    code: code.trim(),
+  });
 }

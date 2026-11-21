@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Middleware\VerifyRecaptcha;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Rules\StrongPassword;
@@ -149,25 +148,6 @@ class AuthController extends Controller
         if ($user->hasTwoFactorEnabled()) {
             return response()->json(
                 app(TwoFactorController::class)->issueLoginChallenge($user, $request->ip()),
-                200
-            );
-        }
-
-        /**
-         * FR-01.15 / BR-35: this browser scored below the reCAPTCHA threshold,
-         * so prove the human another way rather than refusing outright.
-         *
-         * Deliberately after the credential check. Issuing a challenge before
-         * knowing the password was right would turn this into an account
-         * enumeration oracle - and would send an OTP to someone whose account
-         * is merely being guessed at.
-         *
-         * An account with 2FA on never reaches here: it was already challenged
-         * above, which is the same proof.
-         */
-        if ($request->attributes->get(VerifyRecaptcha::LOW_SCORE_ATTRIBUTE) === true) {
-            return response()->json(
-                app(TwoFactorController::class)->issueStepUpChallenge($user, $request->ip()),
                 200
             );
         }

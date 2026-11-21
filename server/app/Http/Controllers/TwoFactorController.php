@@ -206,10 +206,12 @@ class TwoFactorController extends Controller
         }
     }
 
-    /** Why a challenge was issued. Governs which gate challenge() applies. */
+    /**
+     * Why a challenge was issued. Only 2FA issues one since the reCAPTCHA
+     * step-up was removed (2026-11-22); a cached challenge of any other kind is
+     * treated as expired, and its holder signs in again.
+     */
     public const KIND_TWO_FACTOR = 'two_factor';
-
-    public const KIND_STEP_UP = 'recaptcha_step_up';
 
     /**
      * Issue the post-password challenge. Called by AuthController::login.
@@ -238,67 +240,6 @@ class TwoFactorController extends Controller
     }
 
     /**
-     * Identity step-up after a low reCAPTCHA score at login (FR-01.15, BR-35).
-     *
-     * Sent over whichever channel this account has actually verified, not the
-     * one it registered with - the point is to reach a human who already proved
-     * they hold that address or number.
-     *
-     * Unlike the 2FA challenge, this one respects the OTP resend cooldown. A
-     * low score is something an attacker with valid credentials can produce at
-     * will, and re-sending on every attempt would let them burn SMS credits;
-     * inside the cooldown the outstanding code stays live and only a fresh
-     * challenge token is minted.
-     *
-     * @return array<string, mixed>
-     */
-    public function issueStepUpChallenge(User $user, ?string $ip = null): array
-    {
-        $channel = $this->stepUpChannelFor($user);
-        $transport = $this->channels->for($channel);
-
-        $wait = $this->otp->secondsUntilResendAllowed(
-            $this->channels->hash($channel, $transport->identifierFor($user)),
-            OtpCode::PURPOSE_STEP_UP
-        );
-
-        return $this->issueChallenge(
-            $user,
-            $channel,
-            OtpCode::PURPOSE_STEP_UP,
-            self::KIND_STEP_UP,
-            $ip,
-            $channel === Channel::Email
-                ? 'For your security, enter the code we sent to your email address.'
-                : 'For your security, enter the code we sent to your phone.',
-            send: $wait === 0,
-        );
-    }
-
-    /**
-     * A verified channel this account can actually be reached on.
-     *
-     * Prefers the channel chosen at registration, since that one is proven.
-     * Falls back to the other only if it has been verified too - never to an
-     * unverified one, which would send a code nobody receives and leave the
-     * account unable to sign in at all.
-     */
-    private function stepUpChannelFor(User $user): Channel
-    {
-        $chosen = Channel::tryFromValue($user->verification_channel) ?? Channel::Email;
-
-        if ($user->hasVerifiedChannel($chosen) && $this->channels->isAvailable($chosen)) {
-            return $chosen;
-        }
-
-        $other = $chosen === Channel::Email ? Channel::Sms : Channel::Email;
-
-        return $user->hasVerifiedChannel($other) && $this->channels->isAvailable($other)
-            ? $other
-            : $chosen;
-    }
-
-    /**
      * Shared issuance: send the code, mint the challenge token, describe it.
      *
      * @return array<string, mixed>
@@ -310,28 +251,21 @@ class TwoFactorController extends Controller
         string $kind,
         ?string $ip,
         string $message,
-        bool $send = true,
     ): array {
         $transport = $this->channels->for($channel);
 
-        if ($send) {
-            $this->otp->send($user, $purpose, $ip, $channel);
-        }
+        $this->otp->send($user, $purpose, $ip, $channel);
 
         $challengeToken = Str::random(48);
 
         Cache::put(
             self::CHALLENGE_PREFIX.hash('sha256', $challengeToken),
-            // An array, not a bare id: challenge() must know WHY this was
-            // issued, or a step-up token would be redeemable through the 2FA
-            // gate and vice versa.
+            // An array, not a bare id: challenge() checks WHY it was issued.
             ['user_id' => $user->id, 'kind' => $kind],
             now()->addMinutes(OtpService::EXPIRY_MINUTES)
         );
 
         return [
-            // Kept as the flag the client already branches on, so the existing
-            // code-entry screen serves both kinds without a second route.
             'two_factor_required' => true,
             'reason' => $kind,
             'message' => $message,
@@ -359,20 +293,9 @@ class TwoFactorController extends Controller
             ], 422);
         }
 
-        // Tolerates the bare-id shape written before step-up challenges existed,
-        // so a challenge already in flight across a deploy still redeems.
-        $kind = is_array($cached) ? ($cached['kind'] ?? self::KIND_TWO_FACTOR) : self::KIND_TWO_FACTOR;
-        $userId = is_array($cached) ? ($cached['user_id'] ?? null) : $cached;
+        $user = $this->challengedUser($cached);
 
-        $user = $userId === null ? null : User::find($userId);
-
-        // The 2FA gate applies only to 2FA challenges. A step-up challenge is
-        // issued precisely because the account does NOT have 2FA on, so
-        // requiring it here would make every step-up unredeemable.
-        $gateFailed = $user === null
-            || ($kind === self::KIND_TWO_FACTOR && ! $user->hasTwoFactorEnabled());
-
-        if ($gateFailed) {
+        if ($user === null) {
             Cache::forget($cacheKey);
 
             return response()->json([
@@ -381,11 +304,7 @@ class TwoFactorController extends Controller
             ], 422);
         }
 
-        $purpose = $kind === self::KIND_STEP_UP
-            ? OtpCode::PURPOSE_STEP_UP
-            : OtpCode::PURPOSE_TWO_FACTOR_LOGIN;
-
-        $result = $this->otp->verifyForUser($user, $purpose, $request->input('code'));
+        $result = $this->otp->verifyForUser($user, OtpCode::PURPOSE_TWO_FACTOR_LOGIN, $request->input('code'));
 
         if ($result !== OtpVerificationResult::Verified) {
             return $this->rejection($result);
@@ -417,22 +336,17 @@ class TwoFactorController extends Controller
             'challenge_token' => ['required', 'string', 'max:128'],
         ]);
 
-        $cached = Cache::get(self::CHALLENGE_PREFIX.hash('sha256', $request->input('challenge_token')));
-        $kind = is_array($cached) ? ($cached['kind'] ?? self::KIND_TWO_FACTOR) : self::KIND_TWO_FACTOR;
-        $userId = is_array($cached) ? ($cached['user_id'] ?? null) : $cached;
-        $user = $userId === null ? null : User::find($userId);
+        $user = $this->challengedUser(Cache::get(self::CHALLENGE_PREFIX.hash('sha256', $request->input('challenge_token'))));
 
-        if ($user === null || $user->isSuspended() || ($kind === self::KIND_TWO_FACTOR && ! $user->hasTwoFactorEnabled())) {
+        if ($user === null || $user->isSuspended()) {
             return response()->json([
                 'message' => 'This sign-in attempt has expired. Please sign in again.',
                 'reason' => 'challenge_expired',
             ], 422);
         }
 
-        [$purpose, $channel] = $kind === self::KIND_STEP_UP
-            ? [OtpCode::PURPOSE_STEP_UP, $this->stepUpChannelFor($user)]
-            : [OtpCode::PURPOSE_TWO_FACTOR_LOGIN, Channel::tryFromValue($user->two_factor_channel) ?? Channel::Email];
-
+        $purpose = OtpCode::PURPOSE_TWO_FACTOR_LOGIN;
+        $channel = Channel::tryFromValue($user->two_factor_channel) ?? Channel::Email;
         $transport = $this->channels->for($channel);
         $wait = $this->otp->secondsUntilResendAllowed(
             $this->channels->hash($channel, $transport->identifierFor($user)),
@@ -455,6 +369,30 @@ class TwoFactorController extends Controller
             'resend_available_in' => OtpService::RESEND_COOLDOWN_SECONDS,
             'expires_in_minutes' => OtpService::EXPIRY_MINUTES,
         ]);
+    }
+
+    /**
+     * The account a cached challenge belongs to, while it is still a live 2FA
+     * challenge: 2FA still on, and not one of the step-up challenges issued
+     * before 2026-11-22. Tolerates the bare-id shape written before kinds
+     * existed.
+     */
+    private function challengedUser(mixed $cached): ?User
+    {
+        if ($cached === null) {
+            return null;
+        }
+
+        $kind = is_array($cached) ? ($cached['kind'] ?? self::KIND_TWO_FACTOR) : self::KIND_TWO_FACTOR;
+        $userId = is_array($cached) ? ($cached['user_id'] ?? null) : $cached;
+
+        if ($kind !== self::KIND_TWO_FACTOR || $userId === null) {
+            return null;
+        }
+
+        $user = User::find($userId);
+
+        return $user !== null && $user->hasTwoFactorEnabled() ? $user : null;
     }
 
     private function rejection(OtpVerificationResult $result)

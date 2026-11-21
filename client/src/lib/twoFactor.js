@@ -14,7 +14,6 @@
  */
 
 import api from "./api";
-import { RECAPTCHA_ACTIONS, withRecaptcha } from "./recaptcha";
 
 /**
  * Ask for an enrolment code on `channel` ("sms" | "email").
@@ -25,11 +24,8 @@ import { RECAPTCHA_ACTIONS, withRecaptcha } from "./recaptcha";
  * over that channel, and `reason: "missing_identifier"` when the account has
  * no address or number on it.
  */
-export async function requestTwoFactorCode(channel) {
-  return api.post(
-    "/api/2fa/enable",
-    await withRecaptcha({ channel }, RECAPTCHA_ACTIONS.TWO_FACTOR_ENABLE)
-  );
+export function requestTwoFactorCode(channel) {
+  return api.post("/api/2fa/enable", { channel });
 }
 
 /** Redeem the enrolment code. On success 2FA is live from the next login. */
