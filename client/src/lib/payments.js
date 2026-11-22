@@ -7,10 +7,15 @@ import { withToken } from "./recaptcha";
  * Placing an order opens a payment page on Xendit and the browser goes there.
  * Xendit sends the customer back to /payment/return, a fixed address that names
  * no order - a guest's tracking token must never be handed to a third party -
- * so the order to return to is remembered here, in this tab, before leaving.
+ * so the order to return to is remembered here before leaving. In this
+ * browser rather than this tab (decided 2026-11-22): a payment app often hands
+ * the customer back in a new tab, which a tab's own storage would not reach.
  */
 
 const RETURN_KEY = "payment_return";
+
+/** Long enough to cover the 10 minutes to pay and a slow return, no longer. */
+const RETURN_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Place the order and get its payment page. Signed in or as a guest; only a
@@ -44,26 +49,44 @@ export function checkPayment({ orderId, token }, { signal } = {}) {
     : api.get(`/api/orders/${orderId}/payment`, { signal });
 }
 
+/**
+ * A guest's token rides after "#" (decided 2026-11-22): the part of an address
+ * a browser never sends, so it stays out of the web host's request logs.
+ */
 export function trackingPath({ orderId, token }) {
-  return token ? `/track/${token}` : `/orders/${orderId}`;
+  return token ? `/track#${token}` : `/orders/${orderId}`;
 }
 
 export function rememberPaymentReturn(target) {
   try {
-    sessionStorage.setItem(RETURN_KEY, JSON.stringify(target));
+    const { orderId = null, token = null } = target ?? {};
+
+    localStorage.setItem(RETURN_KEY, JSON.stringify({ orderId, token, at: Date.now() }));
   } catch {
     // Storage blocked: the return page falls back to the order list.
   }
 }
 
-/** The order this tab left to pay for, if any. Kept until another payment replaces it. */
+/** The order this browser last left to pay for, within the hour. */
 export function paymentReturnTarget() {
   try {
-    const target = JSON.parse(sessionStorage.getItem(RETURN_KEY) ?? "null");
+    const saved = JSON.parse(localStorage.getItem(RETURN_KEY) ?? "null");
 
-    return target && (target.orderId || target.token) ? target : null;
+    if (!saved || !(saved.orderId || saved.token)) return null;
+    if (!Number.isFinite(saved.at) || Date.now() - saved.at > RETURN_TTL_MS) return null;
+
+    return saved.token ? { token: saved.token } : { orderId: saved.orderId };
   } catch {
     return null;
+  }
+}
+
+/** Paid: nothing more to come back to. */
+export function clearPaymentReturn() {
+  try {
+    localStorage.removeItem(RETURN_KEY);
+  } catch {
+    // Nothing to clear.
   }
 }
 

@@ -4,10 +4,10 @@ import { STORAGE_KEYS, readSecure, removeSecure, writeSecure } from "./secureSto
 
 /**
  * The orders a guest has tracked on this phone (decided 2026-11-17), so Home
- * can show "Track it live" without the link. Kept only as long as the link
- * works (FR-02.13): while the order is open, to 30 days after it was placed,
- * and 7 days after it closes. The API is the authority: a link it refuses
- * (expired, unknown) is dropped here too.
+ * can show "Track it live" without the link. Kept only while the order is
+ * open, and never past the link's 7 days from placement, matching the
+ * browser (FR-02.13c, decided 2026-11-22). The API is the authority: a link
+ * it refuses (expired, unknown) is dropped here too.
  *
  * The token grants access to its order, so it lives in secure storage, like
  * the session token.
@@ -15,26 +15,24 @@ import { STORAGE_KEYS, readSecure, removeSecure, writeSecure } from "./secureSto
 export type TrackedOrder = {
   token: string;
   reference: string | null;
-  /** When the order was placed (ISO), for the 30-day ceiling. */
+  /** When the order was placed (ISO): the link works 7 days from then. */
   placedAt: string | null;
-  /** When it closed (ISO), for the 7 days after. */
+  /** When it closed (ISO); a closed order is not kept. */
   closedAt: string | null;
 };
 
-const OPEN_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
-const CLOSED_LIMIT_MS = 7 * 24 * 60 * 60 * 1000;
+const LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_KEPT = 10;
 
 let orders: TrackedOrder[] = [];
 const listeners = new Set<() => void>();
 
 function stillValid(order: TrackedOrder, now = Date.now()): boolean {
+  if (order.closedAt) return false;
+
   const placed = order.placedAt ? Date.parse(order.placedAt) : now;
-  const closed = order.closedAt ? Date.parse(order.closedAt) : null;
 
-  if (closed !== null) return now - closed < CLOSED_LIMIT_MS;
-
-  return now - placed < OPEN_LIMIT_MS;
+  return Number.isFinite(placed) && now - placed < LIFETIME_MS;
 }
 
 async function save(next: TrackedOrder[]) {
@@ -100,4 +98,47 @@ const snapshot = () => orders;
 
 export function useGuestOrders(): TrackedOrder[] {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/**
+ * The checkout being paid for, a guest's or a signed-in customer's (decided
+ * 2026-11-22 and 2026-11-23). Android may close the app while the customer is
+ * in GCash or a bank app; started cold, the return link then has no screen to
+ * step back to, so payment-return resumes the payment screen from this.
+ * Remembered when the order is placed, cleared once it is paid or its time
+ * to pay has run out.
+ */
+export type PendingCheckout = { token?: string; orderId?: string };
+
+/** Ten minutes to pay, and a slow return: an hour, no more. */
+const PENDING_TTL_MS = 60 * 60 * 1000;
+
+export async function rememberPendingCheckout(target: PendingCheckout): Promise<void> {
+  const saved = { token: target.token ?? null, orderId: target.orderId ?? null, at: Date.now() };
+
+  await writeSecure(STORAGE_KEYS.pendingCheckout, JSON.stringify(saved)).catch(() => {});
+}
+
+export async function readPendingCheckout(): Promise<PendingCheckout | null> {
+  const raw = await readSecure(STORAGE_KEYS.pendingCheckout).catch(() => null);
+
+  try {
+    const saved: unknown = raw ? JSON.parse(raw) : null;
+
+    if (!saved || typeof saved !== "object") return null;
+
+    const { token, orderId, at } = saved as { token?: unknown; orderId?: unknown; at?: unknown };
+
+    if (typeof at !== "number" || Date.now() - at > PENDING_TTL_MS) return null;
+    if (typeof token === "string" && token !== "") return { token };
+    if (typeof orderId === "string" && orderId !== "") return { orderId };
+  } catch {
+    // Unreadable: nothing to resume.
+  }
+
+  return null;
+}
+
+export async function clearPendingCheckout(): Promise<void> {
+  await removeSecure(STORAGE_KEYS.pendingCheckout).catch(() => {});
 }

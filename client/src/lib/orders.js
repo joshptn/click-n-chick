@@ -59,6 +59,24 @@ export function confirmGuestReceipt(token) {
   return api.post("/api/guest/order/received", undefined, holding(token));
 }
 
+/**
+ * The resend card's details with the server's wait turned into a moment on
+ * this clock, taken when the answer arrives, so the countdown needs no state.
+ */
+export function withLinkDeadline(link) {
+  return link ? { ...link, resend_until: Date.now() + (link.resend_in ?? 0) * 1000 } : null;
+}
+
+/** Email the tracking link again (FR-02.13b): once per 30 seconds, 10 per order. */
+export function resendGuestLink(token) {
+  return api.post("/api/guest/order/link", undefined, holding(token));
+}
+
+/** Correct the email the link is sent to; sends nothing by itself (FR-02.13b). */
+export function changeGuestEmail(token, email) {
+  return api.patch("/api/guest/order", { contact_email: email }, holding(token));
+}
+
 export const ORDER_FILTERS = [
   { id: "active", label: "Active" },
   { id: "past", label: "Past" },

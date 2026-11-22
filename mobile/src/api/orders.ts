@@ -67,8 +67,31 @@ export type OrdersPage = {
 /** An answer to cancel, confirm details, confirm receipt or a contact change. */
 export type OrderAnswer = { message?: string; order?: Order };
 
-/** Only what changed is sent, as on the web's EditOrderModal. */
-export type ContactChanges = { contact_name?: string; contact_phone?: string };
+/**
+ * Only what changed is sent, as on the web's EditOrderModal. contact_email is
+ * a guest's only: the address their tracking link goes to (FR-02.13b).
+ */
+export type ContactChanges = { contact_name?: string; contact_phone?: string; contact_email?: string };
+
+/**
+ * A guest's resend card (FR-02.13b, decided 2026-11-22); null once the order
+ * has closed. resend_until is added here, when the answer arrives: the wait
+ * as a moment on this phone's clock (withLinkDeadline).
+ */
+export type TrackingLink = {
+  email: string | null;
+  resend_in: number;
+  resends_left: number;
+  resend_until?: number;
+};
+
+export type GuestOrderAnswer = { order: Order; channel: string | null; link: TrackingLink | null };
+
+export type LinkAnswer = { message?: string; link?: TrackingLink | null };
+
+export function withLinkDeadline(link: TrackingLink | null | undefined): TrackingLink | null {
+  return link ? { ...link, resend_until: Date.now() + (link.resend_in ?? 0) * 1000 } : null;
+}
 
 export const ORDERS_KEY = ["orders"] as const;
 export const orderKey = (id: number | string) => ["orders", String(id)] as const;
@@ -98,11 +121,16 @@ function holding(token: string) {
 }
 
 export const guestOrdersApi = {
-  show: (token: string, signal?: AbortSignal) =>
-    api.get<{ order: Order; channel: string | null }>("/api/guest/order", { ...holding(token), signal }),
+  show: async (token: string, signal?: AbortSignal): Promise<GuestOrderAnswer> => {
+    const answer = await api.get<GuestOrderAnswer>("/api/guest/order", { ...holding(token), signal });
+
+    return { ...answer, link: withLinkDeadline(answer.link) };
+  },
   cancel: (token: string) => api.post<OrderAnswer>("/api/guest/order/cancel", undefined, holding(token)),
   confirmReceipt: (token: string) => api.post<OrderAnswer>("/api/guest/order/received", undefined, holding(token)),
   updateContact: (token: string, changes: ContactChanges) => api.patch<OrderAnswer>("/api/guest/order", changes, holding(token)),
+  /** Email the tracking link again: once per 30 seconds, 10 per order (FR-02.13b). */
+  resendLink: (token: string) => api.post<LinkAnswer>("/api/guest/order/link", undefined, holding(token)),
 };
 
 /**

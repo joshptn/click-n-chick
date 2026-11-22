@@ -18,6 +18,10 @@ use Illuminate\Http\Request;
  * tracking link, until the order closes. The order's own copy changes; the
  * customer's profile does not. A Store Agent cannot change them (decided
  * 2026-11-17), and nothing else on an order can be changed at all.
+ *
+ * A guest may also correct the email their tracking link is sent to, from the
+ * link's resend card (FR-02.13b, decided 2026-11-22). Saving it sends
+ * nothing; the guest presses Resend link after.
  */
 class OrderModificationController extends Controller
 {
@@ -62,7 +66,16 @@ class OrderModificationController extends Controller
             // Nullable so a blank (trimmed to null) gets the message below.
             'contact_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'contact_phone' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'contact_email' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
+
+        // A customer's email is their account's; only a guest's order carries one.
+        if (array_key_exists('contact_email', $validated) && ! $order->isGuest()) {
+            return $this->refuse(
+                'Only the contact name and mobile number can be changed on an order.',
+                'NOT_CHANGEABLE'
+            );
+        }
 
         if (! $this->amendment->canEditContact($order)) {
             return $this->refuse('This order has closed, so its details can no longer be changed.', 'ORDER_ALREADY_CLOSED');
@@ -90,6 +103,16 @@ class OrderModificationController extends Controller
             $changes['contact_phone'] = $phone;
         }
 
+        if (array_key_exists('contact_email', $validated)) {
+            $email = trim((string) $validated['contact_email']);
+
+            if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                return $this->refuse('That email address does not look right. Please check it.', 'CONTACT_EMAIL_INVALID');
+            }
+
+            $changes['guest_email'] = $email;
+        }
+
         if ($changes === []) {
             return $this->refuse('There was nothing to change.', 'NOTHING_TO_CHANGE');
         }
@@ -100,7 +123,9 @@ class OrderModificationController extends Controller
         $this->announcer->announce($order, 'update');
 
         return response()->json([
-            'message' => 'Your contact details for this order have been updated.',
+            'message' => array_keys($changes) === ['guest_email']
+                ? 'Your email address for this order has been updated.'
+                : 'Your contact details for this order have been updated.',
             'order' => new OrderTrackingResource($order->load(self::WITH)),
         ]);
     }

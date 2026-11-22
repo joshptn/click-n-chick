@@ -96,6 +96,9 @@ Route::prefix('guest')->group(function () {
             ->middleware('throttle:user-update');
         Route::post('/order/received', [GuestOrderController::class, 'confirmReceipt'])
             ->middleware('throttle:user-update');
+        // Its own wait and per-order cap are in GuestTrackingLink (FR-02.13b).
+        Route::post('/order/link', [GuestOrderController::class, 'resendLink'])
+            ->middleware('throttle:user-update');
     });
 });
 

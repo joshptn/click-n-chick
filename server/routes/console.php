@@ -24,8 +24,6 @@ Schedule::command('stock:expire-holds')->everyFiveMinutes()->withoutOverlapping(
 // once whenever the customer checks on the order.
 Schedule::command('payments:expire-checkouts')->everyMinute()->withoutOverlapping(5);
 
-Schedule::command('guest:prune-tokens')->daily();
-
 Schedule::command('guest:prune-carts')->daily();
 
 // Cheap when the file is fresh; a new container fetches it within ten minutes.

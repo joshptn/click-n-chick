@@ -3,6 +3,7 @@
 namespace App\Services\Payments;
 
 use App\Exceptions\InsufficientStock;
+use App\Jobs\SendGuestTrackingLink;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\StockHold;
@@ -272,6 +273,14 @@ class PaymentSettlement
     {
         $order->assignOrderNumber();
         $this->announcer->announce($order, 'create', 'create');
+
+        // A guest's tracking link, now that it is a real order (FR-02.13a,
+        // decided 2026-11-22). Once: settle() lets only the first confirmation
+        // of a payment get this far. A payment that could not place the order
+        // (owed back) sends nothing for now (decided 2026-11-23).
+        if ($order->isGuest()) {
+            SendGuestTrackingLink::dispatch($order->getKey());
+        }
     }
 
     private function channel(GatewaySession $session): ?string

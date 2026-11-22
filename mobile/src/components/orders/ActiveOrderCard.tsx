@@ -1,10 +1,12 @@
+import { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
+import { ApiError } from "../../api/client";
 import { ORDERS_KEY, guestOrderKey, guestOrdersApi, ordersApi, type Order } from "../../api/orders";
 import { useSession } from "../../hooks/useSession";
-import { useGuestOrders } from "../../lib/guestOrders";
+import { forgetGuestOrder, useGuestOrders } from "../../lib/guestOrders";
 import { colors } from "../../theme/colors";
 import { AppText } from "../AppText";
 import { IconChevronRight, IconShoppingBag } from "../icons";
@@ -42,6 +44,15 @@ export function ActiveOrderCard() {
   });
 
   const order = signedIn ? mine.data?.data[0] : guest.data?.order;
+
+  // A guest's order is kept only while it is open (decided 2026-11-22), so the
+  // next one tracked on this phone takes its place.
+  const guestClosed = Boolean(guest.data?.order.is_terminal);
+  const guestRefused = guest.error instanceof ApiError && [403, 404, 410].includes(guest.error.status);
+
+  useEffect(() => {
+    if (guestToken && (guestClosed || guestRefused)) void forgetGuestOrder(guestToken);
+  }, [guestToken, guestClosed, guestRefused]);
 
   if (!order || order.is_terminal) return null;
 

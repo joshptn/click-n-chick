@@ -41,6 +41,7 @@ export { default as IconLock } from "@tabler/icons-react-native/IconLock";
 export { default as IconLogin2 } from "@tabler/icons-react-native/IconLogin2";
 export { default as IconLogout } from "@tabler/icons-react-native/IconLogout";
 export { default as IconMail } from "@tabler/icons-react-native/IconMail";
+export { default as IconMailForward } from "@tabler/icons-react-native/IconMailForward";
 export { default as IconMapPin } from "@tabler/icons-react-native/IconMapPin";
 export { default as IconMinus } from "@tabler/icons-react-native/IconMinus";
 export { default as IconMoodEmpty } from "@tabler/icons-react-native/IconMoodEmpty";

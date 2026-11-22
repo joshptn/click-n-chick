@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@mantine/core";
 import { IconArrowLeft, IconInfoCircle, IconMail, IconToolsKitchen2 } from "@tabler/icons-react";
@@ -12,7 +12,9 @@ import EditOrderModal from "../../components/orders/EditOrderModal";
 import OrderStatusPanel from "../../components/orders/OrderStatusPanel";
 import PaymentPanel from "../../components/orders/PaymentPanel";
 import ReviewAdvanceModal from "../../components/orders/ReviewAdvanceModal";
+import TrackingLinkCard from "../../components/orders/TrackingLinkCard";
 import toast from "../../components/app/Toast";
+import { forgetGuestOrder, rememberGuestOrder } from "../../lib/guestOrders";
 import { checkPayment, goToPayment, payOrder } from "../../lib/payments";
 import {
   ORDERS_KEY,
@@ -30,6 +32,7 @@ import {
   guestOrderKey,
   orderKey,
   statusBadgeClass,
+  withLinkDeadline,
 } from "../../lib/orders";
 import { useOrderChannel, usePublicOrderChannel } from "../../context/useRealtime";
 
@@ -47,17 +50,37 @@ function TrackingSkeleton() {
   );
 }
 
+/** An expired link says how the order ended (FR-02.13); the server's message is the body. */
+const LAPSED_TITLES = {
+  ORDER_COMPLETED: "Order completed",
+  ORDER_CANCELLED: "Order cancelled",
+  TRACKING_LINK_EXPIRED: "This link has expired",
+};
+
+function errorTitle(error) {
+  const lapsed = LAPSED_TITLES[error?.payload?.error_code];
+
+  if (lapsed) return lapsed;
+  if (error?.status === 410) return "This link has expired";
+  if (error?.status === 403 || error?.status === 404) return "We can't find that order";
+
+  return "That order could not be loaded";
+}
+
 /**
  * One tracking screen for both kinds of customer.
  *
- * A guest arrives by link, so the order is named by the token in the path rather
- * than by an id, and the live feed comes over a public channel the response names
+ * A guest arrives by link, so the order is named by the token after "#" in the
+ * address (decided 2026-11-22: never sent to the web host) rather than by an
+ * id, and the live feed comes over a public channel the response names
  * instead of a private one. Everything the screen renders - the step chain, the
  * status copy, the cancel prompt, the receipt - is the same resource either way,
  * which is what stops the two experiences drifting apart.
  */
 function OrderTracking({ guest = false }) {
-  const { orderId, token } = useParams();
+  const { orderId } = useParams();
+  const { hash } = useLocation();
+  const token = guest ? hash.replace(/^#/, "") : null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -72,14 +95,32 @@ function OrderTracking({ guest = false }) {
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey,
-    queryFn: ({ signal }) =>
-      guest ? fetchGuestOrder(token, { signal }) : fetchOrder(orderId, { signal }),
+    queryFn: async ({ signal }) => {
+      if (!guest) return fetchOrder(orderId, { signal });
+
+      const payload = await fetchGuestOrder(token, { signal });
+
+      return { ...payload, link: withLinkDeadline(payload?.link) };
+    },
     enabled: Boolean(guest ? token : orderId),
     retry: false,
   });
 
   const order = data?.order ?? null;
   const prompt = cancelPrompt(order);
+
+  // Kept in this browser while the order is open, so a closed tab does not
+  // lose the link (FR-02.13c); forgotten once it closes or the link is refused.
+  useEffect(() => {
+    if (!guest || !token || !order) return;
+
+    if (order.is_terminal) forgetGuestOrder(token);
+    else rememberGuestOrder({ token, reference: order.reference ?? null, placedAt: order.placed_at });
+  }, [guest, token, order]);
+
+  useEffect(() => {
+    if (guest && token && (error?.status === 404 || error?.status === 410)) forgetGuestOrder(token);
+  }, [guest, token, error]);
 
 
   const payTarget = guest ? { token } : { orderId };
@@ -232,13 +273,7 @@ function OrderTracking({ guest = false }) {
 
         {isError && (
           <section className="rounded-[16px] border border-[#f0e9df] bg-white px-6 py-12 text-center">
-            <h2 className="m-0 font-display text-[17px] font-extrabold text-ink">
-              {error?.status === 410
-                ? "This link has expired"
-                : error?.status === 403 || error?.status === 404
-                  ? "We can't find that order"
-                  : "That order could not be loaded"}
-            </h2>
+            <h2 className="m-0 font-display text-[17px] font-extrabold text-ink">{errorTitle(error)}</h2>
             <p className="m-0 mx-auto mt-1.5 max-w-[380px] font-display text-[13px] leading-relaxed text-[#6f6b68]">
               {/* A guest has no account it could "belong to", and the server's
                   wording for an expired or unknown link is already the right one. */}
@@ -324,8 +359,12 @@ function OrderTracking({ guest = false }) {
               )}
             </div>
 
-            <div className="lg:sticky lg:top-[84px]">
+            <div className="flex flex-col gap-3.5 lg:sticky lg:top-[84px]">
               <OrderReceipt order={order} />
+
+              {guest && data?.link && !order.is_terminal && (
+                <TrackingLinkCard token={token} link={data.link} queryKey={queryKey} />
+              )}
             </div>
           </div>
         )}

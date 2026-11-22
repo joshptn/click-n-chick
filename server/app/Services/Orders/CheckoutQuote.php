@@ -344,7 +344,7 @@ class CheckoutQuote
             // link could ever be sent again.
             $user === null && $email === '' => [
                 'code' => 'CONTACT_EMAIL_REQUIRED',
-                'message' => 'Enter your email address so we can send your order details.',
+                'message' => 'Enter your email address so we can send your tracking link.',
             ],
             default => null,
         };

@@ -155,45 +155,54 @@ class GuestTrackingTest extends TestCase
     // The access window, and that one predicate governs it
     // -----------------------------------------------------------------
 
-    public function test_an_open_order_stays_reachable_so_the_right_to_cancel_survives(): void
+    public function test_a_link_works_until_seven_days_after_placement(): void
     {
         [$order, $token] = $this->guestOrder();
 
-        $this->travelTo(CarbonImmutable::now()->addDays(20));
+        $this->travelTo(CarbonImmutable::now()->addDays(7)->subMinute());
 
         $this->holdingToken($token)->getJson('/api/guest/order')->assertOk();
 
         $this->assertTrue($order->fresh()->guestAccessIsLive());
     }
 
-    public function test_an_open_order_stops_being_reachable_at_the_ceiling(): void
+    public function test_an_order_still_open_after_seven_days_says_the_link_expired(): void
     {
         [, $token] = $this->guestOrder();
 
-        $this->travelTo(CarbonImmutable::now()->addDays(31));
+        $this->travelTo(CarbonImmutable::now()->addDays(7)->addMinute());
 
         $this->holdingToken($token)
             ->getJson('/api/guest/order')
             ->assertStatus(410)
-            ->assertJsonPath('error_code', 'TRACKING_LINK_EXPIRED');
+            ->assertJsonPath('error_code', 'TRACKING_LINK_EXPIRED')
+            ->assertJsonPath('message', 'This tracking link has expired. Please contact the store.');
     }
 
-    public function test_a_closed_order_stays_reachable_through_the_grace_window(): void
+    public function test_a_completed_order_says_there_is_nothing_to_track(): void
     {
-        [, $token] = $this->guestOrder([
-            'status' => OrderStatus::COMPLETED,
+        [, $collected] = $this->guestOrder(['status' => OrderStatus::COMPLETED, 'closed_at' => CarbonImmutable::now()]);
+        [, $delivered] = $this->guestOrder([
+            'order_type' => 'delivery',
+            'status' => OrderStatus::DELIVERED,
             'closed_at' => CarbonImmutable::now(),
         ]);
 
-        $this->travelTo(CarbonImmutable::now()->addDays(6));
+        $this->travelTo(CarbonImmutable::now()->addDays(8));
 
-        $this->holdingToken($token)->getJson('/api/guest/order')->assertOk();
+        foreach ([$collected, $delivered] as $token) {
+            $this->holdingToken($token)
+                ->getJson('/api/guest/order')
+                ->assertStatus(410)
+                ->assertJsonPath('error_code', 'ORDER_COMPLETED')
+                ->assertJsonPath('message', 'The order is completed, nothing to track here.');
+        }
     }
 
-    public function test_a_closed_order_is_gone_once_the_grace_window_passes(): void
+    public function test_a_cancelled_order_says_it_was_cancelled(): void
     {
         [, $token] = $this->guestOrder([
-            'status' => OrderStatus::COMPLETED,
+            'status' => OrderStatus::CANCELLED,
             'closed_at' => CarbonImmutable::now(),
         ]);
 
@@ -201,17 +210,46 @@ class GuestTrackingTest extends TestCase
 
         $this->holdingToken($token)
             ->getJson('/api/guest/order')
-            ->assertStatus(410);
+            ->assertStatus(410)
+            ->assertJsonPath('error_code', 'ORDER_CANCELLED')
+            ->assertJsonPath('message', 'This order was cancelled. Nothing to track here.');
     }
 
-    public function test_both_windows_come_from_configuration(): void
+    /** Decided 2026-11-22: counted from placement, so closing late adds nothing. */
+    public function test_closing_an_order_does_not_extend_its_link(): void
     {
-        config()->set('store.guest.track_days_after_close', 1);
+        [$order, $token] = $this->guestOrder();
 
+        $this->travelTo(CarbonImmutable::now()->addDays(6));
+        $order->forceFill(['status' => OrderStatus::COMPLETED, 'closed_at' => CarbonImmutable::now()])->save();
+
+        $this->travelTo(CarbonImmutable::now()->addDays(2));
+
+        $this->holdingToken($token)->getJson('/api/guest/order')->assertStatus(410);
+    }
+
+    /** It was never an order, so it stays "not found" after the link lapses too. */
+    public function test_an_expired_unpaid_checkout_is_still_not_found(): void
+    {
         [, $token] = $this->guestOrder([
-            'status' => OrderStatus::COMPLETED,
+            'status' => OrderStatus::CANCELLED,
+            'payment_status' => Order::PAYMENT_EXPIRED,
             'closed_at' => CarbonImmutable::now(),
         ]);
+
+        $this->travelTo(CarbonImmutable::now()->addDays(8));
+
+        $this->holdingToken($token)
+            ->getJson('/api/guest/order')
+            ->assertNotFound()
+            ->assertJsonPath('error_code', 'ORDER_NOT_FOUND');
+    }
+
+    public function test_the_window_comes_from_configuration(): void
+    {
+        config()->set('store.guest.track_days', 1);
+
+        [, $token] = $this->guestOrder();
 
         $this->travelTo(CarbonImmutable::now()->addDays(2));
 
@@ -229,7 +267,7 @@ class GuestTrackingTest extends TestCase
             'while the link works, the guest channel is broadcast on'
         );
 
-        $this->travelTo(CarbonImmutable::now()->addDays(31));
+        $this->travelTo(CarbonImmutable::now()->addDays(8));
 
         $this->holdingToken($token)->getJson('/api/guest/order')->assertStatus(410);
 
@@ -295,15 +333,69 @@ class GuestTrackingTest extends TestCase
         $this->assertNotSame($order->guest_token_hash, $order->guestChannel());
     }
 
-    public function test_rotating_the_token_moves_the_channel(): void
+    // -----------------------------------------------------------------
+    // The token is derived from the order (decided 2026-11-22)
+    // -----------------------------------------------------------------
+
+    public function test_the_same_order_always_gets_the_same_token_and_channel(): void
+    {
+        [$order, $token] = $this->guestOrder();
+
+        $channel = $order->guestChannel();
+
+        $this->assertSame($token, $order->fresh()->mintGuestToken());
+        $this->assertSame($channel, $order->fresh()->guestChannel());
+    }
+
+    public function test_the_token_can_be_rebuilt_from_the_order(): void
+    {
+        [$order, $token] = $this->guestOrder();
+
+        $this->assertSame($token, $order->fresh()->guestToken());
+    }
+
+    public function test_two_orders_never_share_a_token(): void
+    {
+        [, $first] = $this->guestOrder();
+        [, $second] = $this->guestOrder();
+
+        $this->assertNotSame($first, $second);
+    }
+
+    public function test_the_token_depends_on_the_key(): void
+    {
+        [$order, $token] = $this->guestOrder();
+
+        config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+        config()->set('app.previous_keys', []);
+
+        $this->assertNull($order->fresh()->guestToken(), 'no key reproduces it');
+        $this->assertNotSame($token, Order::query()->find($order->id)->mintGuestToken());
+    }
+
+    public function test_a_previous_key_still_rebuilds_the_token_after_rotation(): void
+    {
+        [$order, $token] = $this->guestOrder();
+
+        config()->set('app.previous_keys', [config('app.key')]);
+        config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+
+        $this->assertSame($token, $order->fresh()->guestToken());
+
+        // And the link itself keeps working: lookup is by the stored hash.
+        $this->holdingToken($token)->getJson('/api/guest/order')->assertOk();
+    }
+
+    /** A link handed out before tokens were derived keeps opening its order. */
+    public function test_a_random_token_from_before_still_opens_its_order(): void
     {
         [$order] = $this->guestOrder();
 
-        $before = $order->guestChannel();
+        $old = bin2hex(random_bytes(32));
+        $order->forceFill(['guest_token_hash' => Order::hashGuestToken($old)])->save();
 
-        $order->mintGuestToken();
-
-        $this->assertNotSame($before, $order->fresh()->guestChannel());
+        $this->holdingToken($old)->getJson('/api/guest/order')->assertOk();
+        $this->assertNull($order->fresh()->guestToken());
     }
 
     /** The test that fails if anyone puts the whole model back in the payload. */
@@ -361,6 +453,42 @@ class GuestTrackingTest extends TestCase
         $this->assertSame(OrderStatus::PREPARING, $order->fresh()->status);
     }
 
+    public function test_a_guest_can_correct_the_email_the_link_is_sent_to(): void
+    {
+        [$order, $token] = $this->guestOrder();
+
+        $this->holdingToken($token)
+            ->patchJson('/api/guest/order', ['contact_email' => '  julia.v@example.test '])
+            ->assertOk()
+            ->assertJsonPath('message', 'Your email address for this order has been updated.');
+
+        $this->assertSame('julia.v@example.test', $order->fresh()->guest_email);
+    }
+
+    public function test_a_malformed_email_is_refused(): void
+    {
+        [$order, $token] = $this->guestOrder();
+
+        foreach (['', 'not-an-email'] as $email) {
+            $this->holdingToken($token)
+                ->patchJson('/api/guest/order', ['contact_email' => $email])
+                ->assertStatus(422)
+                ->assertJsonPath('error_code', 'CONTACT_EMAIL_INVALID');
+        }
+
+        $this->assertSame('julia@example.test', $order->fresh()->guest_email);
+    }
+
+    public function test_the_email_cannot_be_changed_once_the_order_closes(): void
+    {
+        [, $token] = $this->guestOrder(['status' => OrderStatus::COMPLETED, 'closed_at' => CarbonImmutable::now()]);
+
+        $this->holdingToken($token)
+            ->patchJson('/api/guest/order', ['contact_email' => 'new@example.test'])
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'ORDER_ALREADY_CLOSED');
+    }
+
     public function test_a_guest_may_change_only_the_contact_and_has_no_details_to_confirm(): void
     {
         [, $token] = $this->guestOrder();
@@ -398,35 +526,5 @@ class GuestTrackingTest extends TestCase
             ->postJson('/api/guest/order/received')
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'NOT_A_DELIVERY');
-    }
-
-    // -----------------------------------------------------------------
-    // Pruning
-    // -----------------------------------------------------------------
-
-    public function test_the_prune_clears_only_lapsed_tokens(): void
-    {
-        [$live] = $this->guestOrder();
-        [$lapsed] = $this->guestOrder([
-            'status' => OrderStatus::COMPLETED,
-            'closed_at' => CarbonImmutable::now()->subDays(30),
-        ]);
-
-        $this->artisan('guest:prune-tokens')->assertSuccessful();
-
-        $this->assertNotNull($live->fresh()->guest_token_hash);
-        $this->assertNull($lapsed->fresh()->guest_token_hash);
-    }
-
-    public function test_the_dry_run_clears_nothing(): void
-    {
-        [$lapsed] = $this->guestOrder([
-            'status' => OrderStatus::COMPLETED,
-            'closed_at' => CarbonImmutable::now()->subDays(30),
-        ]);
-
-        $this->artisan('guest:prune-tokens --dry-run')->assertSuccessful();
-
-        $this->assertNotNull($lapsed->fresh()->guest_token_hash);
     }
 }
