@@ -331,8 +331,10 @@ export default function Checkout() {
               </View>
 
               <Notice>
-                You can cancel while your order is placed, before the store confirms it, for a full refund. Once the store confirms it, it
-                can no longer be cancelled. Only the contact name and number can be changed after you pay.
+                If the store hasn&apos;t confirmed your order within 15 minutes of payment, you can cancel it for a full refund. Once the
+                store confirms your order, it can no longer be cancelled. Paid with GCash? A refund goes back to your GCash
+                automatically. Paid by scanning the QR code (QR Ph), even from the GCash app? The store refunds you directly, so please
+                contact the store. Only the contact name and number can be changed after you pay.
               </Notice>
 
               <Pressable

@@ -6,7 +6,6 @@ use App\Events\MenuBroadcast;
 use App\Http\Controllers\StockController;
 use App\Models\Category;
 use App\Models\Food;
-use App\Models\Order;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use App\Services\Stock\StockReservation;
@@ -88,7 +87,7 @@ class StockManagementTest extends TestCase
     public function test_the_list_shows_units_held_for_customers_still_paying(): void
     {
         $food = $this->food(['stock_quantity' => 5]);
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $this->user(User::ROLE_CUSTOMER)->id, 'order_type' => 'pickup', 'status' => OrderStatus::PLACED,
             'subtotal' => 0, 'total_amount' => 0, 'total_price' => 0, 'payment_status' => 'unpaid',
         ]);
@@ -146,7 +145,7 @@ class StockManagementTest extends TestCase
     public function test_a_step_does_not_undo_a_sale_that_landed_first(): void
     {
         $food = $this->food(['stock_quantity' => 5]);
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $this->user(User::ROLE_CUSTOMER)->id, 'order_type' => 'pickup', 'status' => OrderStatus::PLACED,
             'subtotal' => 0, 'total_amount' => 0, 'total_price' => 0, 'payment_status' => 'unpaid',
         ]);
@@ -443,4 +442,3 @@ class StockManagementTest extends TestCase
         $this->assertSame('Classic Roasted Chicken', $fresh->food_name);
     }
 }
-

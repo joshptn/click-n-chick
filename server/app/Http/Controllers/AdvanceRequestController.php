@@ -20,7 +20,7 @@ class AdvanceRequestController extends Controller
 {
     use AuthorizesRequests;
 
-    private const WITH = ['items.food', 'items.addons', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'paidPayment'];
 
     public const REMINDER_COOLDOWN_MINUTES = 60;
 
@@ -208,7 +208,6 @@ class AdvanceRequestController extends Controller
                 'status' => OrderStatus::REJECTED,
                 'cancellation_reason' => trim($validated['reason']),
                 'cancelled_by' => $request->user()->getKey(),
-                'refund_owed' => 0,
             ])->save();
 
             return null;

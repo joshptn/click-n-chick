@@ -3,22 +3,27 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\OrderQueueResource;
+use App\Mail\GuestOrderNotice;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
+use App\Services\Payments\PaymentCheckout;
+use App\Services\Payments\PaymentRefunds;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class OrderQueueController extends Controller
 {
     use AuthorizesRequests;
 
-    private const WITH = ['items.food', 'items.addons', 'user', 'payments'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'paidPayment'];
 
     /** The board shows the day's latest finishes; the summary still counts them all. */
     private const COMPLETED_SHOWN = 50;
@@ -27,6 +32,8 @@ class OrderQueueController extends Controller
         private StoreAvailability $store,
         private OrderAnnouncer $announcer,
         private AdvanceExpiry $expiry,
+        private PaymentCheckout $checkout,
+        private PaymentRefunds $refunds,
     ) {}
 
     public function index(Request $request)
@@ -306,6 +313,13 @@ class OrderQueueController extends Controller
             ], 422);
         }
 
+        // Decided 2026-11-23: an unpaid order's open payment page is closed
+        // first. One paid at that moment is now a paid order, and needs the
+        // refund choice like any other.
+        if ($this->checkout->closeOpen($order)) {
+            $order->refresh();
+        }
+
         $reason = trim((string) $validated['reason']);
 
         if ($reason === '') {
@@ -325,28 +339,43 @@ class OrderQueueController extends Controller
         /**
          * BR-21a: a full refund or none, as the agent chose. Clamped to what was
          * actually paid: an unpaid order (an advance request the shop turns
-         * down, usually) has nothing to give back, whatever was chosen.
+         * down, usually) has nothing to give back, whatever was chosen. The
+         * refund is recorded on the payment (decided 2026-11-23); No refund
+         * records ₱0.
          */
-        $refund = ($validated['refund'] ?? false) && $order->isPaid()
+        $payment = $order->paidPayment;
+        $refund = ($validated['refund'] ?? false) && $payment !== null
             ? round((float) ($order->total_amount ?? $order->total_price), 2)
             : 0.0;
 
-        $order->forceFill([
-            'status' => OrderStatus::CANCELLED,
-            'cancellation_reason' => $reason,
-            'cancelled_by' => $request->user()->getKey(),
-            'refund_owed' => $refund,
-        ])->save();
+        DB::transaction(function () use ($order, $reason, $request, $payment, $refund) {
+            $order->forceFill([
+                'status' => OrderStatus::CANCELLED,
+                'cancellation_reason' => $reason,
+                'cancelled_by' => $request->user()->getKey(),
+            ])->save();
+
+            if ($payment === null) {
+                return;
+            }
+
+            $refund > 0
+                ? $this->refunds->owe($payment, $refund, PaymentRefunds::REASON_CANCELLATION)
+                : $this->refunds->decline($payment);
+        });
 
         $this->announcer->statusChanged($order);
+        $this->announcer->toGuest($order, GuestOrderNotice::CANCELLED);
+        $payment?->refresh();
 
         return response()->json([
             'message' => match (true) {
-                $refund > 0 => 'Order cancelled and marked for refund.',
-                ! $order->isPaid() => 'Order cancelled. It had not been paid for, so there is nothing to refund.',
+                $refund > 0 && $payment?->refund_status === Payment::REFUND_MANUAL => 'Order cancelled. The refund is in Refunds, to pay back by hand.',
+                $refund > 0 => 'Order cancelled. The refund is on its way back to the customer\'s GCash.',
+                $payment === null => 'Order cancelled. It had not been paid for, so there is nothing to refund.',
                 default => 'Order cancelled without a refund.',
             },
-            'refund_owed' => $refund,
+            'refund' => $payment?->refundSummary(),
             'order' => new OrderQueueResource($order->load(self::WITH)),
         ]);
     }

@@ -1,7 +1,15 @@
 import { useContext, useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { IconCircleCheck, IconClockHour4, IconCreditCard, IconDeviceMobile, IconLock, IconToolsKitchen2 } from "@tabler/icons-react";
+import {
+  IconCircleCheck,
+  IconClockHour4,
+  IconCreditCard,
+  IconDeviceMobile,
+  IconLock,
+  IconReceiptRefund,
+  IconToolsKitchen2,
+} from "@tabler/icons-react";
 
 import AppHeader from "../../components/app/AppHeader";
 import Button from "../../components/ui/Button";
@@ -123,6 +131,10 @@ function PaymentReturn() {
   const waiting = Boolean(order?.awaiting_payment) && !order?.is_advance;
   const settled = Boolean(data?.paid || order?.is_advance || order?.payment_status === "paid");
   const remaining = waiting ? timeLeft(order.payment_due_at, now) : null;
+  // Decided 2026-11-23: a payment can go through while the order does not, so
+  // the order is checked as well as the payment. "cancelled": paid, but the
+  // order could not go ahead; "extra": paid twice.
+  const notice = order?.payment_notice ?? null;
 
   useEffect(() => {
     if (!waiting) return undefined;
@@ -133,8 +145,11 @@ function PaymentReturn() {
   }, [waiting]);
 
   useEffect(() => {
-    if (data?.paid) toast.success("Your payment went through and your order is with the store.", "Order placed");
-  }, [data?.paid]);
+    if (!data?.paid || notice?.kind === "cancelled") return;
+
+    if (notice?.kind === "extra") toast.info(notice.body, notice.title);
+    else toast.success("Your payment went through and your order is with the store.", "Order placed");
+  }, [data?.paid, notice?.kind, notice?.body, notice?.title]);
 
   // On to the order: nothing more to come back to here.
   useEffect(() => {
@@ -159,8 +174,32 @@ function PaymentReturn() {
     return <Navigate to={token ? "/orders" : "/home"} replace />;
   }
 
-  // A real order: paid (even one owed back), or an advance order, which is an
-  // order before it is paid.
+  // Paid, but the order could not go ahead: said plainly, with the refund,
+  // rather than "Order placed" (decided 2026-11-23).
+  if (settled && notice?.kind === "cancelled") {
+    return (
+      <Shell>
+        <Card icon={IconReceiptRefund} tone="muted" title={notice.title.replace(/\.$/, "")}>
+          <p
+            className="m-0 mx-auto mt-2 max-w-[380px] font-display text-[13.5px] leading-relaxed text-[#6f6b68]"
+            data-testid="payment-notice"
+          >
+            {notice.body}
+          </p>
+
+          <Link
+            to={trackingPath(target)}
+            replace
+            className="mt-6 flex h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-brand-500 font-display text-[15px] font-semibold text-white no-underline transition-colors hover:bg-brand-600"
+          >
+            View order details
+          </Link>
+        </Card>
+      </Shell>
+    );
+  }
+
+  // A real order: paid, or an advance order, which is an order before it is paid.
   if (settled) {
     return <Navigate to={trackingPath(target)} replace />;
   }

@@ -228,7 +228,7 @@ class GuestCheckoutTest extends TestCase
         $this->assertSame('09171234567', $order->contact_phone);
         $this->assertSame('julia@example.test', $order->guest_email);
         $this->assertSame('350.00', $order->total_amount);
-        $this->assertSame('unpaid', $order->payment_status);
+        $this->assertSame('unpaid', $order->paymentStatus());
     }
 
     public function test_the_tracking_token_is_returned_once_and_stored_only_as_a_hash(): void

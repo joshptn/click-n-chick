@@ -5,12 +5,13 @@ import {
   IconShoppingBag,
 } from "@tabler/icons-react";
 
-import { formatDay, formatTime } from "../../lib/orders";
+import { formatDay, formatTime, refundLine } from "../../lib/orders";
 import { formatPeso } from "../../lib/menu";
 
 /** Who collects, what was ordered and what it costs: the receipt's main card. */
 export function OrderSummaryCard({ order }) {
   const isDelivery = order.order_type === "delivery";
+  const refund = refundLine(order);
   const initials =
     (order.contact?.name ?? "")
       .split(" ")
@@ -116,11 +117,24 @@ export function OrderSummaryCard({ order }) {
 
       <div className="px-5 pb-5">
         <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#fff4e8] px-4 py-3">
-          <span className="font-display text-[13.5px] font-bold text-ink">Total amount</span>
+          {/* Decided 2026-11-23: "paid" once it is. */}
+          <span className="font-display text-[13.5px] font-bold text-ink">
+            {order.payment?.paid ? "Total amount paid" : "Total amount"}
+          </span>
           <span className="font-display text-[19px] font-extrabold leading-none text-brand-600">
             {formatPeso(order.total)}
           </span>
         </div>
+
+        {refund && (
+          <div
+            className="mt-2 flex items-center justify-between gap-3 px-4 font-display text-[12.5px] text-[#6f6b68]"
+            data-testid="refund-line"
+          >
+            <span>{refund.label}</span>
+            <span className="font-semibold text-ink">{formatPeso(refund.amount)}</span>
+          </div>
+        )}
       </div>
     </aside>
   );

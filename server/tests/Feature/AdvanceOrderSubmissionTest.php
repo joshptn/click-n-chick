@@ -114,7 +114,7 @@ class AdvanceOrderSubmissionTest extends TestCase
         $this->assertSame(OrderStatus::SUBMITTED, $order->status);
         $this->assertSame('pickup', $order->order_type);
         $this->assertNotNull($order->scheduled_for);
-        $this->assertSame('unpaid', $order->payment_status);
+        $this->assertSame('unpaid', $order->paymentStatus());
         $this->assertSame(400.0, (float) $order->total_amount);
     }
 

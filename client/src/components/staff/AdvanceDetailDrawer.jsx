@@ -32,6 +32,13 @@ const OUTCOME_TONES = {
   slate: "bg-[#f4f1ec] text-[#5f5b58]",
 };
 
+/** Where a refund stands (decided 2026-11-23), after its amount. */
+const REFUND_NOTES = {
+  refunding: "going back to the customer's GCash.",
+  by_hand: "to refund by hand, from Order Records › Refunds.",
+  refunded: "refunded.",
+};
+
 /**
  * Everything about one advance order: who, when they collect, what, the money,
  * and what can be done next.
@@ -80,8 +87,10 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
               <div className={`mx-5 mt-4 rounded-[10px] px-3.5 py-2.5 font-display text-[12.5px] ${OUTCOME_TONES[outcome.tone]}`}>
                 <p className="m-0 font-semibold">{outcome.label}</p>
                 {order.cancellation_reason && <p className="m-0 mt-0.5 opacity-90">{order.cancellation_reason}</p>}
-                {Number(order.refund_owed) > 0 && (
-                  <p className="m-0 mt-0.5 opacity-90">{formatPeso(order.refund_owed)} marked for refund.</p>
+                {order.refund?.amount > 0 && (
+                  <p className="m-0 mt-0.5 opacity-90">
+                    {formatPeso(order.refund.amount)} {REFUND_NOTES[order.refund.state] ?? "marked for refund."}
+                  </p>
                 )}
                 {order.closed_at && <p className="m-0 mt-0.5 text-[11px] opacity-75">{formatStamp(order.closed_at)}</p>}
               </div>

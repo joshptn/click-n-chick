@@ -3,7 +3,9 @@
 namespace App\Services\Orders;
 
 use App\Events\OrderBroadcast;
+use App\Jobs\SendGuestOrderNotice;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\User;
 use App\Utils\Notification;
 use Illuminate\Support\Facades\Log;
@@ -27,6 +29,33 @@ class OrderAnnouncer
     public function statusChanged(Order $order): void
     {
         $this->announce($order, 'update', (string) $order->status);
+    }
+
+    /** A notice for the order's account holder, in the app and by push. Guests have no account. */
+    public function toCustomer(Order $order, array $notice): void
+    {
+        if ($order->user_id === null) {
+            return;
+        }
+
+        $this->attempt($order, 'customer notification', fn () => Notification::send((int) $order->user_id, $notice, $order));
+    }
+
+    /**
+     * An email for the order's guest (decided 2026-11-23: guests are told by
+     * email). Queued; the worker builds the message and the tracking link.
+     */
+    public function toGuest(Order $order, string $kind, ?Payment $payment = null): void
+    {
+        if (! $order->isGuest() || blank($order->guest_email)) {
+            return;
+        }
+
+        $this->attempt($order, 'guest email', fn () => SendGuestOrderNotice::dispatch(
+            (int) $order->getKey(),
+            $kind,
+            $payment?->getKey(),
+        )->afterCommit());
     }
 
     public function toStaff(Order $order, array $notice, array $roles = [User::ROLE_ADMIN]): int

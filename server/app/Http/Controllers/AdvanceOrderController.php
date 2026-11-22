@@ -82,7 +82,6 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                     'delivery_fee' => 0,
                     'total_amount' => $quote['total'],
                     'total_price' => $quote['total'],
-                    'payment_status' => 'unpaid',
                 ]);
 
                 foreach ($quote['items'] as $line) {

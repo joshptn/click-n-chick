@@ -123,7 +123,7 @@ class OrderController extends Controller implements HasMiddleware
             'refunded' => $policy['refundable'],
             'refund_amount' => $policy['refund_amount'],
             'refund_code' => $policy['code'],
-            'order' => new OrderTrackingResource($order->load('items.food', 'items.addons', 'user')),
+            'order' => new OrderTrackingResource($order->load('items.food', 'items.addons', 'user', 'paidPayment')),
         ], 200);
     }
 

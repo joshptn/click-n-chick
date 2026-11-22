@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 
 class Order extends Model
@@ -30,13 +31,6 @@ class Order extends Model
 
     /** An immediate order not paid this long after checkout is cancelled (FR-04.5). */
     public const PAYMENT_WINDOW_MINUTES = StockReservation::PAYMENT_HOLD_MINUTES;
-
-    public const PAYMENT_UNPAID = 'unpaid';
-
-    public const PAYMENT_PAID = 'paid';
-
-    /** An immediate checkout nobody paid for: cancelled by the system, hidden from staff. */
-    public const PAYMENT_EXPIRED = 'expired';
 
     /** Stands in for the customer on the orders of a deleted account. */
     public const ANONYMIZED_CUSTOMER = 'Deleted customer';
@@ -65,7 +59,6 @@ class Order extends Model
         'accepted_at',
         'cancellation_reason',
         'cancelled_by',
-        'refund_owed',
         'closed_at',
         'total_price',
         'subtotal',
@@ -73,7 +66,6 @@ class Order extends Model
         'delivery_fee',
         'delivery_distance_km',
         'total_amount',
-        'payment_status',
         'preparation_time',
         'contact_name',
         'contact_phone',
@@ -105,7 +97,6 @@ class Order extends Model
             'accepted_at' => 'datetime',
             'closed_at' => 'datetime',
             'preparation_time' => 'integer',
-            'refund_owed' => 'decimal:2',
             'delivery_distance_km' => 'decimal:2',
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -295,9 +286,20 @@ class Order extends Model
             && $expires->greaterThan($at ? CarbonImmutable::parse($at) : CarbonImmutable::now());
     }
 
+    /**
+     * Paid when a payment for it is confirmed (decided 2026-11-23: the payment
+     * record is the only record of it). Reads the paidPayment relation, so a
+     * model kept across a settlement needs refresh() first.
+     */
     public function isPaid(): bool
     {
-        return $this->payment_status === self::PAYMENT_PAID;
+        return $this->paidPayment !== null;
+    }
+
+    /** "paid" or "unpaid", as the API has always answered. */
+    public function paymentStatus(): string
+    {
+        return $this->isPaid() ? Payment::STATUS_PAID : 'unpaid';
     }
 
     /**
@@ -305,11 +307,19 @@ class Order extends Model
      * closed unpaid. Nobody sees these, staff or customer (decided
      * 2026-11-17): it is not a real order until it is paid. The row exists so
      * the stock hold knows which checkout it is holding for.
+     *
+     * Never paid, and either still waiting for payment or cancelled by nobody:
+     * the system lets a checkout lapse with cancelled_by empty, while a store
+     * cancellation always names the agent.
      */
     public function isUnpaidCheckout(): bool
     {
-        return ! $this->isAdvance()
-            && ($this->status === OrderStatus::AWAITING_PAYMENT || $this->payment_status === self::PAYMENT_EXPIRED);
+        if ($this->isAdvance() || $this->isPaid()) {
+            return false;
+        }
+
+        return $this->status === OrderStatus::AWAITING_PAYMENT
+            || ($this->status === OrderStatus::CANCELLED && $this->cancelled_by === null);
     }
 
     /** Real orders only: every order except an unpaid immediate checkout. */
@@ -317,11 +327,23 @@ class Order extends Model
     {
         return $query->where(fn (Builder $seen) => $seen
             ->whereNotNull('orders.scheduled_for')
-            ->orWhere(fn (Builder $immediate) => $immediate
-                ->where('orders.status', '!=', OrderStatus::AWAITING_PAYMENT)
-                ->where(fn (Builder $payment) => $payment
-                    ->whereNull('orders.payment_status')
-                    ->orWhere('orders.payment_status', '!=', self::PAYMENT_EXPIRED))));
+            ->orWhereHas('payments', fn (Builder $payment) => $payment->verified())
+            ->orWhereNotIn('orders.status', [OrderStatus::AWAITING_PAYMENT, OrderStatus::CANCELLED])
+            ->orWhere(fn (Builder $cancelled) => $cancelled
+                ->where('orders.status', OrderStatus::CANCELLED)
+                ->whereNotNull('orders.cancelled_by')));
+    }
+
+    /** Orders with a confirmed payment. */
+    public function scopePaid(Builder $query): Builder
+    {
+        return $query->whereHas('payments', fn (Builder $payment) => $payment->verified());
+    }
+
+    /** Orders without a confirmed payment. */
+    public function scopeUnpaid(Builder $query): Builder
+    {
+        return $query->whereDoesntHave('payments', fn (Builder $payment) => $payment->verified());
     }
 
     /**
@@ -592,6 +614,31 @@ class Order extends Model
     public function payments()
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * The payment that paid for the order: the first one confirmed. Any later
+     * confirmed payment is an extra payment, owed back in full (decided
+     * 2026-11-23).
+     */
+    public function paidPayment(): HasOne
+    {
+        return $this->hasOne(Payment::class)->ofMany(
+            ['paid_at' => 'min', 'id' => 'min'],
+            fn (Builder $payment) => $payment->verified(),
+        );
+    }
+
+    /** Confirmed payments after the one that paid for the order. */
+    public function extraPayments()
+    {
+        // With no paid payment there is nothing extra: id 0 matches no row's exclusion,
+        // and verified() finds nothing anyway.
+        return $this->payments()
+            ->verified()
+            ->whereKeyNot($this->paidPayment?->getKey() ?? 0)
+            ->orderBy('paid_at')
+            ->orderBy('id');
     }
 
     public function notifications()

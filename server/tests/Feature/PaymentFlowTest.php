@@ -7,6 +7,7 @@ use App\Events\NotificationBroadcast;
 use App\Events\OrderBroadcast;
 use App\Http\Controllers\CartController;
 use App\Http\Middleware\ResolveGuestOrder;
+use App\Mail\GuestOrderNotice;
 use App\Mail\GuestTrackingLinkMail;
 use App\Models\CartItem;
 use App\Models\Food;
@@ -15,11 +16,13 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\StockHold;
 use App\Models\User;
+use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
 use App\Services\Payments\CheckoutExpiry;
 use App\Services\Payments\FakePaymentGateway;
 use App\Services\Payments\GatewaySession;
 use App\Services\Payments\PaymentGateway;
+use App\Services\Payments\PaymentSettlement;
 use App\Services\Verification\Channel;
 use App\Support\NativeApp;
 use Carbon\CarbonImmutable;
@@ -212,7 +215,7 @@ class PaymentFlowTest extends TestCase
         $order = Order::firstOrFail();
 
         $this->assertSame(OrderStatus::CANCELLED, $order->status);
-        $this->assertSame(Order::PAYMENT_EXPIRED, $order->payment_status);
+        $this->assertTrue($order->isUnpaidCheckout());
         $this->assertSame(10, $food->fresh()->available_quantity);
         $this->assertSame(1, CartItem::count(), 'The cart is left for another try.');
         $this->assertFalse($this->staffSees($order));
@@ -351,9 +354,9 @@ class PaymentFlowTest extends TestCase
         $order->refresh();
 
         $this->assertSame(OrderStatus::CANCELLED, $order->status);
-        $this->assertSame(Order::PAYMENT_EXPIRED, $order->payment_status);
+        $this->assertTrue($order->isUnpaidCheckout());
         $this->assertSame(CheckoutExpiry::REASON, $order->cancellation_reason);
-        $this->assertSame(0.0, (float) $order->refund_owed);
+        $this->assertFalse($order->payments()->refunds()->exists());
         $this->assertContains($session, $this->gateway->cancelled, 'The payment page is closed first.');
         $this->assertSame(Payment::STATUS_CLOSED, $order->payments()->value('payment_status'));
         $this->assertSame(10, $food->fresh()->available_quantity);
@@ -451,16 +454,96 @@ class PaymentFlowTest extends TestCase
         $order->refresh();
         $this->assertSame(OrderStatus::CANCELLED, $order->status);
         $this->assertTrue($order->isPaid());
-        $this->assertSame(700.0, (float) $order->refund_owed);
+        $this->assertSame(700.0, (float) $order->paidPayment->refund_amount);
         $this->assertNull($order->order_number);
 
         // Money is owed back, so the staff can see it now.
         $this->assertTrue($this->staffSees($order));
         $this->assertStringContainsString(
-            'will be refunded',
+            'Payment received, but your order was cancelled. Unfortunately, the items are no longer available.',
             (string) Notification::query()->where('user_id', $customer->id)->latest('id')->value('message')
                 .Notification::query()->where('user_id', $customer->id)->latest('id')->value('body')
         );
+
+        // GCash goes back through Xendit at once (decided 2026-11-23).
+        $this->assertSame(Payment::REFUND_PENDING, $order->paidPayment->refund_status);
+        $this->assertCount(1, $this->gateway->refunds);
+
+        // The return screen checks the order as well as the payment.
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}/payment")
+            ->assertOk()
+            ->assertJsonPath('paid', true)
+            ->assertJsonPath('order.status', OrderStatus::CANCELLED)
+            ->assertJsonPath('order.payment_notice.kind', 'cancelled')
+            ->assertJsonPath('order.payment_notice.title', 'Payment received, but your order was cancelled.')
+            ->assertJsonPath('order.payment_notice.body', 'Unfortunately, the items are no longer available. We received your ₱700.00 payment, and a full refund of ₱700.00 is on its way back to your GCash. You can view your order details for updates.')
+            ->assertJsonPath('order.payment.refund.state', 'refunding');
+    }
+
+    public function test_a_qrph_payment_that_cannot_place_the_order_is_refunded_by_hand(): void
+    {
+        $customer = $this->user();
+        $food = $this->food(2);
+        $this->checkout($customer, $food)->assertCreated();
+        $order = Order::firstOrFail();
+        $session = $this->sessionOf($order);
+
+        $this->gateway->unreachable = true;
+        $this->travel(10)->minutes();
+        $this->artisan('payments:expire-checkouts')->assertSuccessful();
+        $this->gateway->unreachable = false;
+        $food->forceFill(['stock_quantity' => 0])->save();
+
+        $this->gateway->pay($session, 'QRPH');
+        $this->webhook('payment_session.completed', ['payment_session_id' => $session])->assertOk();
+
+        $payment = $order->fresh()->paidPayment;
+        $this->assertSame(Payment::REFUND_MANUAL, $payment->refund_status);
+        $this->assertSame([], $this->gateway->refunds, 'Xendit cannot refund QR Ph.');
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}/payment")
+            ->assertJsonPath('order.payment_notice.body', 'Unfortunately, the items are no longer available. We received your ₱700.00 payment, and please contact the store to get your ₱700.00 back. You can view your order details for updates.');
+    }
+
+    /** Decided 2026-11-23: the second payment is refunded in full; the order goes ahead. */
+    public function test_an_order_paid_twice_refunds_the_extra_payment(): void
+    {
+        $customer = $this->user();
+        $this->checkout($customer, $this->food())->assertCreated();
+        $order = Order::firstOrFail();
+        $first = $this->sessionOf($order);
+
+        // A second page was opened for the same order, and both were paid.
+        $extra = Payment::create(['order_id' => $order->id, 'user_id' => $customer->id, 'payment_status' => Payment::STATUS_PENDING]);
+        $second = $this->gateway->createSession($extra->gatewayReference(), 700, 'second', CarbonImmutable::now()->addMinutes(10));
+        $extra->forceFill(['provider_reference_id' => $second->id])->save();
+
+        $this->gateway->pay($first);
+        $this->webhook('payment_session.completed', ['payment_session_id' => $first])->assertOk();
+        $this->gateway->pay($second->id);
+        $this->webhook('payment_session.completed', ['payment_session_id' => $second->id])->assertOk();
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::PLACED, $order->status);
+        $this->assertNull($order->paidPayment->refund_amount, 'The payment that paid for it is not refunded.');
+
+        $extra->refresh();
+        $this->assertTrue($extra->isVerified());
+        $this->assertSame('700.00', $extra->refund_amount);
+        $this->assertSame(Payment::REFUND_PENDING, $extra->refund_status);
+        $this->assertSame($extra->idempotency_key, $this->gateway->refunds[$extra->refund_reference_id]->paymentId);
+
+        $notice = Notification::query()->where('user_id', $customer->id)->where('title', 'You paid twice')->first();
+        $this->assertNotNull($notice);
+        $this->assertSame('You paid twice for order 001. The extra ₱700.00 is on its way back to your GCash.', $notice->body);
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/orders/{$order->id}/payment")
+            ->assertJsonPath('order.status', OrderStatus::PLACED)
+            ->assertJsonPath('order.payment_notice.kind', 'extra')
+            ->assertJsonPath('order.payment_notice.body', 'You paid twice. The extra ₱700.00 is being refunded.');
     }
 
     /**
@@ -471,11 +554,11 @@ class PaymentFlowTest extends TestCase
     public function test_a_checkout_uses_the_days_discount_paid_or_not(): void
     {
         $customer = $this->user();
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::AWAITING_PAYMENT,
-            'payment_status' => Order::PAYMENT_UNPAID,
+            'payment_status' => 'unpaid',
             'subtotal' => 350,
             'discount_amount' => 70,
             'total_amount' => 280,
@@ -486,7 +569,7 @@ class PaymentFlowTest extends TestCase
 
         $this->assertTrue($usage->usedToday($customer));
 
-        $order->forceFill(['status' => OrderStatus::CANCELLED, 'payment_status' => Order::PAYMENT_EXPIRED])->save();
+        $order->forceFill(['status' => OrderStatus::CANCELLED, 'cancelled_by' => null])->save();
         $this->assertTrue($usage->usedToday($customer));
     }
 
@@ -593,13 +676,13 @@ class PaymentFlowTest extends TestCase
         Mail::assertNotSent(GuestTrackingLinkMail::class);
     }
 
-    /** Decided 2026-11-23: nothing is sent for now; the refund work decides what is. */
-    public function test_a_guest_payment_that_cannot_place_the_order_sends_nothing(): void
+    /** Decided 2026-11-23: the guest is told by email, with the tracking link. */
+    public function test_a_guest_whose_payment_cannot_place_the_order_is_told_by_email(): void
     {
         Mail::fake();
 
         $food = $this->food(2);
-        [$order] = $this->guestCheckout($food);
+        [$order, $token] = $this->guestCheckout($food);
         $session = $this->sessionOf($order);
 
         $this->gateway->unreachable = true;
@@ -614,18 +697,101 @@ class PaymentFlowTest extends TestCase
 
         $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
         Mail::assertNotSent(GuestTrackingLinkMail::class);
+        Mail::assertSent(GuestOrderNotice::class, 1);
+        Mail::assertSent(GuestOrderNotice::class, function (GuestOrderNotice $mail) use ($token) {
+            return $mail->hasTo('julia@example.test')
+                && $mail->url === config('app.frontend_url').'/track#'.$token
+                && $mail->notice['subject'] === 'Payment received, but your order was cancelled'
+                && $mail->notice['heading'] === 'Payment received, but your order was cancelled.'
+                && str_starts_with($mail->notice['body'], 'Unfortunately, the items are no longer available. We received your ₱700.00 payment');
+        });
+    }
+
+    /** Decided 2026-11-23: cancelling closes the page; a payment that still lands is refunded. */
+    public function test_a_payment_after_the_store_cancelled_an_advance_order_is_refunded(): void
+    {
+        $customer = $this->user();
+        $agent = $this->user(User::ROLE_ADMIN);
+        $order = $this->orderWith([
+            'user_id' => $customer->id,
+            'order_type' => 'pickup',
+            'scheduled_for' => now()->addDays(3),
+            'accepted_at' => now(),
+            'advance_order_number' => '002',
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'subtotal' => 400,
+            'discount_amount' => 0,
+            'total_amount' => 400,
+            'total_price' => 400,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/pay")->assertOk();
+        $session = $this->gateway->latest()->id;
+
+        $this->actingAs($agent, 'sanctum')
+            ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'The oven broke.'])
+            ->assertOk();
+
+        $this->assertContains($session, $this->gateway->cancelled, 'The payment page is closed first.');
+
+        // A QR code scanned before the page closed still pays.
+        $this->gateway->pay($session);
+        $this->webhook('payment_session.completed', ['payment_session_id' => $session])->assertOk();
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::CANCELLED, $order->status);
+        $this->assertSame(PaymentSettlement::CLOSED, $order->cancellation_reason);
+        $this->assertSame('400.00', $order->paidPayment->refund_amount);
+        $this->assertSame(
+            'Unfortunately, it arrived after the order had closed. We received your ₱400.00 payment, and a full refund of ₱400.00 is on its way back to your GCash. You can view your order details for updates.',
+            app(OrderNotice::class)->paymentNotice($order)['body']
+        );
+    }
+
+    /** Decided 2026-11-23: one the customer cancelled themselves goes ahead after all. */
+    public function test_a_late_payment_revives_an_advance_order_the_customer_cancelled(): void
+    {
+        $customer = $this->user();
+        $order = $this->orderWith([
+            'user_id' => $customer->id,
+            'order_type' => 'pickup',
+            'scheduled_for' => now()->addDays(3),
+            'accepted_at' => now(),
+            'advance_order_number' => '003',
+            'status' => OrderStatus::AWAITING_PAYMENT,
+            'subtotal' => 400,
+            'discount_amount' => 0,
+            'total_amount' => 400,
+            'total_price' => 400,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/orders/{$order->id}/pay")->assertOk();
+        $session = $this->gateway->latest()->id;
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/order/{$order->id}/cancel")->assertOk();
+        $this->assertContains($session, $this->gateway->cancelled, 'The payment page is closed first.');
+        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+
+        $this->gateway->pay($session);
+        $this->webhook('payment_session.completed', ['payment_session_id' => $session])->assertOk();
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::CONFIRMED, $order->status);
+        $this->assertNull($order->cancelled_by);
+        $this->assertTrue($order->isPaid());
+        $this->assertFalse($order->payments()->refunds()->exists());
     }
 
     public function test_paying_for_an_accepted_advance_order_confirms_it(): void
     {
         $customer = $this->user();
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'scheduled_for' => now()->addDays(3),
             'accepted_at' => now(),
             'status' => OrderStatus::AWAITING_PAYMENT,
-            'payment_status' => Order::PAYMENT_UNPAID,
+            'payment_status' => 'unpaid',
             'subtotal' => 1200,
             'discount_amount' => 0,
             'total_amount' => 1200,
@@ -654,14 +820,14 @@ class PaymentFlowTest extends TestCase
     private function payAdvance(CarbonImmutable $collectAt): Order
     {
         $customer = $this->user();
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'scheduled_for' => $collectAt,
             'accepted_at' => now(),
             'advance_order_number' => '004',
             'status' => OrderStatus::AWAITING_PAYMENT,
-            'payment_status' => Order::PAYMENT_UNPAID,
+            'payment_status' => 'unpaid',
             'subtotal' => 400,
             'discount_amount' => 0,
             'total_amount' => 400,
@@ -710,13 +876,13 @@ class PaymentFlowTest extends TestCase
     public function test_an_expiring_advance_request_closes_its_payment_page(): void
     {
         $customer = $this->user();
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'scheduled_for' => now()->addDays(3),
             'accepted_at' => now(),
             'status' => OrderStatus::AWAITING_PAYMENT,
-            'payment_status' => Order::PAYMENT_UNPAID,
+            'payment_status' => 'unpaid',
             'subtotal' => 1200,
             'discount_amount' => 0,
             'total_amount' => 1200,
@@ -760,13 +926,13 @@ class PaymentFlowTest extends TestCase
     public function test_paying_for_an_advance_order_from_the_app_returns_to_the_app(): void
     {
         $customer = $this->user();
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'scheduled_for' => now()->addDays(3),
             'accepted_at' => now(),
             'status' => OrderStatus::AWAITING_PAYMENT,
-            'payment_status' => Order::PAYMENT_UNPAID,
+            'payment_status' => 'unpaid',
             'subtotal' => 500,
             'discount_amount' => 0,
             'total_amount' => 500,

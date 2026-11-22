@@ -3,12 +3,16 @@
 namespace App\Services\Orders;
 
 use App\Models\Order;
+use App\Services\Store\StoreContact;
+use Carbon\CarbonImmutable;
 
 /**
  * When a customer may cancel, and what they get back (decided 2026-11-17).
  *
- *   immediate  only while `placed`, before a Store Agent confirms it; paid
- *              before it is placed, so refunded in full (BR-19, BR-20)
+ *   immediate  only while `placed`, before a Store Agent confirms it, and only
+ *              once the store has had 15 minutes from payment to answer
+ *              (decided 2026-11-23); paid before it is placed, so refunded in
+ *              full (BR-19, BR-20)
  *   advance    only while unpaid (`submitted`, `accepted`, `awaiting_payment`);
  *              nothing was charged, so nothing is refunded. Once paid, the
  *              customer cannot cancel it (BR-21)
@@ -30,6 +34,14 @@ class CancellationPolicy
 
     /** An advance order that has been paid for. */
     public const ADVANCE_PAID = 'ADVANCE_PAID';
+
+    /** A placed immediate order inside the store's 15 minutes to answer. */
+    public const AWAITING_STORE = 'AWAITING_STORE';
+
+    /** Wording decided 2026-11-23, on the web and in the app. */
+    public const CONFIRMED_MESSAGE = 'Your order is already confirmed and will be prepared any time now, so it can no longer be cancelled through the app. Please contact %s if you need assistance.';
+
+    public function __construct(private StoreContact $contact) {}
 
     /** @return array<string, mixed> */
     public function for(Order $order): array
@@ -54,17 +66,38 @@ class CancellationPolicy
         }
 
         if ($status !== OrderStatus::PLACED) {
-            return $this->refused(
-                self::STORE_CONFIRMED,
-                'The store has already confirmed this order, so it can no longer be cancelled. Please call the store if something is wrong.'
-            );
+            return $this->refused(self::STORE_CONFIRMED, sprintf(self::CONFIRMED_MESSAGE, $this->contact->theStore()));
         }
 
-        // Paid before it was placed, so the whole amount goes back. An order
-        // from before payment existed may be unpaid; it then has nothing to refund.
-        return $order->isPaid()
-            ? $this->allowed(true, $order, null, 'You can cancel this order while the store has not confirmed it yet. Your payment will be refunded in full.')
-            : $this->allowed(false, $order, self::NOTHING_PAID, 'You can cancel this order. You have not paid for it, so there is nothing to refund.');
+        // An order from before payment existed may be unpaid; it then has
+        // nothing to refund and nothing to wait for.
+        if (! $order->isPaid()) {
+            return $this->allowed(false, $order, self::NOTHING_PAID, 'You can cancel this order. You have not paid for it, so there is nothing to refund.');
+        }
+
+        $from = $this->cancelFrom($order);
+
+        if ($from !== null && $from->isFuture()) {
+            $at = $from->setTimezone((string) config('store.timezone', 'Asia/Manila'))->format('g:i A');
+
+            return array_merge($this->refused(
+                self::AWAITING_STORE,
+                "The store has until {$at} to confirm your order. If it hasn't by then, you can cancel it here for a full refund."
+            ), ['cancel_from' => $from->toIso8601String()]);
+        }
+
+        // Paid before it was placed, so the whole amount goes back.
+        return $this->allowed(true, $order, null, 'You can cancel this order while the store has not confirmed it yet. Your payment will be refunded in full.');
+    }
+
+    /** When a placed immediate order may first be cancelled: the store's minutes from payment, then. */
+    public function cancelFrom(Order $order): ?CarbonImmutable
+    {
+        $paidAt = $order->paidPayment?->paid_at;
+
+        return $paidAt === null
+            ? null
+            : CarbonImmutable::parse($paidAt)->addMinutes((int) config('store.cancel_wait_minutes', 15));
     }
 
     public function canCancel(Order $order): bool
@@ -85,7 +118,7 @@ class CancellationPolicy
         if ($order->isPaid() || ! in_array($status, AdvanceExpiry::UNPAID_STATUSES, true)) {
             return $this->refused(
                 self::ADVANCE_PAID,
-                'This advance order is paid, so it can no longer be cancelled. Please call the store if something is wrong.'
+                'This advance order is paid, so it can no longer be cancelled. Please contact '.$this->contact->theStore().' if something is wrong.'
             );
         }
 
@@ -108,6 +141,7 @@ class CancellationPolicy
             'refund_amount' => $refundable ? round((float) ($order->total_amount ?? $order->total_price), 2) : 0.0,
             'code' => $code,
             'message' => $message,
+            'cancel_from' => null,
         ];
     }
 
@@ -120,6 +154,7 @@ class CancellationPolicy
             'refund_amount' => 0.0,
             'code' => $code,
             'message' => $message,
+            'cancel_from' => null,
         ];
     }
 }

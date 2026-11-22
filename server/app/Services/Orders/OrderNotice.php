@@ -2,8 +2,13 @@
 
 namespace App\Services\Orders;
 
+use App\Mail\GuestOrderNotice;
 use App\Models\Order;
+use App\Models\Payment;
+use App\Services\Payments\PaymentRefunds;
+use App\Services\Payments\PaymentSettlement;
 use App\Services\Store\StoreAvailability;
+use App\Services\Store\StoreContact;
 use Carbon\CarbonImmutable;
 
 class OrderNotice
@@ -26,7 +31,10 @@ class OrderNotice
     /** A pay-by time this close is spelled out in minutes. */
     public const URGENT_MINUTES = 30;
 
-    public function __construct(private StoreAvailability $store) {}
+    public function __construct(
+        private StoreAvailability $store,
+        private StoreContact $contact,
+    ) {}
 
     /**
      * @return array{title: string, body: string, type: string}
@@ -63,7 +71,8 @@ class OrderNotice
      */
     public function staffCancelled(Order $order): array
     {
-        $owed = (float) ($order->refund_owed ?? 0);
+        $payment = $order->paidPayment;
+        $owed = $payment !== null && $payment->owesRefund() ? (float) $payment->refund_amount : 0.0;
 
         return [
             'title' => 'Advance order cancelled',
@@ -240,6 +249,12 @@ class OrderNotice
 
     private function cancellationBody(Order $order, string $subject): string
     {
+        // Paid, but the payment could not place it: said the same way as on the
+        // return screen (decided 2026-11-23).
+        if (PaymentSettlement::couldNotPlace($order) && ($notice = $this->paymentNotice($order)) !== null) {
+            return $notice['message'];
+        }
+
         $byShop = $order->cancelled_by !== null
             && (int) $order->cancelled_by !== (int) $order->user_id;
 
@@ -252,16 +267,162 @@ class OrderNotice
 
     private function refundSentence(Order $order): string
     {
-        $owed = (float) ($order->refund_owed ?? 0);
+        $payment = $order->paidPayment;
 
-        if ($owed > 0) {
-            return "{$this->peso($owed)} will be refunded to you.";
+        if ($payment === null) {
+            return 'Nothing had been paid, so there is nothing to refund.';
         }
 
         // Paid and nothing owed back: the store chose not to refund (BR-21a).
-        return $order->isPaid()
-            ? 'This order is not refunded.'
-            : 'Nothing had been paid, so there is nothing to refund.';
+        if (! in_array($payment->refundState(), ['refunding', 'by_hand', 'refunded'], true)) {
+            return 'This order is not refunded.';
+        }
+
+        return $this->refundLine($order, $payment);
+    }
+
+    /**
+     * Where a refund stands, for the customer (wording approved 2026-11-23).
+     * A GCash refund Xendit refused is not announced: it reads as pending.
+     */
+    public function refundLine(Order $order, Payment $payment): string
+    {
+        $amount = $this->peso($payment->refund_amount);
+
+        if ($payment->refund_status === Payment::REFUND_REFUNDED) {
+            return PaymentRefunds::throughXendit($payment)
+                ? "Your {$amount} refund for ".lcfirst($order->title()).' has been sent back to your GCash.'
+                : "The store has sent your {$amount} refund for ".lcfirst($order->title()).'.';
+        }
+
+        if ($payment->refund_status === Payment::REFUND_PENDING && $payment->isGcash()) {
+            return "{$amount} is on its way back to your GCash.";
+        }
+
+        if ($payment->payment_method === Payment::METHOD_QRPH) {
+            return "Please contact {$this->contact->theStore()} to get your {$amount} back.";
+        }
+
+        return "A full refund of {$amount} is pending.";
+    }
+
+    /** @return array{title: string, body: string, type: string} */
+    public function customerRefunded(Order $order, Payment $payment): array
+    {
+        return [
+            'title' => 'Refund sent',
+            'body' => $this->refundLine($order, $payment),
+            'type' => $order->isAdvance() ? self::TYPE_ADVANCE : self::TYPE_ORDER,
+        ];
+    }
+
+    /** @return array{title: string, body: string, type: string} */
+    public function customerExtraPayment(Order $order, Payment $payment): array
+    {
+        $amount = $this->peso($payment->refund_amount);
+        $which = lcfirst($order->title());
+
+        $body = match (true) {
+            $payment->refund_status === Payment::REFUND_REFUNDED => "You paid twice for {$which}. The extra {$amount} has been refunded.",
+            $payment->payment_method === Payment::METHOD_QRPH => "You paid twice for {$which}. Please contact {$this->contact->theStore()} to get the extra {$amount} back.",
+            $payment->isGcash() => "You paid twice for {$which}. The extra {$amount} is on its way back to your GCash.",
+            default => "You paid twice for {$which}. The extra {$amount} is being refunded.",
+        };
+
+        return [
+            'title' => 'You paid twice',
+            'body' => $body,
+            'type' => $order->isAdvance() ? self::TYPE_ADVANCE : self::TYPE_ORDER,
+        ];
+    }
+
+    /**
+     * What the return screen says when a payment did not simply place the
+     * order (decided 2026-11-23): paid, but the order could not go ahead; or
+     * paid twice. Null otherwise.
+     *
+     * @return array{kind: string, title: string, body: string, message: string}|null
+     */
+    public function paymentNotice(Order $order): ?array
+    {
+        $payment = $order->paidPayment;
+
+        if ($payment === null) {
+            return null;
+        }
+
+        if (PaymentSettlement::couldNotPlace($order)) {
+            $reason = match ($order->cancellation_reason) {
+                PaymentSettlement::SOLD_OUT, PaymentSettlement::SOLD_OUT_AFTER_WINDOW => 'Unfortunately, the items are no longer available.',
+                PaymentSettlement::PAST_PAY_BY => 'Unfortunately, it arrived after the time to pay had passed.',
+                default => 'Unfortunately, it arrived after the order had closed.',
+            };
+
+            $amount = $this->peso($payment->refund_amount ?? ($order->total_amount ?? $order->total_price));
+
+            $refund = match (true) {
+                $payment->refund_status === Payment::REFUND_REFUNDED => "your full refund of {$amount} has been sent.",
+                $payment->refund_status === Payment::REFUND_PENDING && $payment->isGcash() => "a full refund of {$amount} is on its way back to your GCash.",
+                $payment->payment_method === Payment::METHOD_QRPH => "please contact {$this->contact->theStore()} to get your {$amount} back.",
+                default => "a full refund of {$amount} is pending.",
+            };
+
+            $title = 'Payment received, but your order was cancelled.';
+            $body = "{$reason} We received your {$amount} payment, and {$refund} You can view your order details for updates.";
+
+            return ['kind' => 'cancelled', 'title' => $title, 'body' => $body, 'message' => "{$title} {$body}"];
+        }
+
+        $extra = $order->extraPayments()->refunds()->get()->last();
+
+        if ($extra === null) {
+            return null;
+        }
+
+        $amount = $this->peso($extra->refund_amount);
+
+        $body = match (true) {
+            $extra->refund_status === Payment::REFUND_REFUNDED => "You paid twice. The extra {$amount} has been refunded.",
+            $extra->payment_method === Payment::METHOD_QRPH => "You paid twice. Please contact {$this->contact->theStore()} to get the extra {$amount} back.",
+            default => "You paid twice. The extra {$amount} is being refunded.",
+        };
+
+        return ['kind' => 'extra', 'title' => 'You paid twice', 'body' => $body, 'message' => $body];
+    }
+
+    /**
+     * A guest's email (decided 2026-11-23), or null when there is nothing to
+     * say any more.
+     *
+     * @return array{subject: string, heading: string, body: string}|null
+     */
+    public function guestEmail(Order $order, string $kind, ?Payment $payment = null): ?array
+    {
+        $title = lcfirst($order->title());
+
+        return match ($kind) {
+            GuestOrderNotice::CANCELLED => $order->status !== OrderStatus::CANCELLED ? null : [
+                'subject' => 'Your '.$title.' was cancelled',
+                'heading' => 'Your order was cancelled',
+                'body' => $this->cancellationBody($order, 'your '.$title),
+            ],
+            GuestOrderNotice::PAYMENT_CANCELLED => ($notice = $this->paymentNotice($order)) === null || $notice['kind'] !== 'cancelled' ? null : [
+                'subject' => 'Payment received, but your order was cancelled',
+                'heading' => $notice['title'],
+                'body' => $notice['body'],
+            ],
+            GuestOrderNotice::EXTRA_PAYMENT => $payment === null ? null : [
+                'subject' => 'You paid twice for '.$title,
+                'heading' => 'You paid twice',
+                'body' => $this->customerExtraPayment($order, $payment)['body'],
+            ],
+            GuestOrderNotice::REFUNDED => $payment === null || $payment->refund_status !== Payment::REFUND_REFUNDED ? null : [
+                'subject' => 'Your refund for '.$title,
+                'heading' => 'Refund sent',
+                'body' => $this->refundLine($order, $payment),
+            ],
+            default => null,
+        };
     }
 
     private function withReason(Order $order, string $opening): string

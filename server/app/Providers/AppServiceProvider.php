@@ -13,6 +13,7 @@ use App\Services\Push\FcmClient;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SemaphoreClient;
 use App\Services\Sms\SmsSender;
+use App\Services\Store\StoreContact;
 use App\Services\Verification\Channel;
 use App\Services\Verification\ChannelRegistry;
 use App\Services\Verification\EmailVerificationChannel;
@@ -60,6 +61,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(PaymentGateway::class, fn ($app) => $app->runningUnitTests()
             ? new FakePaymentGateway
             : XenditGateway::fromConfig());
+
+        // Looked up once per request or queued job, then reused by every message
+        // that says "contact the store".
+        $this->app->scoped(StoreContact::class);
 
         $this->app->singleton(ChannelRegistry::class, function ($app) {
             return new ChannelRegistry([

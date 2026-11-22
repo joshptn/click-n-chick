@@ -3,10 +3,12 @@ import { Skeleton } from "@mantine/core";
 import { formatPeso } from "../../lib/menu";
 import {
   OUTCOME_PILL,
+  REFUND_STATES,
   formatRecordDate,
   formatRecordTime,
   itemsPreview,
   recordOutcome,
+  recordRefund,
   typeLabel,
 } from "../../lib/records";
 
@@ -23,13 +25,26 @@ function PaymentNote({ record }) {
 
 function StatusPill({ record }) {
   const outcome = recordOutcome(record);
+  const refund = recordRefund(record);
+  const state = refund ? REFUND_STATES[refund.state] : null;
 
   return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-[3px] font-display text-[10.5px] font-semibold ring-1 ring-inset ${OUTCOME_PILL[outcome.tone]}`}
-      title={outcome.detail}
-    >
-      {outcome.label}
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <span
+        className={`inline-flex rounded-full px-2.5 py-[3px] font-display text-[10.5px] font-semibold ring-1 ring-inset ${OUTCOME_PILL[outcome.tone]}`}
+        title={outcome.detail}
+      >
+        {outcome.label}
+      </span>
+      {state && (
+        <span
+          className={`inline-flex rounded-full px-2 py-[2px] font-display text-[10px] font-semibold ring-1 ring-inset ${OUTCOME_PILL[state.tone]}`}
+          title={state.detail}
+          data-testid="refund-pill"
+        >
+          {state.label}
+        </span>
+      )}
     </span>
   );
 }

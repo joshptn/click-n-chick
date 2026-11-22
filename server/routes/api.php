@@ -22,6 +22,7 @@ use App\Http\Controllers\OrderTrackingController;
 use App\Http\Controllers\OtpController;
 use App\Http\Controllers\PasswordChangeController;
 use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\PaymentRefundController;
 use App\Http\Controllers\PosterController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PushTokenController;
@@ -217,6 +218,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
     // Order Records (UC-OPS-007): closed orders, read-only, for both staff roles.
     Route::get('/agent/records', [OrderRecordController::class, 'index']);
     Route::get('/agent/records/{order}', [OrderRecordController::class, 'show'])->whereNumber('order');
+    // Who paid, read from Xendit when an order's details open (decided 2026-11-23).
+    Route::get('/agent/payments/{payment}/payer', [PaymentRefundController::class, 'payer'])
+        ->whereNumber('payment')
+        ->middleware('throttle:payment-status');
 
     // Read by both staff roles; changing stock is the Store Agent's (below).
     Route::get('/agent/stock', [StockController::class, 'index']);
@@ -233,6 +238,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])-
 
     Route::post('/agent/orders/{order}/advance', [OrderQueueController::class, 'advance']);
     Route::post('/agent/orders/{order}/cancel', [OrderQueueController::class, 'cancel']);
+    // A refund by hand, ticked once the money is sent (decided 2026-11-23).
+    Route::post('/agent/payments/{payment}/refunded', [PaymentRefundController::class, 'complete'])
+        ->whereNumber('payment')
+        ->middleware('throttle:user-update');
 
     Route::post('/agent/advance-requests/{order}/accept', [AdvanceRequestController::class, 'accept'])
         ->whereNumber('order');

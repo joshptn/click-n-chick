@@ -354,7 +354,6 @@ function DailySalesReport() {
 
   const filtered = filters.type !== "all" || filters.kind !== "all";
   const live = report?.payments.recording;
-  const marked = report?.unverified_sales.marked_paid_orders ?? 0;
   const mismatched = report?.fulfilled.mismatched_orders ?? 0;
   const meta = list.meta;
   const preview = list.records.find((record) => String(record.id) === selectedId) ?? null;
@@ -445,7 +444,6 @@ function DailySalesReport() {
                 <Notice testId="payments-notice">
                   <strong className="font-semibold">Online payment is not connected yet, so no money is confirmed as received.</strong>{" "}
                   Figures below show orders as recorded at checkout.
-                  {marked > 0 && ` ${orderCount(marked)} marked paid without a payment record ${marked === 1 ? "is" : "are"} not counted as verified.`}
                 </Notice>
               )}
               {mismatched > 0 && (

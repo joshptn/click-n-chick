@@ -57,10 +57,11 @@ class OrderQueueResource extends JsonResource
             'discount_amount' => $this->discount_amount,
             'delivery_fee' => $this->delivery_fee,
             'total_amount' => $this->total_amount,
-            'payment_status' => $this->payment_status,
+            'payment_status' => $this->paymentStatus(),
+            // The payment that paid for the order (decided 2026-11-23), not the newest attempt.
             'payment_method' => $this->whenLoaded(
-                'payments',
-                fn () => $this->payments->sortByDesc('id')->first()?->payment_method
+                'paidPayment',
+                fn () => $this->paidPayment?->payment_method
             ),
 
             'created_at' => $this->created_at?->toIso8601String(),

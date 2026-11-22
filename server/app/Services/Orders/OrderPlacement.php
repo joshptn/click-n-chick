@@ -67,7 +67,6 @@ class OrderPlacement
                 'longitude' => $isDelivery ? ($destination['longitude'] ?? null) : null,
                 'location' => $isDelivery ? ($destination['locality'] ?? null) : null,
                 'delivery_note' => $isDelivery ? ($destination['delivery_note'] ?? null) : null,
-                'payment_status' => Order::PAYMENT_UNPAID,
                 'contact_name' => $contact['name'],
                 'contact_phone' => $contact['phone'],
                 'guest_email' => $isGuest ? ($contact['email'] ?: null) : null,

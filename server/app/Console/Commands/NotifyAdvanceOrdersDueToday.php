@@ -87,7 +87,7 @@ class NotifyAdvanceOrdersDueToday extends Command
             ->whereNotNull('scheduled_for')
             ->whereNotNull('user_id')
             ->whereIn('status', [OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT])
-            ->where(fn ($payment) => $payment->whereNull('payment_status')->orWhere('payment_status', '!=', Order::PAYMENT_PAID))
+            ->unpaid()
             ->whereBetween('scheduled_for', [$now->startOfDay()->utc(), $now->endOfDay()->utc()])
             ->orderBy('scheduled_for')
             ->get()

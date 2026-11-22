@@ -3,7 +3,9 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 /**
  * The cancellation terms, shown before payment and agreed with a tick (BR-21c).
  * Decided 2026-11-17: cancel only before the store confirms, for a full
- * refund; only the contact name and number can change afterwards.
+ * refund; only the contact name and number can change afterwards. Reworded
+ * 2026-11-23: the store has 15 minutes first, and a QR Ph refund is the
+ * store's to send.
  */
 function CancellationNotice({ quote }) {
   if (!quote) return null;
@@ -17,11 +19,15 @@ function CancellationNotice({ quote }) {
 
       <ul className="m-0 mt-2 list-disc space-y-1.5 pl-4 font-display text-[12px] leading-snug text-[#8a6206]">
         <li>
-          You can cancel while your order is <strong>placed</strong>, before the store confirms it, and get a{" "}
-          <strong>full refund</strong>.
+          If the store hasn&rsquo;t confirmed your order within <strong>15 minutes</strong> of payment, you can cancel
+          it for a <strong>full refund</strong>.
         </li>
         <li>
           Once the store confirms your order, <strong>it can no longer be cancelled</strong>.
+        </li>
+        <li>
+          Paid with GCash? A refund goes back to your GCash automatically. Paid by scanning the QR code (QR Ph), even
+          from the GCash app? The store refunds you directly, so please contact the store.
         </li>
         <li>
           Only the contact name and mobile number can be changed after you pay, until your order is completed.

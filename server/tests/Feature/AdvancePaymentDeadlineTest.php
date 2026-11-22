@@ -73,7 +73,7 @@ class AdvancePaymentDeadlineTest extends TestCase
             'prep_time' => 15,
         ]);
 
-        $order = Order::create(array_merge([
+        $order = $this->orderWith(array_merge([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::SUBMITTED,
@@ -144,7 +144,7 @@ class AdvancePaymentDeadlineTest extends TestCase
     {
         $customer = $this->user(User::ROLE_CUSTOMER);
 
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -177,7 +177,7 @@ class AdvancePaymentDeadlineTest extends TestCase
 
         $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
         $this->assertStringContainsString('Payment was not received', $fresh->cancellation_reason);
-        $this->assertSame(0.0, (float) $fresh->refund_owed);
+        $this->assertFalse($fresh->payments()->refunds()->exists());
         $this->assertNotNull($fresh->closed_at);
     }
 
@@ -236,7 +236,7 @@ class AdvancePaymentDeadlineTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
         $this->assertSame(AdvanceExpiry::UNANSWERED, $fresh->cancellation_reason);
         $this->assertNull($fresh->cancelled_by);
-        $this->assertSame(0.0, (float) $fresh->refund_owed);
+        $this->assertFalse($fresh->payments()->refunds()->exists());
     }
 
     public function test_an_unpaid_request_is_cancelled_at_its_collection_time_inside_the_window(): void
@@ -308,7 +308,7 @@ class AdvancePaymentDeadlineTest extends TestCase
 
     public function test_immediate_orders_are_never_expired(): void
     {
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $this->user(User::ROLE_CUSTOMER)->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -396,7 +396,7 @@ class AdvancePaymentDeadlineTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
         $this->assertSame($reason, $fresh->cancellation_reason);
         $this->assertNull($fresh->cancelled_by);
-        $this->assertEquals(0, $fresh->refund_owed);
+        $this->assertFalse($fresh->payments()->refunds()->exists());
     }
 
     private function overdue(User $customer): Order

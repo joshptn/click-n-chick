@@ -57,7 +57,7 @@ class OrderModificationTest extends TestCase
         bool $advance = false,
         string $paymentStatus = 'paid',
     ): Order {
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $owner?->id,
             'order_type' => $type,
             'status' => OrderStatus::PLACED,

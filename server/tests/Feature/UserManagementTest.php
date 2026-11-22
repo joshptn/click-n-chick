@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\AuthController;
 use App\Mail\VerificationCodeMail;
 use App\Models\AuthEvent;
 use App\Models\Discount;
 use App\Models\Order;
 use App\Models\OtpCode;
 use App\Models\Payment;
-use App\Http\Controllers\AuthController;
 use App\Models\User;
 use App\Services\Auth\DeviceRegistrar;
 use App\Services\Media\CloudinaryService;
@@ -468,7 +468,7 @@ class UserManagementTest extends TestCase
 
     private function ownedOrder(User $user, array $attributes = []): Order
     {
-        return Order::create($attributes + [
+        return $this->orderWith($attributes + [
             'user_id' => $user->id,
             'order_type' => 'delivery',
             'status' => 'delivered',
@@ -590,6 +590,26 @@ class UserManagementTest extends TestCase
 
         $this->assertNotNull($target->fresh());
         $this->assertSame($target->id, $order->fresh()->user_id);
+    }
+
+    /** Decided 2026-11-23: deleting would wipe the contact a refund is owed to. */
+    public function test_an_account_still_owed_a_refund_cannot_be_deleted_until_it_is_refunded(): void
+    {
+        $manager = $this->manager();
+        $target = $this->user();
+        $order = $this->ownedOrder($target, ['status' => 'cancelled', 'refund_owed' => 350]);
+
+        $this->as($manager, 'deleteJson', "/api/admin/users/{$target->id}", self::CONFIRM)
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'HAS_PENDING_REFUND');
+
+        $this->assertNotNull($target->fresh());
+        $this->assertSame($target->id, $order->fresh()->user_id);
+
+        $order->paidPayment->forceFill(['refund_status' => Payment::REFUND_REFUNDED, 'refunded_at' => now()])->save();
+
+        $this->as($manager, 'deleteJson', "/api/admin/users/{$target->id}", self::CONFIRM)->assertOk();
+        $this->assertNull($target->fresh());
     }
 
     public function test_the_email_and_phone_are_free_again_after_deletion(): void

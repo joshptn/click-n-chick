@@ -40,9 +40,13 @@ class PaymentPolicy
         return $user->hasRole(User::ROLE_ADMIN);
     }
 
+    /**
+     * Marking a refund by hand as refunded: the Store Agent's (decided
+     * 2026-11-23). The Store Manager reads Order Records but does not work it.
+     */
     public function refund(User $user, Payment $payment): bool
     {
-        return $user->hasRole(User::ROLE_SUPER_ADMIN);
+        return $user->hasRole(User::ROLE_ADMIN);
     }
 
     public function create(User $user): bool

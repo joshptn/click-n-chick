@@ -21,7 +21,7 @@ use Throwable;
 
 class GuestOrderController extends Controller
 {
-    private const WITH = ['items.food', 'items.addons', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'paidPayment'];
 
     public function __construct(
         private CheckoutQuote $checkout,

@@ -126,7 +126,7 @@ class StockReservationTest extends TestCase
 
     private function bareOrder(): Order
     {
-        return Order::create([
+        return $this->orderWith([
             'user_id' => $this->user()->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -283,6 +283,7 @@ class StockReservationTest extends TestCase
         $food = $this->food(['stock_quantity' => 10]);
         $customer = $this->user();
         $order = $this->placed($customer, $food, 3);
+        $this->travel(16)->minutes();
 
         $this->actingAs($customer, 'sanctum')->postJson("/api/order/{$order->id}/cancel")->assertOk();
 

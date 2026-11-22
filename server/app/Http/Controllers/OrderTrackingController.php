@@ -14,7 +14,7 @@ class OrderTrackingController extends Controller
 {
     use AuthorizesRequests;
 
-    private const WITH = ['items.food', 'items.addons', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'paidPayment'];
 
     public function __construct(
         private OrderAnnouncer $announcer,

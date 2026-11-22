@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Services\Orders\AmendmentPolicy;
 use App\Services\Orders\CancellationPolicy;
+use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
 use App\Services\Payments\PaymentCheckout;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -46,7 +47,6 @@ class OrderTrackingResource extends JsonResource
             'editable' => app(AmendmentPolicy::class)->editable($this->resource),
             'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
             'can_confirm_details' => app(AmendmentPolicy::class)->canConfirmDetails($this->resource),
-            'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
             'cancelled_by_store' => $this->cancelled_by !== null && $this->cancelled_by !== $this->user_id,
             'can_confirm_receipt' => $isDelivery && $status === OrderStatus::ON_THE_WAY,
 
@@ -88,7 +88,28 @@ class OrderTrackingResource extends JsonResource
             'discount_amount' => (float) $this->discount_amount,
             'delivery_fee' => (float) $this->delivery_fee,
             'total' => (float) ($this->total_amount ?? $this->total_price),
-            'payment_status' => $this->payment_status,
+            'payment_status' => $this->paymentStatus(),
+
+            // Decided 2026-11-23: the payment record is the only record of it.
+            // The summary reads "Total amount paid" once paid, and a cancelled
+            // paid order shows its refund.
+            'payment' => $this->payment(),
+            // "Payment received, but your order was cancelled", or "You paid
+            // twice", for the return screen; null otherwise.
+            'payment_notice' => app(OrderNotice::class)->paymentNotice($this->resource),
+        ];
+    }
+
+    private function payment(): array
+    {
+        $paid = $this->paidPayment;
+
+        return [
+            'paid' => $paid !== null,
+            'method' => $paid?->payment_method,
+            'paid_at' => $paid?->paid_at?->toIso8601String(),
+            'amount' => $paid === null ? null : (float) ($this->total_amount ?? $this->total_price),
+            'refund' => $paid?->refundSummary(),
         ];
     }
 

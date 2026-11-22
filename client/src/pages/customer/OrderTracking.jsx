@@ -179,6 +179,20 @@ function OrderTracking({ guest = false }) {
     queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
   }, [lastEvent, queryKey, queryClient]);
 
+  // Decided 2026-11-23: a placed order can be cancelled once the store has had
+  // its 15 minutes. Asked again then, so the Cancel button appears by itself.
+  const cancelFrom = order?.cancellation?.cancel_from ?? null;
+
+  useEffect(() => {
+    if (!cancelFrom) return undefined;
+
+    const wait = Math.max(0, new Date(cancelFrom).getTime() - Date.now()) + 1000;
+    // setTimeout holds at most ~24.8 days; this wait is minutes.
+    const timer = window.setTimeout(() => queryClient.invalidateQueries({ queryKey }), wait);
+
+    return () => window.clearTimeout(timer);
+  }, [cancelFrom, queryKey, queryClient]);
+
   // Merged rather than replaced: a guest's cached entry also holds the channel
   // name, and dropping it would silently unsubscribe them from their own order.
   const settle = (payload) => {

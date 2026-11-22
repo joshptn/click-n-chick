@@ -36,7 +36,7 @@ class RemindUnpaidAdvanceOrders extends Command
             ->whereNotNull('user_id')
             ->whereNotNull('accepted_at')
             ->whereIn('status', [OrderStatus::ACCEPTED, OrderStatus::AWAITING_PAYMENT])
-            ->where(fn ($payment) => $payment->whereNull('payment_status')->orWhere('payment_status', '!=', Order::PAYMENT_PAID))
+            ->unpaid()
             ->where('scheduled_for', '>', $now)
             ->orderBy('id')
             ->get()

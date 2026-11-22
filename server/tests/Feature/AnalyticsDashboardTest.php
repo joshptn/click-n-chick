@@ -66,7 +66,7 @@ class AnalyticsDashboardTest extends TestCase
         $this->travelTo($this->at($placedAt));
 
         $total = $attributes['total_amount'] ?? 300;
-        $order = Order::create($attributes + [
+        $order = $this->orderWith($attributes + [
             'user_id' => $this->user()->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -205,7 +205,7 @@ class AnalyticsDashboardTest extends TestCase
         $this->placed('2026-11-09 09:00:00');
         $this->placed('2026-11-09 09:00:00', ['status' => OrderStatus::COMPLETED]);
         $this->placed('2026-11-09 09:00:00', ['status' => OrderStatus::DELIVERED, 'order_type' => 'delivery']);
-        $this->placed('2026-11-09 09:00:00', ['status' => OrderStatus::CANCELLED]);
+        $this->placed('2026-11-09 09:00:00', ['status' => OrderStatus::CANCELLED, 'payment_status' => 'paid']);
         $this->placed('2026-11-08 09:00:00', ['status' => OrderStatus::COMPLETED]);
 
         $this->operations()
@@ -300,7 +300,7 @@ class AnalyticsDashboardTest extends TestCase
         $pay($paid, '2026-11-09 11:05:00');
         $pay($this->placed('2026-11-08 10:00:00', $later + ['status' => OrderStatus::SCHEDULED]), '2026-11-08 11:00:00');
         $pay($this->placed('2026-11-09 10:00:00'), '2026-11-09 11:00:00');
-        $this->placed('2026-11-09 10:00:00', $later + ['status' => OrderStatus::SCHEDULED, 'payment_status' => 'paid']);
+        $this->placed('2026-11-09 10:00:00', $later + ['status' => OrderStatus::SCHEDULED]);
 
         $this->operations()->assertJsonPath('advance.paid', 1);
     }

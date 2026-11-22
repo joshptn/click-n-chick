@@ -86,7 +86,7 @@ class AdvancePreparationRuleTest extends TestCase
             'prep_time' => 15,
         ]);
 
-        $order = Order::create(array_merge([
+        $order = $this->orderWith(array_merge([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::SUBMITTED,
@@ -249,7 +249,7 @@ class AdvancePreparationRuleTest extends TestCase
 
         $fresh = $order->fresh();
         $this->assertSame(OrderStatus::CANCELLED, $fresh->status);
-        $this->assertSame(400.0, (float) $fresh->refund_owed);
+        $this->assertSame(400.0, (float) $fresh->paidPayment->refund_amount);
     }
 
     public function test_a_payment_inside_the_grace_minutes_still_confirms(): void
@@ -311,7 +311,8 @@ class AdvancePreparationRuleTest extends TestCase
         $customer = $this->user();
         $order = $this->order($customer, '2026-10-08 12:00');
         $this->accept($order, 60)->assertOk();
-        $order->forceFill(['payment_status' => Order::PAYMENT_PAID, 'status' => OrderStatus::CONFIRMED])->save();
+        $this->payFor($order);
+        $order->forceFill(['status' => OrderStatus::CONFIRMED])->save();
 
         $this->at('2026-10-06 09:00');
         $this->artisan('advance:remind-payment')->assertSuccessful();
@@ -334,7 +335,7 @@ class AdvancePreparationRuleTest extends TestCase
     {
         $order = $this->order($this->user(), $collectAt, [
             'accepted_at' => now()->subDay(),
-            'payment_status' => Order::PAYMENT_PAID,
+            'payment_status' => 'paid',
         ]);
         $order->forceFill(['status' => $status])->save();
 

@@ -4,6 +4,7 @@ namespace App\Services\Payments;
 
 use App\Exceptions\InsufficientStock;
 use App\Jobs\SendGuestTrackingLink;
+use App\Mail\GuestOrderNotice;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\StockHold;
@@ -28,6 +29,11 @@ use Illuminate\Support\Facades\Log;
  *   paid after the system cancelled it unpaid (decided 2026-11-17): revived if
  *   it still can be (stock still there; an advance order's collection time not
  *   yet passed), otherwise left cancelled with the full amount owed back
+ *   an advance order the customer cancelled themselves is revived the same
+ *   way; one the store cancelled is not (decided 2026-11-23)
+ *   a second payment on an order already paid: owed back in full
+ *
+ * Every refund is recorded on the payment and started by PaymentRefunds.
  */
 class PaymentSettlement
 {
@@ -37,17 +43,40 @@ class PaymentSettlement
 
     private const REFUND = 'refund';
 
-    private const DUPLICATE = 'duplicate';
+    private const EXTRA = 'extra';
 
     /** How late after the pay-by time a payment is still taken, for the webhook's own delay. */
     public const LATE_PAYMENT_GRACE_MINUTES = 2;
+
+    /**
+     * Why a paid order could not go ahead. Stored as the cancellation reason
+     * and matched exactly, so the return screen and the guest's email can say
+     * "Payment received, but your order was cancelled" (decided 2026-11-23).
+     */
+    public const SOLD_OUT = 'An item sold out before your payment was confirmed.';
+
+    public const SOLD_OUT_AFTER_WINDOW = 'Your payment arrived after the 10-minute payment window, and an item has sold out since.';
+
+    public const PAST_PAY_BY = 'Your payment arrived after the pay-by time, so the order could not go ahead.';
+
+    public const CLOSED = 'Your payment arrived after this order had closed.';
+
+    public const REASONS = [self::SOLD_OUT, self::SOLD_OUT_AFTER_WINDOW, self::PAST_PAY_BY, self::CLOSED];
 
     public function __construct(
         private PaymentGateway $gateway,
         private StockReservation $stock,
         private OrderAnnouncer $announcer,
         private OrderNotice $notice,
+        private PaymentRefunds $refunds,
     ) {}
+
+    /** Whether a cancelled order was cancelled because its payment could not place it. */
+    public static function couldNotPlace(Order $order): bool
+    {
+        return $order->status === OrderStatus::CANCELLED
+            && in_array($order->cancellation_reason, self::REASONS, true);
+    }
 
     /**
      * Ask the provider how a pending payment stands, and act on the answer.
@@ -102,6 +131,11 @@ class PaymentSettlement
 
             $order = Order::query()->whereKey($locked->order_id)->lockForUpdate()->first();
 
+            // Asked before this payment is recorded, under the order's lock: a
+            // second payment settling at the same moment waits here and then
+            // sees the first.
+            $alreadyPaid = $order->payments()->verified()->whereKeyNot($locked->getKey())->exists();
+
             $locked->forceFill([
                 'payment_status' => Payment::STATUS_PAID,
                 'paid_at' => now(),
@@ -109,7 +143,7 @@ class PaymentSettlement
                 'idempotency_key' => $paymentId,
             ])->save();
 
-            if (abs($session->amount - (float) ($order->total_amount ?? $order->total_price)) > 0.009) {
+            if (abs($session->amount - $this->total($order)) > 0.009) {
                 Log::warning('A payment did not match its order total.', [
                     'order_id' => $order->getKey(),
                     'payment_id' => $locked->getKey(),
@@ -117,45 +151,50 @@ class PaymentSettlement
                 ]);
             }
 
-            return [$order, $this->moveOrder($order, $locked)];
+            // Already paid through another checkout: this one is owed back in full.
+            if ($alreadyPaid) {
+                Log::warning('An order was paid twice; the second payment is owed back.', [
+                    'order_id' => $order->getKey(),
+                    'payment_id' => $locked->getKey(),
+                ]);
+
+                $this->refunds->owe($locked, $this->total($order), PaymentRefunds::REASON_DUPLICATE);
+
+                return [$order, self::EXTRA, $locked];
+            }
+
+            return [$order, $this->moveOrder($order, $locked), $locked];
         });
 
         if ($result === null) {
             return;
         }
 
-        [$order, $outcome] = $result;
+        [$order, $outcome, $paid] = $result;
 
-        $this->announce($order->refresh(), $outcome);
+        $this->announce($order->refresh(), $outcome, $paid->refresh());
     }
 
     /** Inside the transaction, with the order locked. Returns what happened. */
     private function moveOrder(Order $order, Payment $payment): string
     {
-        // Already paid through another checkout: this one is owed back.
-        if ($order->isPaid()) {
-            $payment->forceFill([
-                'refund_amount' => $this->total($order),
-                'refund_status' => 'pending',
-            ])->save();
-
-            Log::warning('An order was paid twice; the second payment is owed back.', [
-                'order_id' => $order->getKey(),
-                'payment_id' => $payment->getKey(),
-            ]);
-
-            return self::DUPLICATE;
-        }
-
         $status = (string) $order->status;
-        $cancelledBySystem = $status === OrderStatus::CANCELLED && $order->cancelled_by === null;
+        $cancelledBy = $order->cancelled_by;
+        $cancelledBySystem = $status === OrderStatus::CANCELLED && $cancelledBy === null;
 
         if ($order->isAdvance()) {
+            // Decided 2026-11-23: one the customer cancelled themselves is
+            // revived too; one the store cancelled or declined never is.
+            $cancelledByCustomer = $status === OrderStatus::CANCELLED
+                && $cancelledBy !== null
+                && $order->user_id !== null
+                && (int) $cancelledBy === (int) $order->user_id;
+
             $canConfirm = in_array($status, [OrderStatus::AWAITING_PAYMENT, OrderStatus::ACCEPTED], true)
-                || ($cancelledBySystem && $order->scheduled_for !== null && $order->scheduled_for->isFuture());
+                || (($cancelledBySystem || $cancelledByCustomer) && $order->scheduled_for !== null && $order->scheduled_for->isFuture());
 
             if (! $canConfirm) {
-                return $this->owe($order, 'Your payment arrived after this order had closed.');
+                return $this->owe($order, $payment, self::CLOSED);
             }
 
             // Decided 2026-11-20: the pay-by time is the latest a payment is
@@ -166,22 +205,22 @@ class PaymentSettlement
             $due = $order->paymentDueAt();
 
             if ($due !== null && CarbonImmutable::now()->greaterThan($due->addMinutes(self::LATE_PAYMENT_GRACE_MINUTES))) {
-                return $this->owe($order, 'Your payment arrived after the pay-by time, so the order could not go ahead.');
+                return $this->owe($order, $payment, self::PAST_PAY_BY);
             }
 
             return $this->reopen($order, OrderStatus::CONFIRMED, self::CONFIRMED);
         }
 
         if ($status !== OrderStatus::AWAITING_PAYMENT && ! $cancelledBySystem) {
-            return $this->owe($order, 'Your payment arrived after this order had closed.');
+            return $this->owe($order, $payment, self::CLOSED);
         }
 
         try {
             $this->secureStock($order);
         } catch (InsufficientStock) {
-            return $this->owe($order, $status === OrderStatus::AWAITING_PAYMENT
-                ? 'An item sold out before your payment was confirmed.'
-                : 'Your payment arrived after the 10-minute payment window, and an item has sold out since.');
+            return $this->owe($order, $payment, $status === OrderStatus::AWAITING_PAYMENT
+                ? self::SOLD_OUT
+                : self::SOLD_OUT_AFTER_WINDOW);
         }
 
         return $this->reopen($order, OrderStatus::PLACED, self::PLACED);
@@ -191,10 +230,8 @@ class PaymentSettlement
     {
         $order->forceFill([
             'status' => $status,
-            'payment_status' => Order::PAYMENT_PAID,
             'cancellation_reason' => null,
             'cancelled_by' => null,
-            'refund_owed' => 0,
             'closed_at' => null,
         ])->save();
 
@@ -202,14 +239,14 @@ class PaymentSettlement
     }
 
     /** Money taken for an order that cannot go ahead: it stays (or becomes) cancelled, owed back in full. */
-    private function owe(Order $order, string $reason): string
+    private function owe(Order $order, Payment $payment, string $reason): string
     {
         $order->forceFill([
             'status' => OrderStatus::CANCELLED,
-            'payment_status' => Order::PAYMENT_PAID,
-            'refund_owed' => $this->total($order),
             'cancellation_reason' => $reason,
         ])->save();
+
+        $this->refunds->owe($payment, $this->total($order), PaymentRefunds::REASON_CANCELLATION);
 
         return self::REFUND;
     }
@@ -247,16 +284,35 @@ class PaymentSettlement
         $this->stock->confirm($order);
     }
 
-    private function announce(Order $order, string $outcome): void
+    private function announce(Order $order, string $outcome, Payment $payment): void
     {
         match ($outcome) {
             // Now the shop has it: its number for the day, onto the staff boards, and
             // the customer's "order placed" notice.
             self::PLACED => $this->placed($order),
             self::CONFIRMED => $this->confirmed($order),
-            self::REFUND => $this->announcer->statusChanged($order),
+            self::REFUND => $this->cancelledAfterPayment($order),
+            self::EXTRA => $this->paidTwice($order, $payment),
             default => null,
         };
+    }
+
+    /**
+     * Paid, but the order could not go ahead (decided 2026-11-23): the
+     * account holder's notice reads "Payment received, but your order was
+     * cancelled", and a guest is emailed the same with the tracking link.
+     */
+    private function cancelledAfterPayment(Order $order): void
+    {
+        $this->announcer->statusChanged($order);
+        $this->announcer->toGuest($order, GuestOrderNotice::PAYMENT_CANCELLED);
+    }
+
+    /** The extra payment is on its way back (or to collect, for QR Ph). */
+    private function paidTwice(Order $order, Payment $payment): void
+    {
+        $this->announcer->toCustomer($order, $this->notice->customerExtraPayment($order, $payment));
+        $this->announcer->toGuest($order, GuestOrderNotice::EXTRA_PAYMENT, $payment);
     }
 
     /**

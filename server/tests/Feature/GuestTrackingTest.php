@@ -47,7 +47,7 @@ class GuestTrackingTest extends TestCase
     /** @return array{0: Order, 1: string} the order and the one copy of its token */
     private function guestOrder(array $overrides = []): array
     {
-        $order = Order::create(array_merge([
+        $order = $this->orderWith(array_merge([
             'user_id' => null,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -233,7 +233,7 @@ class GuestTrackingTest extends TestCase
     {
         [, $token] = $this->guestOrder([
             'status' => OrderStatus::CANCELLED,
-            'payment_status' => Order::PAYMENT_EXPIRED,
+            'payment_status' => 'expired',
             'closed_at' => CarbonImmutable::now(),
         ]);
 
@@ -306,7 +306,7 @@ class GuestTrackingTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $user->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -437,7 +437,7 @@ class GuestTrackingTest extends TestCase
         // Left empty on purpose: it is what makes the notice read as the
         // customer's own doing rather than the shop's.
         $this->assertNull($fresh->cancelled_by);
-        $this->assertSame('350.00', $fresh->refund_owed);
+        $this->assertSame('350.00', $fresh->paidPayment->refund_amount);
     }
 
     public function test_a_guest_cannot_cancel_once_the_store_confirms(): void

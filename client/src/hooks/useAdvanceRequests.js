@@ -238,7 +238,7 @@ export function useAdvanceRequests() {
         status_label: "Cancelled",
         cancelled_by_store: true,
         cancellation_reason: reason || null,
-        refund_owed: response?.refund_owed ?? 0,
+        refund: response?.refund ?? null,
         closed_at: new Date().toISOString(),
       });
       toast.success(response?.message ?? "Order cancelled.", "Order cancelled");

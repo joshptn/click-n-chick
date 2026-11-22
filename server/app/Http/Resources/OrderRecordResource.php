@@ -3,10 +3,12 @@
 namespace App\Http\Resources;
 
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\User;
 use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\OrderStatus;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Collection;
 
 /**
  * A closed order as Order Records shows it.
@@ -32,6 +34,7 @@ class OrderRecordResource extends JsonResource
         $status = (string) $this->status;
         $isDelivery = $this->order_type === 'delivery';
         $items = $this->relationLoaded('items') ? $this->items : collect();
+        [$paid, $extras] = $this->confirmedPayments();
 
         $row = [
             'id' => $this->id,
@@ -61,9 +64,12 @@ class OrderRecordResource extends JsonResource
 
             'total' => (float) ($this->total_amount ?? $this->total_price ?? 0),
             'discount_amount' => (float) $this->discount_amount,
-            'payment_status' => $this->payment_status,
-            'payment_verified' => (bool) ($this->payment_verified ?? false),
-            'refund_owed' => $this->refund_owed === null ? null : (float) $this->refund_owed,
+            'payment_status' => $paid === null ? 'unpaid' : 'paid',
+            'payment_verified' => (bool) ($this->payment_verified ?? $paid !== null),
+            // Decided 2026-11-23: the refund lives on the payment. An extra
+            // payment's refund is listed apart from the order's own.
+            'refund' => $paid?->refundSummary(),
+            'extra_refunds' => $extras->map(fn ($payment) => $payment->refundSummary())->filter()->values(),
             'cancelled_by_store' => $this->cancelledByStore(),
             'expired_unpaid' => AdvanceExpiry::expired($status, $this->cancellation_reason, $this->cancelled_by),
             'cancellation_reason' => $this->cancellation_reason,
@@ -77,7 +83,6 @@ class OrderRecordResource extends JsonResource
             return $row;
         }
 
-        $payment = $this->relationLoaded('payments') ? $this->payments->sortByDesc('id')->first() : null;
         $canceller = $this->relationLoaded('cancelledBy') ? $this->cancelledBy : null;
 
         return $row + [
@@ -115,13 +120,12 @@ class OrderRecordResource extends JsonResource
             'subtotal' => (float) $this->subtotal,
             'delivery_fee' => (float) $this->delivery_fee,
 
+            // The payment that paid for the order, not the newest attempt
+            // (decided 2026-11-23); any later one is an extra payment, refunded.
             'payment' => [
-                'status' => $this->payment_status,
-                'method' => $payment?->payment_method,
-                'paid_at' => $payment?->paid_at?->toIso8601String(),
-                'refund_amount' => $payment?->refund_amount === null ? null : (float) $payment->refund_amount,
-                'refund_status' => $payment?->refund_status,
-                'refunded_at' => $payment?->refunded_at?->toIso8601String(),
+                'status' => $paid === null ? 'unpaid' : 'paid',
+                ...$this->paymentDetails($paid),
+                'extra_payments' => $extras->map(fn ($payment) => $this->paymentDetails($payment))->values(),
             ],
 
             // Staff only: a customer cancelling their own order is not named.
@@ -135,6 +139,43 @@ class OrderRecordResource extends JsonResource
                 'details_confirmed_at' => $this->details_confirmed_at?->toIso8601String(),
                 'closed_at' => ($this->closed_at ?? $this->updated_at)?->toIso8601String(),
             ],
+        ];
+    }
+
+    /**
+     * The payment that paid for the order and any extra ones, from the loaded
+     * payments: the first confirmed is the order's, as Order::paidPayment.
+     *
+     * @return array{0: ?Payment, 1: Collection<int, Payment>}
+     */
+    private function confirmedPayments(): array
+    {
+        if (! $this->relationLoaded('payments')) {
+            $paid = $this->relationLoaded('paidPayment') ? $this->paidPayment : null;
+
+            return [$paid, collect()];
+        }
+
+        $confirmed = $this->payments
+            ->filter(fn (Payment $payment) => $payment->isVerified())
+            ->sortBy(fn (Payment $payment) => sprintf('%015d-%015d', $payment->paid_at->getTimestamp(), $payment->id))
+            ->values();
+
+        return [$confirmed->first(), $confirmed->slice(1)->values()];
+    }
+
+    /** @return array<string, mixed> */
+    private function paymentDetails(?Payment $payment): array
+    {
+        $xenditId = (string) $payment?->idempotency_key;
+
+        return [
+            'id' => $payment?->getKey(),
+            'method' => $payment?->payment_method,
+            'paid_at' => $payment?->paid_at?->toIso8601String(),
+            // What Xendit's dashboard searches by.
+            'xendit_payment_id' => str_starts_with($xenditId, 'py-') ? $xenditId : null,
+            'refund' => $payment?->refundSummary(),
         ];
     }
 

@@ -31,7 +31,18 @@ export type Order = {
   /** An advance order's pay-by time: 24 hours, or collection less preparation time for today or tomorrow. */
   payment_due_at?: string | null;
   payment_status?: string | null;
-  cancellation: { refundable?: boolean; refund_amount?: number; code?: string; message?: string } | null;
+  /** The payment that paid for it and its refund (decided 2026-11-23: the payment is the only record). */
+  payment?: OrderPayment;
+  /** "Payment received, but your order was cancelled", or "You paid twice": for the payment screen. */
+  payment_notice?: PaymentNotice | null;
+  cancellation: {
+    refundable?: boolean;
+    refund_amount?: number;
+    code?: string;
+    message?: string;
+    /** A placed order may be cancelled from then: the store's 15 minutes from payment (decided 2026-11-23). */
+    cancel_from?: string | null;
+  } | null;
   can_cancel: boolean;
   details_confirmed_at: string | null;
   can_confirm_details: boolean;
@@ -57,6 +68,26 @@ export type Order = {
   delivery_fee: number;
   total: number;
 };
+
+export type Refund = {
+  payment_id: number;
+  amount: number;
+  /** refunding (GCash, with Xendit), by_hand (QR Ph, or what Xendit refused), refunded, none (the store chose no refund). */
+  state: "refunding" | "by_hand" | "refunded" | "none";
+  method: string | null;
+  reference: string | null;
+  refunded_at: string | null;
+};
+
+export type OrderPayment = {
+  paid: boolean;
+  method: string | null;
+  paid_at: string | null;
+  amount: number | null;
+  refund: Refund | null;
+};
+
+export type PaymentNotice = { kind: "cancelled" | "extra"; title: string; body: string; message: string };
 
 export type OrdersPage = {
   data: Order[];
@@ -198,17 +229,32 @@ export function statusTone(order: Order): "live" | "done" | "cancelled" {
   return "live";
 }
 
+/**
+ * The refund under a cancelled paid order's total (decided 2026-11-23, as on
+ * the web): "Refund pending", "Refunded", or "Refunded amount" ₱0.00 when the
+ * store chose no refund. Null for an order that is not cancelled or never paid.
+ */
+export function refundLine(order: Order): { label: string; amount: number } | null {
+  if (!order.is_cancelled || !order.payment?.paid) return null;
+
+  const refund = order.payment.refund;
+
+  if (refund?.state === "refunded") return { label: "Refunded", amount: refund.amount };
+  if (refund?.state === "refunding" || refund?.state === "by_hand") return { label: "Refund pending", amount: refund.amount };
+
+  return { label: "Refunded amount", amount: 0 };
+}
+
 /** The cancel confirmation's wording, from the API's cancellation terms (as on the web). */
 export function cancelPrompt(order: Order | null) {
   const terms = order?.cancellation ?? null;
   const withdrawing = order?.status === "submitted";
   const advance = Boolean(order?.is_advance);
 
+  // The only other answer a customer can cancel with (decided 2026-11-17).
   const outcome = terms?.refundable
     ? `You will be refunded ${formatPeso(terms.refund_amount)} in full.`
-    : terms?.code === "NOTHING_PAID"
-      ? "You have not paid for this, so there is nothing to refund."
-      : "The kitchen has already started on this, so it cannot be refunded.";
+    : "You have not paid for this, so there is nothing to refund.";
 
   const consequence = withdrawing
     ? "The store will not see this request any more."

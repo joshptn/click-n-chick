@@ -63,7 +63,7 @@ class CancellationPolicyTest extends TestCase
         ?string $scheduledFor = null,
         bool $paid = true,
     ): Order {
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => ($owner ?? $this->customer())->id,
             'order_type' => $type,
             'status' => OrderStatus::PLACED,
@@ -186,8 +186,61 @@ class CancellationPolicyTest extends TestCase
             ->assertJsonPath('refund_amount', 440)
             ->assertJsonPath('order.status', OrderStatus::CANCELLED);
 
-        $this->assertSame('440.00', $order->fresh()->refund_owed);
+        $this->assertSame('440.00', $order->fresh()->paidPayment->refund_amount);
         $this->assertSame($customer->id, $order->fresh()->cancelled_by);
+    }
+
+    /** Decided 2026-11-23: the store has 15 minutes from payment to confirm first. */
+    public function test_a_customer_cancels_only_once_the_store_has_had_15_minutes(): void
+    {
+        $customer = $this->customer();
+        $order = $this->order(OrderStatus::PLACED, owner: $customer);
+        $order->paidPayment->forceFill(['paid_at' => now()->subMinutes(10)])->save();
+
+        $decision = $this->policy()->for($order->fresh());
+
+        $this->assertFalse($decision['can_cancel']);
+        $this->assertSame(CancellationPolicy::AWAITING_STORE, $decision['code']);
+        $this->assertSame(now()->addMinutes(5)->toIso8601String(), $decision['cancel_from']);
+        $this->assertSame(
+            "The store has until 10:05 AM to confirm your order. If it hasn't by then, you can cancel it here for a full refund.",
+            $decision['message']
+        );
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson("/api/order/{$order->id}/cancel")
+            ->assertStatus(400)
+            ->assertJsonPath('error_code', CancellationPolicy::AWAITING_STORE);
+
+        $this->assertSame(OrderStatus::PLACED, $order->fresh()->status);
+
+        $this->travel(5)->minutes();
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson("/api/order/{$order->id}/cancel")
+            ->assertOk()
+            ->assertJsonPath('refunded', true);
+    }
+
+    /** Wording decided 2026-11-23; the number is the first active Store Agent's, verified or not. */
+    public function test_a_confirmed_order_tells_the_customer_to_contact_the_store(): void
+    {
+        $order = $this->order(OrderStatus::CONFIRMED);
+
+        $this->assertSame(
+            'Your order is already confirmed and will be prepared any time now, so it can no longer be cancelled through the app. Please contact the store if you need assistance.',
+            $this->policy()->for($order)['message']
+        );
+
+        User::factory()->create(['role' => User::ROLE_ADMIN, 'account_status' => User::STATUS_SUSPENDED, 'phone_number' => '09170000009']);
+        User::factory()->create(['role' => User::ROLE_ADMIN, 'account_status' => User::STATUS_ACTIVE, 'phone_number' => '09170000001', 'phone_verified_at' => null]);
+        User::factory()->create(['role' => User::ROLE_ADMIN, 'account_status' => User::STATUS_ACTIVE, 'phone_number' => '09170000002']);
+        $this->app->forgetScopedInstances();
+
+        $this->assertStringEndsWith(
+            'Please contact the store at 09170000001 if you need assistance.',
+            $this->policy()->for($order)['message']
+        );
     }
 
     public function test_a_confirmed_order_is_refused_at_the_endpoint(): void
@@ -215,7 +268,7 @@ class CancellationPolicyTest extends TestCase
             ->assertJsonPath('refund_code', 'NOTHING_PAID')
             ->assertJsonPath('order.status', OrderStatus::CANCELLED);
 
-        $this->assertSame('0.00', $order->fresh()->refund_owed);
+        $this->assertFalse($order->payments()->refunds()->exists());
     }
 
     public function test_a_customer_cancels_an_accepted_request_before_paying_for_it(): void
@@ -228,7 +281,7 @@ class CancellationPolicyTest extends TestCase
             ->assertOk()
             ->assertJsonPath('refunded', false);
 
-        $this->assertSame('0.00', $order->fresh()->refund_owed);
+        $this->assertFalse($order->payments()->refunds()->exists());
     }
 
     public function test_a_paid_advance_order_is_refused_at_the_endpoint(): void
@@ -300,7 +353,8 @@ class CancellationPolicyTest extends TestCase
         $this->actingAs($agent, 'sanctum')
             ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'We ran out of chicken.', 'refund' => true])
             ->assertOk()
-            ->assertJsonPath('refund_owed', 440);
+            ->assertJsonPath('refund.amount', 440)
+            ->assertJsonPath('refund.state', 'refunding');
 
         $this->assertSame($agent->id, $order->fresh()->cancelled_by);
         $this->assertSame('We ran out of chicken.', $order->fresh()->cancellation_reason);
@@ -313,10 +367,11 @@ class CancellationPolicyTest extends TestCase
         $this->actingAs($this->agent(), 'sanctum')
             ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Never collected.', 'refund' => false])
             ->assertOk()
-            ->assertJsonPath('refund_owed', 0);
+            ->assertJsonPath('refund.amount', 0)
+            ->assertJsonPath('refund.state', 'none');
 
         $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
-        $this->assertSame('0.00', $order->fresh()->refund_owed);
+        $this->assertSame('0.00', $order->fresh()->paidPayment->refund_amount);
     }
 
     public function test_a_paid_order_needs_an_explicit_refund_choice(): void
@@ -355,7 +410,9 @@ class CancellationPolicyTest extends TestCase
         $this->actingAs($this->agent(), 'sanctum')
             ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'Kitchen cannot make this after all.', 'refund' => true])
             ->assertOk()
-            ->assertJsonPath('refund_owed', 0);
+            ->assertJsonPath('refund', null);
+
+        $this->assertFalse($order->payments()->refunds()->exists());
     }
 
     public function test_the_generic_status_route_cannot_cancel(): void

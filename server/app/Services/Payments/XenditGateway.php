@@ -105,6 +105,59 @@ class XenditGateway implements PaymentGateway
     }
 
     /**
+     * Payments API v3 refund, by the payment id (py-...). The amount is sent
+     * even though it is the full amount, so a mismatch is refused rather than
+     * guessed at.
+     */
+    public function refund(string $paymentId, float $amount, string $reference, string $reason): GatewayRefund
+    {
+        return GatewayRefund::fromXendit($this->send(fn () => $this->v3()->post('/v3/refunds', [
+            'reference_id' => $reference,
+            'payment_id' => $paymentId,
+            'amount' => round($amount, 2),
+            'reason' => $reason,
+            'metadata' => (object) ['source' => 'click-n-chick'],
+        ])));
+    }
+
+    public function getRefund(string $refundId): GatewayRefund
+    {
+        return GatewayRefund::fromXendit(
+            $this->send(fn () => $this->v3()->get('/v3/refunds/'.rawurlencode($refundId)))
+        );
+    }
+
+    public function refundsFor(string $paymentId): array
+    {
+        $body = $this->send(fn () => $this->v3()->get('/v3/refunds', ['payment_id' => $paymentId]));
+
+        // The answer is a bare list; some responses wrap it in data.
+        $rows = array_is_list($body) ? $body : (array) ($body['data'] ?? []);
+
+        return array_values(array_map(fn ($row) => GatewayRefund::fromXendit((array) $row), $rows));
+    }
+
+    public function payerDetails(string $paymentId): array
+    {
+        $details = (array) ($this->send(fn () => $this->v3()->get('/v3/payments/'.rawurlencode($paymentId)))['payment_details'] ?? []);
+        $text = fn (string $key) => isset($details[$key]) && is_string($details[$key]) && trim($details[$key]) !== ''
+            ? trim($details[$key])
+            : null;
+
+        return [
+            'name' => $text('payer_name'),
+            'account' => $text('payer_account_number'),
+            'issuer' => $text('issuer_name') ?? $text('digital_wallet'),
+            'receipt' => $text('receipt_id'),
+        ];
+    }
+
+    private function v3(): PendingRequest
+    {
+        return $this->client()->withHeaders(['api-version' => self::PAYMENTS_API_VERSION]);
+    }
+
+    /**
      * Xendit takes HTTPS only. A local web app runs on plain http, so locally
      * the scheme is raised: the session is still created, and the customer
      * comes back to the order page by hand. Deployed, FRONTEND_URL is already

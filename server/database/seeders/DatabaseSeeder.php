@@ -17,7 +17,6 @@ class DatabaseSeeder extends Seeder
             AddonSeeder::class,
             FoodSeeder::class,
             PosterSeeder::class,
-            OrderSeeder::class,
         ]);
     }
 }
