@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,6 +8,7 @@ import {
   cancelPrompt,
   feedbackMailto,
   isRefused,
+  refundLine,
   statusTone,
   type ContactChanges,
   type Order,
@@ -141,6 +142,23 @@ export function OrderTrackingView({
 }: Props) {
   // Review Advance Order (decided 2026-11-20): on every Pay now, before Xendit.
   const [reviewing, setReviewing] = useState(false);
+
+  // Decided 2026-11-23: a placed order can be cancelled once the store has had
+  // its 15 minutes; asked again then, so the Cancel card appears by itself.
+  const refresh = useRef(onRefresh);
+  useEffect(() => {
+    refresh.current = onRefresh;
+  }, [onRefresh]);
+  const cancelFrom = order?.cancellation?.cancel_from ?? null;
+
+  useEffect(() => {
+    if (!cancelFrom) return;
+
+    const wait = Math.max(0, new Date(cancelFrom).getTime() - Date.now()) + 1000;
+    const timer = setTimeout(() => refresh.current(), wait);
+
+    return () => clearTimeout(timer);
+  }, [cancelFrom]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace(guest ? "/home" : "/notifications"));
 
@@ -281,6 +299,21 @@ export function OrderTrackingView({
             )}
 
             {order.can_cancel && !order.is_terminal && <CancelCard order={order} cancelling={cancelling} onCancel={confirmCancel} />}
+
+            {/* Not cancellable: why, as on the web (decided 2026-11-23). */}
+            {!order.can_cancel &&
+              !order.is_terminal &&
+              order.cancellation?.code !== "AWAITING_PAYMENT" &&
+              order.cancellation?.message ? (
+              <View style={[styles.card, styles.cancelNote]} testID="cancel-note">
+                <View style={styles.noteRow}>
+                  <IconInfoCircle size={15} color={colors.ink500} strokeWidth={2} />
+                  <AppText family="display" size={12.5} color={colors.ink500} style={styles.flex}>
+                    {order.cancellation.message}
+                  </AppText>
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.card}>
               <View style={styles.feedbackHead}>
@@ -426,6 +459,7 @@ function PayCard({ order, paying, onPay }: { order: Order; paying: boolean; onPa
 
 function OrderItems({ order }: { order: Order }) {
   const delivery = order.order_type === "delivery";
+  const refund = refundLine(order);
   const where = delivery
     ? order.delivery?.full_address || order.delivery?.location
     : order.pickup?.at
@@ -457,7 +491,8 @@ function OrderItems({ order }: { order: Order }) {
       <View style={styles.totals}>
         {order.delivery_fee > 0 && <TotalRow label="Delivery fee" value={formatPeso(order.delivery_fee)} />}
         {order.discount_amount > 0 && <TotalRow label="Discount" value={`-${formatPeso(order.discount_amount)}`} />}
-        <TotalRow label="Total" value={formatPeso(order.total)} strong />
+        <TotalRow label={order.payment?.paid ? "Total amount paid" : "Total"} value={formatPeso(order.total)} strong />
+        {refund && <TotalRow label={refund.label} value={formatPeso(refund.amount)} />}
       </View>
 
       {order.contact.name || order.contact.phone ? (
@@ -663,6 +698,7 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   whereRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   cancelWarn: { backgroundColor: "#fff9e8", borderWidth: 1, borderColor: "#ffe6a8" },
+  cancelNote: { backgroundColor: "#faf7f3" },
   cancelButton: {
     alignSelf: "flex-start",
     paddingHorizontal: 16,

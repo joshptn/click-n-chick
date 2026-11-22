@@ -10,7 +10,7 @@ import { ORDERS_KEY } from "../api/orders";
 import { AppText } from "../components/AppText";
 import { ScreenHeader } from "../components/account/ScreenHeader";
 import { CheckoutButton } from "../components/checkout/CheckoutButton";
-import { IconClock, IconClockHour4, IconCreditCard, IconLock, IconToolsKitchen2 } from "../components/icons";
+import { IconClock, IconClockHour4, IconCreditCard, IconLock, IconReceiptRefund, IconToolsKitchen2 } from "../components/icons";
 import { clearPendingCheckout } from "../lib/guestOrders";
 import { formatPeso } from "../lib/money";
 import { toast } from "../lib/toast";
@@ -91,6 +91,9 @@ export default function Payment() {
   const paid = Boolean(status.data?.paid || order?.payment_status === "paid");
   const waiting = Boolean(order?.awaiting_payment) && !paid;
   const remaining = waiting ? timeLeft(order?.payment_due_at, now) : null;
+  // Decided 2026-11-23: a payment can go through while the order does not.
+  // "cancelled": paid, but the order could not go ahead; "extra": paid twice.
+  const notice = order?.payment_notice ?? null;
 
   useEffect(() => {
     if (!waiting) return;
@@ -102,10 +105,11 @@ export default function Payment() {
   useEffect(() => {
     if (!paid || announced.current) return;
     announced.current = true;
-    toast.success("Order placed", "Your payment went through and your order is with the store.");
+    if (notice?.kind === "extra") toast.info(notice.title, notice.body);
+    else if (notice?.kind !== "cancelled") toast.success("Order placed", "Your payment went through and your order is with the store.");
     void queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
     void queryClient.invalidateQueries({ queryKey: ["cart"] });
-  }, [paid, queryClient]);
+  }, [paid, notice?.kind, notice?.title, notice?.body, queryClient]);
 
   // Paid, or the time to pay ran out: nothing left for a cold start to resume.
   const over = paid || (status.data !== undefined && !order?.awaiting_payment);
@@ -125,11 +129,39 @@ export default function Payment() {
 
   if (!target) return <Redirect href="/home" />;
 
-  if (paid) {
-    return <Redirect href={target.token ? `/track/${target.token}` : `/orders/${target.orderId}`} />;
+  const orderPath = target.token ? `/track/${target.token}` : `/orders/${target.orderId}`;
+
+  if (paid && notice?.kind !== "cancelled") {
+    return <Redirect href={orderPath} />;
   }
 
   const home = () => router.navigate("/home");
+
+  // Paid, but the order could not go ahead: said plainly, with the refund,
+  // rather than "Order placed" (decided 2026-11-23).
+  if (paid && notice?.kind === "cancelled") {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+        <ScreenHeader title="Payment" onBack={home} />
+        <View style={styles.body}>
+          <View style={styles.card} testID="payment-notice">
+            <View style={[styles.ring, styles.ringMuted]}>
+              <IconReceiptRefund size={27} color={colors.ink500} strokeWidth={2} />
+            </View>
+            <AppText family="display" weight="bold" size={20} color={colors.authInk} style={styles.center}>
+              {notice.title.replace(/\.$/, "")}
+            </AppText>
+            <AppText family="display" size={13.5} color={colors.authMuted} style={styles.center}>
+              {notice.body}
+            </AppText>
+            <View style={styles.action}>
+              <CheckoutButton label="View order details" onPress={() => router.replace(orderPath)} testID="payment-view-order" />
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>

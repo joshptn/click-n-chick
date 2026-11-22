@@ -53,6 +53,7 @@ export { default as IconPhotoOff } from "@tabler/icons-react-native/IconPhotoOff
 export { default as IconPlus } from "@tabler/icons-react-native/IconPlus";
 export { default as IconQrcode } from "@tabler/icons-react-native/IconQrcode";
 export { default as IconReceipt } from "@tabler/icons-react-native/IconReceipt";
+export { default as IconReceiptRefund } from "@tabler/icons-react-native/IconReceiptRefund";
 export { default as IconRosetteDiscountCheck } from "@tabler/icons-react-native/IconRosetteDiscountCheck";
 export { default as IconScooter } from "@tabler/icons-react-native/IconScooter";
 export { default as IconSearch } from "@tabler/icons-react-native/IconSearch";

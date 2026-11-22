@@ -215,7 +215,7 @@ export function CartContents({ mode, bottomSpace }: { mode: CartMode; bottomSpac
                 ? `Tick at least one item to ${advance ? "schedule" : "check out"}`
                 : advance
                   ? "Pickup only · you pay once the store accepts your request"
-                  : "🔒 Secure checkout · cancel any time before the store confirms"}
+                  : "🔒 Secure checkout · cancel for a full refund if the store hasn't confirmed within 15 minutes"}
             </AppText>
           </>
         )}
