@@ -8,7 +8,15 @@ import Button from "../../components/ui/Button";
 import AuthContext from "../../context/AuthContext";
 import toast from "../../components/app/Toast";
 import { formatPeso } from "../../lib/menu";
-import { checkPayment, goToPayment, payOrder, paymentReturnTarget, timeLeft, trackingPath } from "../../lib/payments";
+import {
+  checkPayment,
+  clearPaymentReturn,
+  goToPayment,
+  payOrder,
+  paymentReturnTarget,
+  timeLeft,
+  trackingPath,
+} from "../../lib/payments";
 
 const POLL_MS = 5 * 1000;
 
@@ -99,7 +107,8 @@ function PaymentReturn() {
   const [searchParams] = useSearchParams();
   const fromApp = searchParams.get("source") === "app";
   // The app's payment is the app's to check: this tab has no order to look at.
-  const target = fromApp ? null : paymentReturnTarget();
+  // Read once: it is cleared from storage once the payment has gone through.
+  const [target] = useState(() => (fromApp ? null : paymentReturnTarget()));
   const [now, setNow] = useState(() => Date.now());
 
   const { data, isLoading, isError } = useQuery({
@@ -112,6 +121,7 @@ function PaymentReturn() {
 
   const order = data?.order ?? null;
   const waiting = Boolean(order?.awaiting_payment) && !order?.is_advance;
+  const settled = Boolean(data?.paid || order?.is_advance || order?.payment_status === "paid");
   const remaining = waiting ? timeLeft(order.payment_due_at, now) : null;
 
   useEffect(() => {
@@ -125,6 +135,11 @@ function PaymentReturn() {
   useEffect(() => {
     if (data?.paid) toast.success("Your payment went through and your order is with the store.", "Order placed");
   }, [data?.paid]);
+
+  // On to the order: nothing more to come back to here.
+  useEffect(() => {
+    if (settled) clearPaymentReturn();
+  }, [settled]);
 
   const reopening = useMutation({
     mutationFn: () => payOrder(target),
@@ -146,7 +161,7 @@ function PaymentReturn() {
 
   // A real order: paid (even one owed back), or an advance order, which is an
   // order before it is paid.
-  if (data?.paid || order?.is_advance || order?.payment_status === "paid") {
+  if (settled) {
     return <Navigate to={trackingPath(target)} replace />;
   }
 
@@ -198,7 +213,9 @@ function PaymentReturn() {
       <Card icon={IconClockHour4} tone="muted" title={isError ? "We couldn't check your payment" : "Payment time ran out"}>
         <p className="m-0 mx-auto mt-2 max-w-[360px] font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
           {isError
-            ? "Please check your connection. If you paid, your order will show under your orders."
+            ? target.token
+              ? "Please check your connection. If you paid, your tracking link is on its way to your email."
+              : "Please check your connection. If you paid, your order will show under your orders."
             : "The 10 minutes to pay have passed, so nothing was charged and no order was placed."}
         </p>
 

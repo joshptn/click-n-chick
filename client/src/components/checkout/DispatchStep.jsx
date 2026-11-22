@@ -146,7 +146,7 @@ function DispatchStep({
     <Field
       label="Email Address"
       error={emailBlocker?.message}
-      hint="Your receipt and tracking link go here."
+      hint="Your tracking link goes here."
     >
       {(id) => (
         <Input

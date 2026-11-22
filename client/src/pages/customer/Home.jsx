@@ -9,6 +9,7 @@ import CartPanel from "../../components/cart/CartPanel";
 import CategoryTabs from "../../components/menu/CategoryTabs";
 import FoodCard from "../../components/menu/FoodCard";
 import FoodDetailModal from "../../components/menu/FoodDetailModal";
+import GuestOrderBanner from "../../components/orders/GuestOrderBanner";
 import PosterBanner from "../../components/menu/PosterBanner";
 import toast from "../../components/app/Toast";
 import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
@@ -105,6 +106,8 @@ function Home() {
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
 
           <div className="min-w-0">
+            <GuestOrderBanner />
+
             <PosterBanner />
 
             <h2 className="mb-3 mt-6 font-display text-[11.5px] font-bold uppercase tracking-[0.14em] text-[#a39f9b]">

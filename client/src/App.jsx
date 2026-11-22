@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react'
-import { Routes, Route, Navigate, createRoutesFromElements, matchRoutes } from 'react-router-dom'
+import { Routes, Route, Navigate, createRoutesFromElements, matchRoutes, useParams } from 'react-router-dom'
 import { CHANNELS } from './lib/verificationChannels'
 import PrivateRoutes from './providers/PrivateRoutes'
 import { ROLES } from './lib/roles'
@@ -43,6 +43,13 @@ const {
   StoreSettings,
 } = pages
 
+/** A tracking link from before the token moved after "#": the same page, in the new form. */
+function TrackRedirect() {
+  const { token } = useParams()
+
+  return <Navigate to={{ pathname: '/track', hash: token }} replace />
+}
+
 const routes = (
   <>
     <Route path="/login" element={<Login />} />
@@ -56,7 +63,9 @@ const routes = (
     <Route path="/unauthorized" element={<Unauthorized />} />
     <Route path="/home" element={<Home />} />
     <Route path="/checkout" element={<Checkout />} />
-    <Route path="/track/:token" element={<OrderTracking guest />} />
+    {/* The token rides after "#" (decided 2026-11-22); /track/<token> is kept for links from before. */}
+    <Route path="/track" element={<OrderTracking guest />} />
+    <Route path="/track/:token" element={<TrackRedirect />} />
     <Route path="/payment/return" element={<PaymentReturn />} />
 
     <Route element={<PrivateRoutes allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.SUPER_ADMIN]} />} >
