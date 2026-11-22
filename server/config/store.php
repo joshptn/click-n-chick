@@ -26,8 +26,13 @@ return [
         'quote_per_day' => (int) env('GUEST_QUOTE_PER_DAY', 800),
         'geocode_per_minute' => (int) env('GUEST_GEOCODE_PER_MINUTE', 10),
         'geocode_per_day' => (int) env('GUEST_GEOCODE_PER_DAY', 500),
-        'track_days_after_close' => (int) env('GUEST_TRACK_DAYS_AFTER_CLOSE', 7),
-        'track_days_ceiling' => (int) env('GUEST_TRACK_DAYS_CEILING', 30),
+        // A tracking link works this many days from placement, whatever
+        // happens to the order meanwhile (decided 2026-11-22).
+        'track_days' => (int) env('GUEST_TRACK_DAYS', 7),
+        // Resending the link from the tracking page: one send per wait, the
+        // automatic email included, and a cap per order (decided 2026-11-22).
+        'link_resend_wait_seconds' => (int) env('GUEST_LINK_RESEND_WAIT', 30),
+        'link_resends_per_order' => (int) env('GUEST_LINK_RESENDS', 10),
         'cart_idle_days' => (int) env('GUEST_CART_IDLE_DAYS', 7),
     ],
 

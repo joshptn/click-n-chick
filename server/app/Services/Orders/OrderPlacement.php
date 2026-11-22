@@ -73,6 +73,13 @@ class OrderPlacement
                 'guest_email' => $isGuest ? ($contact['email'] ?: null) : null,
             ]);
 
+            // In the same transaction, so a guest's order never exists without
+            // its tracking link; the controller reads the token back with
+            // Order::guestToken.
+            if ($isGuest) {
+                $order->mintGuestToken();
+            }
+
             foreach ($quote['items'] as $line) {
                 $item = OrderItem::create([
                     'order_id' => $order->id,

@@ -47,6 +47,9 @@ class Order extends Model
     /** What an order came to; rows from before total_amount carry total_price only. */
     public const TOTAL_SQL = 'COALESCE(orders.total_amount, orders.total_price, 0)';
 
+    /** Domain label for the guest tracking token's HMAC (mintGuestToken). */
+    private const GUEST_TOKEN_LABEL = 'guest-order-tracking';
+
     use HasFactory;
 
     protected $fillable = [
@@ -169,18 +172,62 @@ class Order extends Model
     }
 
     /**
-     * Mint the tracking credential and return the only copy of it.
+     * Make the tracking token and keep its hash (decided 2026-11-22).
+     *
+     * Derived rather than random, so the server can rebuild it to email the
+     * link once the order is paid, while the database still holds only the
+     * hash: a copy of the database cannot produce a link without the key.
+     * Called inside the placement transaction (OrderPlacement::place), so an
+     * order never exists without its link.
      *
      * Kept off $fillable deliberately: a verifier must never be settable from
      * request input, so this is the one way it is written.
      */
     public function mintGuestToken(): string
     {
-        $token = bin2hex(random_bytes(32));
+        $token = $this->deriveGuestToken((string) config('app.key'));
 
         $this->forceFill(['guest_token_hash' => static::hashGuestToken($token)])->save();
 
         return $token;
+    }
+
+    /**
+     * The token behind the stored hash, rebuilt: under the current key, then
+     * each of app.previous_keys, so rotating APP_KEY does not strand an order.
+     * Null when no key reproduces it (an order whose token was made before
+     * tokens were derived).
+     */
+    public function guestToken(): ?string
+    {
+        if ($this->guest_token_hash === null) {
+            return null;
+        }
+
+        $keys = array_filter([config('app.key'), ...(array) config('app.previous_keys', [])]);
+
+        foreach ($keys as $key) {
+            $token = $this->deriveGuestToken((string) $key);
+
+            if (hash_equals($this->guest_token_hash, static::hashGuestToken($token))) {
+                return $token;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * HMAC-SHA256 of the order under one key, labelled so it can never match
+     * another use of APP_KEY. The placement time is in it as well as the id:
+     * a database reset under the same key would otherwise hand an old link
+     * the new order that reuses its id.
+     */
+    private function deriveGuestToken(string $key): string
+    {
+        $placedAt = CarbonImmutable::parse($this->created_at)->getTimestamp();
+
+        return hash_hmac('sha256', self::GUEST_TOKEN_LABEL.'|'.$this->getKey().'|'.$placedAt, $key);
     }
 
     public static function hashGuestToken(string $token): string
@@ -222,10 +269,13 @@ class Order extends Model
     }
 
     /**
-     * When the tracking link stops working.
+     * When the tracking link stops working: a fixed number of days from
+     * placement, whatever happens to the order meanwhile (decided 2026-11-22).
      *
      * One predicate for both surfaces - the HTTP routes and broadcasting consult
-     * this and nothing else, so the two windows cannot drift apart.
+     * this and nothing else, so the two windows cannot drift apart. The hash is
+     * never cleared afterwards, so a lapsed link is still recognised and can be
+     * told why it no longer opens the order (ResolveGuestOrder).
      */
     public function guestAccessExpiresAt(): ?CarbonImmutable
     {
@@ -233,11 +283,8 @@ class Order extends Model
             return null;
         }
 
-        return $this->closed_at === null
-            ? CarbonImmutable::parse($this->created_at)
-                ->addDays((int) config('store.guest.track_days_ceiling'))
-            : CarbonImmutable::parse($this->closed_at)
-                ->addDays((int) config('store.guest.track_days_after_close'));
+        return CarbonImmutable::parse($this->created_at)
+            ->addDays((int) config('store.guest.track_days'));
     }
 
     public function guestAccessIsLive(?CarbonInterface $at = null): bool

@@ -9,6 +9,7 @@ use App\Models\Cart;
 use App\Models\Order;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
+use App\Services\Orders\GuestTrackingLink;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
@@ -28,6 +29,7 @@ class GuestOrderController extends Controller
         private OrderAnnouncer $announcer,
         private OrderCancellation $cancellation,
         private CancellationPolicy $policy,
+        private GuestTrackingLink $links,
     ) {}
 
     public function quote(Request $request)
@@ -61,8 +63,10 @@ class GuestOrderController extends Controller
         }
 
         try {
+            // The token's hash is written inside the placement transaction;
+            // the token itself is rebuilt here from the order.
             $order = $this->placement->place(null, $cart, $quote);
-            $token = $order->mintGuestToken();
+            $token = $order->guestToken();
         } catch (InsufficientStock $short) {
             return response()->json([
                 'message' => $short->getMessage(),
@@ -77,10 +81,10 @@ class GuestOrderController extends Controller
 
         // Not announced yet: the shop hears of it when it is paid (PaymentSettlement).
         return app(CheckoutResponder::class)->respond($order, $cart, $quote, [
-            // The only copy. Nothing stores it in plaintext and nothing can
-            // recover it, so the browser keeps it and the link carries it. It
-            // is not given to Xendit: the payment page returns to a fixed
-            // address, and the browser takes the guest back from there.
+            // Not stored in plaintext: the browser or app keeps it, and once
+            // the order is paid it is rebuilt from the order and emailed
+            // (FR-02.13a). It is not given to Xendit: the payment page returns
+            // to a fixed address, and the browser takes the guest back from there.
             'tracking_token' => $token,
             'channel' => $order->guestChannel(),
         ]);
@@ -96,7 +100,57 @@ class GuestOrderController extends Controller
         return response()->json([
             'order' => new OrderTrackingResource($order->load(self::WITH)),
             'channel' => $order->guestChannel(),
+            // The resend card (FR-02.13b); null once the order has closed.
+            'link' => $this->links->status($order),
         ]);
+    }
+
+    /**
+     * Email the tracking link again, from the card on the tracking page
+     * (FR-02.13b, decided 2026-11-22): once per wait, a cap per order, and
+     * only while the order is open.
+     */
+    public function resendLink(Request $request)
+    {
+        $order = $this->order($request);
+
+        if ($this->links->status($order) === null) {
+            return response()->json([
+                'message' => 'This order has closed, so its link is no longer sent.',
+                'error_code' => 'ORDER_ALREADY_CLOSED',
+            ], 422);
+        }
+
+        try {
+            $outcome = $this->links->resend($order, (string) $request->header(ResolveGuestOrder::HEADER));
+        } catch (Throwable $e) {
+            Log::warning('A guest tracking link could not be resent.', [
+                'order_id' => $order->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => "We couldn't send it just now. Please try again in a moment.",
+                'error_code' => 'LINK_NOT_SENT',
+                'link' => $this->links->status($order),
+            ], 503);
+        }
+
+        [$status, $body] = match ($outcome) {
+            GuestTrackingLink::SENT => [200, [
+                'message' => 'Your tracking link has been sent. Please check your email.',
+            ]],
+            GuestTrackingLink::WAIT => [429, [
+                'message' => 'Please wait a moment before sending it again.',
+                'error_code' => 'LINK_RESEND_WAIT',
+            ]],
+            GuestTrackingLink::LIMIT => [429, [
+                'message' => "You've reached the resend limit for this order. Keep this page open, or bookmark it, to come back to your order.",
+                'error_code' => 'LINK_RESEND_LIMIT',
+            ]],
+        };
+
+        return response()->json([...$body, 'link' => $this->links->status($order)], $status);
     }
 
     public function cancel(Request $request)

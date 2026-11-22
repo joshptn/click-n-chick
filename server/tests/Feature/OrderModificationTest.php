@@ -214,6 +214,20 @@ class OrderModificationTest extends TestCase
             ->assertForbidden();
     }
 
+    /** Only a guest's order carries an email of its own (decided 2026-11-22). */
+    public function test_a_customer_cannot_change_an_email_on_their_order(): void
+    {
+        $customer = $this->customer();
+        $order = $this->order($customer);
+
+        $this->actingAs($customer, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}", ['contact_email' => 'other@example.test'])
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'NOT_CHANGEABLE');
+
+        $this->assertNull($order->fresh()->guest_email);
+    }
+
     public function test_a_guest_changes_their_contact_from_the_tracking_link(): void
     {
         $order = $this->order(null, 'pickup');

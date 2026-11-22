@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Order;
+use App\Services\Orders\OrderStatus;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -39,28 +40,51 @@ class ResolveGuestOrder
         // 404, not 403: the route never accepts an order id, so there is nothing
         // here that could confirm an order exists to someone guessing.
         if ($order === null) {
-            return response()->json([
-                'message' => 'We could not find that order. The link may be wrong, or it may belong to someone else.',
-                'error_code' => 'ORDER_NOT_FOUND',
-            ], 404);
+            return $this->notFound();
         }
 
         /**
          * 410 rather than 404, and safe to distinguish: presenting a hash that
          * matches proves the holder legitimately had this link, because nobody
-         * can produce one without having held the token. So saying "expired"
-         * leaks nothing, and it is a far better answer than pretending the order
-         * never existed.
+         * can produce one without having held the token. So saying how the
+         * order ended leaks nothing, and it is a far better answer than
+         * pretending the order never existed (FR-02.13, decided 2026-11-22).
          */
         if (! $order->guestAccessIsLive()) {
-            return response()->json([
-                'message' => 'This tracking link has expired. Please contact the store if you still need help with this order.',
-                'error_code' => 'TRACKING_LINK_EXPIRED',
-            ], 410);
+            // Never paid, so never an order: it stays "not found", as it
+            // was while the link worked.
+            if ($order->isUnpaidCheckout()) {
+                return $this->notFound();
+            }
+
+            [$code, $message] = match (true) {
+                in_array($order->status, [OrderStatus::COMPLETED, OrderStatus::DELIVERED], true) => [
+                    'ORDER_COMPLETED',
+                    'The order is completed, nothing to track here.',
+                ],
+                $order->status === OrderStatus::CANCELLED => [
+                    'ORDER_CANCELLED',
+                    'This order was cancelled. Nothing to track here.',
+                ],
+                default => [
+                    'TRACKING_LINK_EXPIRED',
+                    'This tracking link has expired. Please contact the store.',
+                ],
+            };
+
+            return response()->json(['message' => $message, 'error_code' => $code], 410);
         }
 
         $request->attributes->set(self::ATTRIBUTE, $order);
 
         return $next($request);
+    }
+
+    private function notFound(): Response
+    {
+        return response()->json([
+            'message' => 'We could not find that order. The link may be wrong, or it may belong to someone else.',
+            'error_code' => 'ORDER_NOT_FOUND',
+        ], 404);
     }
 }

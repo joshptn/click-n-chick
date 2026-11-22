@@ -7,6 +7,7 @@ use App\Events\NotificationBroadcast;
 use App\Events\OrderBroadcast;
 use App\Http\Controllers\CartController;
 use App\Http\Middleware\ResolveGuestOrder;
+use App\Mail\GuestTrackingLinkMail;
 use App\Models\CartItem;
 use App\Models\Food;
 use App\Models\Notification;
@@ -25,6 +26,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
@@ -521,6 +523,97 @@ class PaymentFlowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('paid', true)
             ->assertJsonPath('order.status', OrderStatus::PLACED);
+    }
+
+    /** @return array{0: Order, 1: string} a guest's order waiting for payment, and its token */
+    private function guestCheckout(Food $food): array
+    {
+        $cart = $this->postJson('/api/guest/cart/items', ['food_id' => $food->id, 'quantity' => 2])
+            ->assertCreated()
+            ->json('guest_token');
+
+        $token = $this->withHeader(CartController::GUEST_HEADER, $cart)
+            ->postJson('/api/guest/orders', $this->body())
+            ->assertCreated()
+            ->json('tracking_token');
+
+        return [Order::query()->latest('id')->firstOrFail(), $token];
+    }
+
+    /** FR-02.13a, decided 2026-11-22: once, when the payment lands, and never before. */
+    public function test_a_guests_tracking_link_is_emailed_once_when_the_payment_lands(): void
+    {
+        Mail::fake();
+
+        [$order, $token] = $this->guestCheckout($this->food());
+
+        $this->assertSame(Order::hashGuestToken($token), $order->guest_token_hash);
+        Mail::assertNothingSent();
+
+        $this->gateway->pay($this->sessionOf($order));
+
+        // The webhook twice and the guest's own check: one email.
+        $this->completed($order)->assertOk();
+        $this->completed($order)->assertOk();
+        $this->withHeader(ResolveGuestOrder::HEADER, $token)->getJson('/api/guest/order/payment')->assertOk();
+
+        Mail::assertSent(GuestTrackingLinkMail::class, 1);
+        Mail::assertSent(GuestTrackingLinkMail::class, function (GuestTrackingLinkMail $mail) use ($token) {
+            return $mail->hasTo('julia@example.test')
+                && $mail->url === config('app.frontend_url').'/track#'.$token
+                && $mail->order->title() === 'Order 001';
+        });
+    }
+
+    public function test_the_email_names_the_order_and_its_date_and_carries_the_link(): void
+    {
+        [$order, $token] = $this->guestCheckout($this->food());
+        $order->forceFill(['order_number' => '005'])->save();
+
+        $mail = new GuestTrackingLinkMail($order->fresh(), 'https://shop.example.test/track#'.$token);
+
+        $mail->assertHasSubject('Track your order 005 – BES House of Chicken');
+        $mail->assertSeeInHtml('Order 005');
+        $mail->assertSeeInHtml('August 24, 2026');
+        $mail->assertSeeInHtml('https://shop.example.test/track#'.$token, false);
+        $mail->assertSeeInHtml('Enjoy your food!');
+    }
+
+    public function test_a_customers_order_sends_no_tracking_link(): void
+    {
+        Mail::fake();
+
+        $customer = $this->user();
+        $this->checkout($customer, $this->food())->assertCreated();
+        $order = Order::firstOrFail();
+
+        $this->gateway->pay($this->sessionOf($order));
+        $this->completed($order)->assertOk();
+
+        Mail::assertNotSent(GuestTrackingLinkMail::class);
+    }
+
+    /** Decided 2026-11-23: nothing is sent for now; the refund work decides what is. */
+    public function test_a_guest_payment_that_cannot_place_the_order_sends_nothing(): void
+    {
+        Mail::fake();
+
+        $food = $this->food(2);
+        [$order] = $this->guestCheckout($food);
+        $session = $this->sessionOf($order);
+
+        $this->gateway->unreachable = true;
+        $this->travel(10)->minutes();
+        $this->artisan('payments:expire-checkouts')->assertSuccessful();
+        $this->gateway->unreachable = false;
+
+        $food->forceFill(['stock_quantity' => 0])->save();
+
+        $this->gateway->pay($session);
+        $this->webhook('payment_session.completed', ['payment_session_id' => $session])->assertOk();
+
+        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+        Mail::assertNotSent(GuestTrackingLinkMail::class);
     }
 
     public function test_paying_for_an_accepted_advance_order_confirms_it(): void
