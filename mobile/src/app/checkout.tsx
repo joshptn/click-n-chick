@@ -23,6 +23,7 @@ import { Notice, OrderSummary, StepCard, Stepper, SummaryRow } from "../componen
 import { IconCheck, IconChevronRight, IconLock, IconQrcode, IconShoppingCart, IconWallet } from "../components/icons";
 import { useSession } from "../hooks/useSession";
 import { useStoreStatus } from "../hooks/useStoreStatus";
+import { rememberPendingCheckout } from "../lib/guestOrders";
 import { formatTime } from "../lib/time";
 import { toast } from "../lib/toast";
 import { colors } from "../theme/colors";
@@ -165,9 +166,14 @@ export default function Checkout() {
 
   const place = useMutation({
     mutationFn: () => checkoutApi.place(scope, input),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       // The ordered lines have left the cart.
       void queryClient.invalidateQueries({ queryKey: ["cart"] });
+
+      // Saved before Xendit opens, so a cold start can come back to it.
+      await rememberPendingCheckout(
+        result.tracking_token ? { token: result.tracking_token } : { orderId: String(result.order.id) }
+      );
 
       router.replace({
         pathname: "/payment",

@@ -3,7 +3,16 @@ import { useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../api/client";
-import { guestOrderKey, guestOrdersApi, type ContactChanges, type Order, type OrderAnswer } from "../../api/orders";
+import {
+  guestOrderKey,
+  guestOrdersApi,
+  withLinkDeadline,
+  type ContactChanges,
+  type GuestOrderAnswer,
+  type Order,
+  type OrderAnswer,
+  type TrackingLink,
+} from "../../api/orders";
 import { OrderTrackingView } from "../../components/orders/OrderTrackingView";
 import { usePublicOrderChannel } from "../../hooks/useRealtime";
 import { forgetGuestOrder, rememberGuestOrder } from "../../lib/guestOrders";
@@ -36,12 +45,14 @@ export default function GuestOrder() {
 
   const order = query.data?.order ?? null;
 
-  // Remembered for Home's "Track it live" while the link works; forgotten
-  // once the API says it no longer does.
+  // Remembered for Home's "Track it live" while the order is open (decided
+  // 2026-11-22, as the browser); forgotten once it closes, or once the API
+  // says the link no longer works.
   useEffect(() => {
-    if (order) {
-      void rememberGuestOrder({ token, reference: order.reference, placedAt: order.placed_at, closedAt: order.closed_at });
-    }
+    if (!order) return;
+
+    if (order.is_terminal) void forgetGuestOrder(token);
+    else void rememberGuestOrder({ token, reference: order.reference, placedAt: order.placed_at, closedAt: null });
   }, [order, token]);
 
   useEffect(() => {
@@ -55,16 +66,45 @@ export default function GuestOrder() {
     if (lastEvent) void queryClient.invalidateQueries({ queryKey });
   }, [lastEvent, queryClient, queryKey]);
 
-  // Merged rather than replaced: the cached answer also carries the channel name.
+  // Merged rather than replaced: the cached answer also carries the channel
+  // name and the resend card's details.
   const settle = (payload: OrderAnswer) => {
     if (payload.order) {
       const next: Order = payload.order;
-      queryClient.setQueryData<{ order: Order; channel: string | null }>(queryKey, (prev) => ({
+      queryClient.setQueryData<GuestOrderAnswer>(queryKey, (prev) => ({
         channel: prev?.channel ?? null,
+        link: prev?.link ?? null,
         order: next,
       }));
     }
   };
+
+  const keepLink = (next: TrackingLink | null | undefined) => {
+    if (next === undefined) return;
+    queryClient.setQueryData<GuestOrderAnswer>(queryKey, (prev) => (prev ? { ...prev, link: withLinkDeadline(next) } : prev));
+  };
+
+  // The card shows the result; a refusal (the wait, the limit, a failed send) is a toast.
+  const resendLink = useMutation({
+    mutationFn: () => guestOrdersApi.resendLink(token),
+    onSuccess: (payload) => keepLink(payload.link),
+    onError: (error) => {
+      if (error instanceof ApiError) keepLink(error.payload.link as TrackingLink | null | undefined);
+      toast.error("Link not sent", errorText(error, "We couldn't send it just now. Please try again in a moment."));
+    },
+  });
+
+  // Saving the address sends nothing; the guest taps Resend link after.
+  const changeLinkEmail = useMutation({
+    mutationFn: (email: string) => guestOrdersApi.updateContact(token, { contact_email: email }),
+    onSuccess: (payload, email) => {
+      settle(payload);
+      queryClient.setQueryData<GuestOrderAnswer>(queryKey, (prev) =>
+        prev?.link ? { ...prev, link: { ...prev.link, email } } : prev
+      );
+      toast.success("Email updated", "Tap Resend link to send it there.");
+    },
+  });
 
   const cancel = useMutation({
     mutationFn: () => guestOrdersApi.cancel(token),
@@ -113,6 +153,9 @@ export default function GuestOrder() {
       onConfirmReceipt={() => confirmReceipt.mutate()}
       cancelling={cancel.isPending}
       confirmingReceipt={confirmReceipt.isPending}
+      trackingLink={query.data?.link ?? null}
+      onResendLink={() => resendLink.mutateAsync()}
+      onChangeLinkEmail={(email) => changeLinkEmail.mutateAsync(email)}
     />
   );
 }

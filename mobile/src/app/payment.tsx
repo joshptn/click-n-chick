@@ -11,6 +11,7 @@ import { AppText } from "../components/AppText";
 import { ScreenHeader } from "../components/account/ScreenHeader";
 import { CheckoutButton } from "../components/checkout/CheckoutButton";
 import { IconClock, IconClockHour4, IconCreditCard, IconLock, IconToolsKitchen2 } from "../components/icons";
+import { clearPendingCheckout } from "../lib/guestOrders";
 import { formatPeso } from "../lib/money";
 import { toast } from "../lib/toast";
 import { colors } from "../theme/colors";
@@ -105,6 +106,12 @@ export default function Payment() {
     void queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
     void queryClient.invalidateQueries({ queryKey: ["cart"] });
   }, [paid, queryClient]);
+
+  // Paid, or the time to pay ran out: nothing left for a cold start to resume.
+  const over = paid || (status.data !== undefined && !order?.awaiting_payment);
+  useEffect(() => {
+    if (over) void clearPendingCheckout();
+  }, [over]);
 
   const reopen = useMutation({
     mutationFn: () => paymentApi.pay(target as PaymentTarget),

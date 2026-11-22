@@ -4,7 +4,15 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError } from "../../api/client";
-import { cancelPrompt, feedbackMailto, isRefused, statusTone, type ContactChanges, type Order } from "../../api/orders";
+import {
+  cancelPrompt,
+  feedbackMailto,
+  isRefused,
+  statusTone,
+  type ContactChanges,
+  type Order,
+  type TrackingLink,
+} from "../../api/orders";
 import { formatPeso } from "../../lib/money";
 import { formatDay, formatTime } from "../../lib/time";
 import { toast } from "../../lib/toast";
@@ -31,6 +39,7 @@ import {
 import { Sheet } from "../account/Sheet";
 import { ContactEditor } from "./ContactEditor";
 import { GREEN, OrderProgress } from "./OrderProgress";
+import { TrackingLinkCard } from "./TrackingLinkCard";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 type Hero = { icon: ComponentType<IconProps>; title: string; body: string };
@@ -98,6 +107,10 @@ type Props = {
   paying?: boolean;
   /** Change the contact name and number (BR-21b); rejects with the API's message. */
   onUpdateContact?: (changes: ContactChanges) => Promise<unknown>;
+  /** A guest's resend card (FR-02.13b): its details, null once the order has closed. */
+  trackingLink?: TrackingLink | null;
+  onResendLink?: () => Promise<unknown>;
+  onChangeLinkEmail?: (email: string) => Promise<unknown>;
 };
 
 /**
@@ -122,6 +135,9 @@ export function OrderTrackingView({
   onPay,
   paying = false,
   onUpdateContact,
+  trackingLink = null,
+  onResendLink,
+  onChangeLinkEmail,
 }: Props) {
   // Review Advance Order (decided 2026-11-20): on every Pay now, before Xendit.
   const [reviewing, setReviewing] = useState(false);
@@ -259,6 +275,10 @@ export function OrderTrackingView({
             )}
 
             <OrderItems order={order} />
+
+            {guest && trackingLink && onResendLink && onChangeLinkEmail && !order.is_terminal && (
+              <TrackingLinkCard link={trackingLink} onResend={onResendLink} onChangeEmail={onChangeLinkEmail} />
+            )}
 
             {order.can_cancel && !order.is_terminal && <CancelCard order={order} cancelling={cancelling} onCancel={confirmCancel} />}
 
@@ -538,8 +558,19 @@ function ActionButton({
 function LoadError({ error, guest, onBack }: { error: unknown; guest: boolean; onBack: () => void }) {
   const status = error instanceof ApiError ? error.status : 0;
   const serverMessage = error instanceof ApiError && typeof error.payload.message === "string" ? error.payload.message : null;
+  const code = error instanceof ApiError && typeof error.payload.error_code === "string" ? error.payload.error_code : null;
 
-  const title = status === 410 ? "This link has expired" : status === 403 || status === 404 ? "We can't find that order" : "That order could not be loaded";
+  // An expired link says how the order ended (FR-02.13, decided 2026-11-22).
+  const title =
+    code === "ORDER_COMPLETED"
+      ? "Order completed"
+      : code === "ORDER_CANCELLED"
+        ? "Order cancelled"
+        : status === 410
+          ? "This link has expired"
+          : status === 403 || status === 404
+            ? "We can't find that order"
+            : "That order could not be loaded";
 
   const body =
     guest && serverMessage && status !== 0
