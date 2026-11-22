@@ -9,6 +9,14 @@ const REASONS = ["Out of stock", "Kitchen is at capacity", "Outside our delivery
 
 const MAX_REASON = 255;
 
+/** Where the money goes (decided 2026-11-23): GCash through Xendit, QR Ph by hand. */
+function refundDetail(method, amount) {
+  if (method === "GCASH") return `${amount} goes back to the customer's GCash automatically.`;
+  if (method === "QRPH") return `${amount} is added to Refunds for you to pay back by hand.`;
+
+  return `${amount} is marked to go back to the customer.`;
+}
+
 function RefundOption({ selected, onSelect, icon, title, detail }) {
   const Icon = icon;
 
@@ -150,7 +158,7 @@ function CancelOrderModal({ order, mode = "reject", opened, onClose, onConfirm, 
             onSelect={() => setRefund(true)}
             icon={IconCashBanknote}
             title="Refund in full"
-            detail={`${amount} is marked to go back to the customer.`}
+            detail={refundDetail(order.payment_method, amount)}
           />
           <RefundOption
             selected={refund === false}

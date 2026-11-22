@@ -150,6 +150,22 @@ export function itemsSummary(items = []) {
   return rest.length === 0 ? head : `${head} + ${rest.length} more`;
 }
 
+/**
+ * The refund under a cancelled paid order's total (decided 2026-11-23):
+ * "Refund pending", "Refunded", or "Refunded amount" ₱0.00 when the store
+ * chose no refund. Null for an order that is not cancelled or never paid.
+ */
+export function refundLine(order) {
+  if (!order?.is_cancelled || !order?.payment?.paid) return null;
+
+  const refund = order.payment.refund;
+
+  if (refund?.state === "refunded") return { label: "Refunded", amount: refund.amount };
+  if (refund?.state === "refunding" || refund?.state === "by_hand") return { label: "Refund pending", amount: refund.amount };
+
+  return { label: "Refunded amount", amount: 0 };
+}
+
 export function cancelPrompt(order) {
   const terms = order?.cancellation ?? null;
   const withdrawing = isUnanswered(order);

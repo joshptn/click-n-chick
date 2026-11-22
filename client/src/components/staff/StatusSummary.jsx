@@ -1,7 +1,7 @@
 import { TONES } from "./tones";
 
 /** The day at a glance; each card jumps to its column. */
-function StatusSummary({ columns, onSelect, loading = false, gridClass = "sm:grid-cols-3 lg:grid-cols-5" }) {
+function StatusSummary({ columns, onSelect, loading = false, gridClass = "sm:grid-cols-3 lg:grid-cols-5", spanLast = true }) {
   return (
     <div className={`grid grid-cols-2 gap-2.5 ${gridClass}`}>
       {columns.map((column) => {
@@ -13,7 +13,7 @@ function StatusSummary({ columns, onSelect, loading = false, gridClass = "sm:gri
             type="button"
             onClick={() => onSelect(column.key)}
             data-testid={`summary-${column.key}`}
-            className={`flex flex-col items-center justify-center rounded-[12px] px-3 py-2 ring-1 ring-inset transition-transform hover:-translate-y-0.5 ${tone.surface} ${tone.ring} last:col-span-2 sm:last:col-span-1`}
+            className={`flex flex-col items-center justify-center rounded-[12px] px-3 py-2 ring-1 ring-inset transition-transform hover:-translate-y-0.5 ${tone.surface} ${tone.ring} ${spanLast ? "last:col-span-2 sm:last:col-span-1" : ""}`}
           >
             <span className={`font-display text-[18px] font-bold leading-none ${tone.text}`}>
               {loading ? "–" : column.total}

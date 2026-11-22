@@ -14,7 +14,8 @@ import {
 } from "@tabler/icons-react";
 
 import { Line, Money, Section } from "./DetailParts";
-import { initialsOf, paymentLabel } from "../../lib/agent";
+import RecordPayment from "./RecordPayment";
+import { initialsOf } from "../../lib/agent";
 import { formatPeso } from "../../lib/menu";
 import {
   OUTCOME_PILL,
@@ -254,22 +255,7 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
                           {formatPeso(record.total)}
                         </span>
                       </div>
-                      <p className="m-0 mt-1 font-display text-[11px] text-[#8d8884]">
-                        {record.payment?.status === "paid" ? "Paid" : "Not paid"}
-                        {record.payment?.method && ` · ${paymentLabel({ payment_method: record.payment.method })}`}
-                        {record.payment?.paid_at && ` · ${formatRecordStamp(record.payment.paid_at)}`}
-                      </p>
-                      {record.refund_owed > 0 ? (
-                        <p className="m-0 rounded-[9px] bg-[#fdecec] px-2.5 py-1.5 font-display text-[11.5px] text-[#c4302b]">
-                          Refund owed: <span className="font-semibold">{formatPeso(record.refund_owed)}</span>
-                          {record.payment?.refund_status && ` · ${record.payment.refund_status}`}
-                        </p>
-                      ) : (
-                        record.status === "cancelled" &&
-                        record.payment?.status === "paid" && (
-                          <p className="m-0 font-display text-[11px] text-[#8d8884]">No refund recorded for this cancellation.</p>
-                        )
-                      )}
+                      <RecordPayment record={record} />
                     </div>
                   </Section>
 

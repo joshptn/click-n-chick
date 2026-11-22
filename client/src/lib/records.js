@@ -20,6 +20,16 @@ export function fetchRecord(id, { signal } = {}) {
   return api.get(`/api/agent/records/${id}`, { signal });
 }
 
+/** Who paid, read from Xendit each time (decided 2026-11-23). */
+export function fetchPayer(paymentId, { signal } = {}) {
+  return api.get(`/api/agent/payments/${paymentId}/payer`, { signal });
+}
+
+/** A Store Agent ticks a refund by hand once the money is sent. */
+export function markRefunded(paymentId, reference) {
+  return api.post(`/api/agent/payments/${paymentId}/refunded`, { reference: reference || null });
+}
+
 /** The store's calendar, which is what the server files records under. */
 export const STORE_TIMEZONE = "Asia/Manila";
 
@@ -50,6 +60,8 @@ export const OUTCOMES = [
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
   { key: "rejected", label: "Declined" },
+  // Decided 2026-11-23: every order with money owed back, open or closed.
+  { key: "refunds", label: "Refunds" },
 ];
 
 export const ORDER_TYPES = [
@@ -68,7 +80,6 @@ export const PAYMENT_FILTERS = [
   { key: "all", label: "Any payment" },
   { key: "paid", label: "Paid" },
   { key: "unpaid", label: "Not paid" },
-  { key: "refund_owed", label: "Refund owed" },
 ];
 
 export const RECORD_SORTS = [
@@ -158,14 +169,38 @@ export function recordOutcome(record) {
       return { tone: "green", label: "Delivered", detail: "Delivered" };
     case "rejected":
       return { tone: "slate", label: "Declined", detail: "Declined by the store" };
-    default:
+    case "cancelled":
       if (record?.cancelled_by_store) return { tone: "red", label: "Cancelled", detail: "Cancelled by the store" };
       if (record?.expired_unpaid) {
         return { tone: "amber", label: "Cancelled", detail: "Expired unpaid" };
       }
 
       return { tone: "red", label: "Cancelled", detail: "Cancelled by the customer" };
+    default:
+      // Only Refunds lists an open order: an extra payment on one still in progress.
+      return { tone: "slate", label: record?.status_label ?? "Open", detail: "Still open" };
   }
+}
+
+/** A refund's state as Order Records shows it (decided 2026-11-23). */
+export const REFUND_STATES = {
+  refunding: { tone: "amber", label: "Refunding", detail: "Going back to GCash through Xendit" },
+  by_hand: { tone: "red", label: "Refund by hand", detail: "Send it to the customer, then tick it" },
+  refunded: { tone: "green", label: "Refunded", detail: "Refunded" },
+};
+
+/** The refund that matters most on a record: one still to do, then one in flight. */
+export function recordRefund(record) {
+  const refunds = [record?.refund, ...(record?.extra_refunds ?? [])].filter(
+    (refund) => refund && REFUND_STATES[refund.state]
+  );
+
+  return (
+    refunds.find((refund) => refund.state === "by_hand") ??
+    refunds.find((refund) => refund.state === "refunding") ??
+    refunds[0] ??
+    null
+  );
 }
 
 export const OUTCOME_PILL = {

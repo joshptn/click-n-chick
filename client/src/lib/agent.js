@@ -75,7 +75,8 @@ export function advanceAgentOrder(id) {
   return api.post(`/api/agent/orders/${id}/advance`);
 }
 
-export function cancelAgentOrder(id, { reason, refund = true } = {}) {
+/** `refund` must be chosen for a paid order (true or false); there is no default. */
+export function cancelAgentOrder(id, { reason, refund } = {}) {
   return api.post(`/api/agent/orders/${id}/cancel`, { reason: reason || null, refund });
 }
 

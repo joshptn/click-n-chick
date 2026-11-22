@@ -35,6 +35,8 @@ const SUMMARY = [
   { key: "completed", label: "Completed", tone: "green", field: "completed" },
   { key: "cancelled", label: "Cancelled", tone: "orange", field: "cancelled" },
   { key: "rejected", label: "Declined", tone: "amber", field: "rejected" },
+  // Decided 2026-11-23: beside Declined; the count is what waits to be refunded by hand.
+  { key: "refunds", label: "Refunds", tone: "orange", field: "refunds_to_do" },
   { key: "value", label: "Completed Sales", tone: "blue", field: "completed_value", money: true },
 ];
 
@@ -172,7 +174,7 @@ function OrderRecords() {
                   <LivePill />
                 </div>
                 <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
-                  Completed, cancelled and declined orders. Records are read-only.
+                  Completed, cancelled and declined orders, and every refund. Read-only, except ticking a refund by hand.
                 </p>
               </div>
             </div>
@@ -180,6 +182,8 @@ function OrderRecords() {
             <div className="mt-4">
               <StatusSummary
                 columns={summaryCards}
+                gridClass="sm:grid-cols-3 lg:grid-cols-6"
+                spanLast={false}
                 loading={list.isLoading}
                 onSelect={(key) => {
                   const outcome = key === "value" ? "completed" : key;
