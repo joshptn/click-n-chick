@@ -2,8 +2,12 @@
 
 namespace App\Services\Orders;
 
+use App\Mail\GuestOrderNotice;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Payments\PaymentCheckout;
+use App\Services\Payments\PaymentRefunds;
+use Illuminate\Support\Facades\DB;
 
 class OrderCancellation
 {
@@ -12,6 +16,8 @@ class OrderCancellation
         private OrderAnnouncer $announcer,
         private OrderNotice $notice,
         private AdvanceExpiry $expiry,
+        private PaymentCheckout $checkout,
+        private PaymentRefunds $refunds,
     ) {}
 
     /**
@@ -31,7 +37,15 @@ class OrderCancellation
                 'refund_amount' => 0.0,
                 'code' => $refusal['error_code'],
                 'message' => $refusal['message'],
+                'cancel_from' => null,
             ];
+        }
+
+        // Decided 2026-11-23: an unpaid advance order's open payment page is
+        // closed first, so it cannot take money for an order about to go. One
+        // paid at that very moment is now paid, and the policy refuses.
+        if ($this->checkout->closeOpen($order)) {
+            $order->refresh();
         }
 
         $decision = $this->policy->for($order);
@@ -40,13 +54,20 @@ class OrderCancellation
             return $decision;
         }
 
-        $order->forceFill([
-            'status' => OrderStatus::CANCELLED,
-            'cancelled_by' => $by?->getKey(),
-            'refund_owed' => $decision['refund_amount'],
-        ])->save();
+        DB::transaction(function () use ($order, $by, $decision) {
+            $order->forceFill([
+                'status' => OrderStatus::CANCELLED,
+                'cancelled_by' => $by?->getKey(),
+            ])->save();
+
+            // Paid before it was placed, so the whole amount goes back (BR-20).
+            if ($decision['refundable'] && $order->paidPayment !== null) {
+                $this->refunds->owe($order->paidPayment, (float) $decision['refund_amount'], PaymentRefunds::REASON_CUSTOMER);
+            }
+        });
 
         $this->announcer->announce($order, 'cancelled', OrderStatus::CANCELLED);
+        $this->announcer->toGuest($order, GuestOrderNotice::CANCELLED);
 
         // A booked advance order frees a slot somebody planned around, so the
         // staff are told. An immediate cancellation is already on the queue screen.

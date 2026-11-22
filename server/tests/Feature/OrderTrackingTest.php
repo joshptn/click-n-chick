@@ -51,7 +51,7 @@ class OrderTrackingTest extends TestCase
 
     private function order(User $owner, string $type = 'pickup', string $status = OrderStatus::PLACED, bool $queue = true): Order
     {
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $owner->id,
             'order_type' => $type,
             'status' => OrderStatus::PLACED,
@@ -203,7 +203,7 @@ class OrderTrackingTest extends TestCase
     public function test_an_advance_request_is_named_by_its_collection_until_accepted(): void
     {
         $customer = $this->customer();
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::SUBMITTED,

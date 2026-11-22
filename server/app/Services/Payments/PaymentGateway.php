@@ -44,4 +44,35 @@ interface PaymentGateway
      * @throws PaymentGatewayException
      */
     public function paymentChannel(string $paymentRequestId): ?string;
+
+    /**
+     * Refund a payment in full (decided 2026-11-23: GCash only; Xendit cannot
+     * refund QR Ph). $reference names the refund on our side, one per payment.
+     *
+     * @throws PaymentGatewayException
+     */
+    public function refund(string $paymentId, float $amount, string $reference, string $reason): GatewayRefund;
+
+    /** @throws PaymentGatewayException */
+    public function getRefund(string $refundId): GatewayRefund;
+
+    /**
+     * The refunds already made on a payment, so a retried refund can find the
+     * one it sent before rather than sending a second.
+     *
+     * @return list<GatewayRefund>
+     *
+     * @throws PaymentGatewayException
+     */
+    public function refundsFor(string $paymentId): array;
+
+    /**
+     * The payer as the payment method provider reported them. Xendit fills
+     * these only when the provider gives them, so any may be null.
+     *
+     * @return array{name: ?string, account: ?string, issuer: ?string, receipt: ?string}
+     *
+     * @throws PaymentGatewayException
+     */
+    public function payerDetails(string $paymentId): array;
 }

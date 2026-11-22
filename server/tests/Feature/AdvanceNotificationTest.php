@@ -311,7 +311,7 @@ class AdvanceNotificationTest extends TestCase
 
         $this->assertStringContainsString('The store cancelled', $body);
         $this->assertStringContainsString('A pipe burst in the kitchen.', $body);
-        $this->assertStringContainsString('₱400.00 will be refunded', $body);
+        $this->assertStringContainsString('₱400.00 is on its way back to your GCash', $body);
     }
 
     public function test_a_customer_cancelling_is_not_told_the_store_did_it(): void
@@ -373,7 +373,7 @@ class AdvanceNotificationTest extends TestCase
         $agent = $this->user(User::ROLE_ADMIN);
         $customer = $this->user();
 
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -605,7 +605,7 @@ class AdvanceNotificationTest extends TestCase
         bool $paid = false,
         string $dueIn = '5 days',
     ): Order {
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::SUBMITTED,

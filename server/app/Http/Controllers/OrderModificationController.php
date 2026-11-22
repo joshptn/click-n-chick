@@ -27,7 +27,7 @@ class OrderModificationController extends Controller
 {
     use AuthorizesRequests;
 
-    private const WITH = ['items.food', 'items.addons', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'paidPayment'];
 
     /** Fields that used to be changeable, refused by name so the reason is clear. */
     private const LOCKED = ['address_id', 'latitude', 'longitude', 'full_address', 'location', 'delivery_note', 'pickup_at'];

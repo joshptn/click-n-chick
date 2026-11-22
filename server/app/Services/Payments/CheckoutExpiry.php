@@ -72,10 +72,8 @@ class CheckoutExpiry
 
             $locked->forceFill([
                 'status' => OrderStatus::CANCELLED,
-                'payment_status' => Order::PAYMENT_EXPIRED,
                 'cancellation_reason' => self::REASON,
                 'cancelled_by' => null,
-                'refund_owed' => 0,
             ])->save();
 
             $locked->payments()->pending()->update(['payment_status' => Payment::STATUS_CLOSED]);
@@ -93,10 +91,8 @@ class CheckoutExpiry
     {
         $order->forceFill([
             'status' => OrderStatus::CANCELLED,
-            'payment_status' => Order::PAYMENT_EXPIRED,
             'cancellation_reason' => 'Payment could not be started.',
             'cancelled_by' => null,
-            'refund_owed' => 0,
         ])->save();
     }
 

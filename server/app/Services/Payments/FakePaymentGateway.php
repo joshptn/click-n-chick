@@ -27,7 +27,24 @@ class FakePaymentGateway implements PaymentGateway
     /** @var array<string, bool> session id => returns to the native app */
     public array $returnsToApp = [];
 
+    /** @var array<string, GatewayRefund> refund id => refund */
+    public array $refunds = [];
+
+    /** @var array<string, string> refund id => payment id */
+    public array $refundedPayments = [];
+
+    /** What a new refund comes back as: PENDING (as Xendit usually answers), SUCCEEDED or FAILED. */
+    public string $refundStatus = GatewayRefund::PENDING;
+
+    /** Xendit refuses the refund outright (QR Ph, or a channel error). */
+    public bool $refuseRefunds = false;
+
+    /** @var array<string, array{name: ?string, account: ?string, issuer: ?string, receipt: ?string}> */
+    public array $payers = [];
+
     private int $counter = 0;
+
+    private int $refundCounter = 0;
 
     public function createSession(
         string $reference,
@@ -99,6 +116,53 @@ class FakePaymentGateway implements PaymentGateway
     public function latest(): ?GatewaySession
     {
         return $this->sessions === [] ? null : end($this->sessions);
+    }
+
+    public function refund(string $paymentId, float $amount, string $reference, string $reason): GatewayRefund
+    {
+        $this->guard();
+
+        if ($this->refuseRefunds) {
+            throw new PaymentGatewayException('Xendit refused the request: Refund feature is not available for this payment channel.', 400, 'REFUND_NOT_SUPPORTED');
+        }
+
+        $id = 'rfd-fake-'.(++$this->refundCounter);
+        $this->refundedPayments[$id] = $paymentId;
+
+        return $this->refunds[$id] = new GatewayRefund($id, $this->refundStatus, $reference, $paymentId);
+    }
+
+    public function getRefund(string $refundId): GatewayRefund
+    {
+        $this->guard();
+
+        return $this->refunds[$refundId]
+            ?? throw new PaymentGatewayException('Refund not found.', 404, 'DATA_NOT_FOUND');
+    }
+
+    public function refundsFor(string $paymentId): array
+    {
+        $this->guard();
+
+        return array_values(array_filter(
+            $this->refunds,
+            fn (GatewayRefund $refund) => $refund->paymentId === $paymentId,
+        ));
+    }
+
+    public function payerDetails(string $paymentId): array
+    {
+        $this->guard();
+
+        return $this->payers[$paymentId] ?? ['name' => null, 'account' => null, 'issuer' => null, 'receipt' => null];
+    }
+
+    /** Xendit finishes a refund: what its webhook would report, and what getRefund() then says. */
+    public function settleRefund(string $refundId, string $status = GatewayRefund::SUCCEEDED): GatewayRefund
+    {
+        $refund = $this->refunds[$refundId];
+
+        return $this->refunds[$refundId] = new GatewayRefund($refund->id, $status, $refund->reference, $refund->paymentId);
     }
 
     private function with(GatewaySession $session, string $status, ?string $paymentId = null, ?string $requestId = null): GatewaySession

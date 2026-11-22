@@ -6,6 +6,7 @@ use App\Events\SessionRevoked;
 use App\Http\Resources\ManagedUserResource;
 use App\Models\AuthEvent;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\User;
 use App\Rules\StrongPassword;
 use App\Services\Orders\OrderStatus;
@@ -299,6 +300,19 @@ class UserManagementController extends Controller
 
             if ($target->Orders()->whereNotIn('status', OrderStatus::terminal())->exists()) {
                 return $this->refuse('This customer still has an open order. Delete the account once it has closed.', 'HAS_OPEN_ORDERS');
+            }
+
+            // Decided 2026-11-23: deleting would wipe the contact a refund is
+            // owed to, so it waits until every refund is refunded.
+            $owed = Payment::query()
+                ->owed()
+                ->where(fn (Builder $whose) => $whose
+                    ->where('payments.user_id', $target->getKey())
+                    ->orWhereHas('order', fn (Builder $order) => $order->where('user_id', $target->getKey())))
+                ->exists();
+
+            if ($owed) {
+                return $this->refuse('This customer is still owed a refund. Delete the account once it has been refunded.', 'HAS_PENDING_REFUND');
             }
 
             // Before the orders are detached, while "someone else's order" can

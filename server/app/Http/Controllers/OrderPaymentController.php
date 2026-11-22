@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  */
 class OrderPaymentController extends Controller
 {
-    private const WITH = ['items.food', 'items.addons', 'user'];
+    private const WITH = ['items.food', 'items.addons', 'user', 'paidPayment'];
 
     public function __construct(
         private PaymentCheckout $checkout,

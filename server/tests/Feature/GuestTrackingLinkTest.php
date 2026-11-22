@@ -48,7 +48,7 @@ class GuestTrackingLinkTest extends TestCase
     /** @return array{0: Order, 1: string} a paid, open guest order and its token */
     private function guestOrder(array $overrides = []): array
     {
-        $order = Order::create(array_merge([
+        $order = $this->orderWith(array_merge([
             'user_id' => null,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -56,7 +56,7 @@ class GuestTrackingLinkTest extends TestCase
             'subtotal' => 350,
             'total_price' => 350,
             'total_amount' => 350,
-            'payment_status' => Order::PAYMENT_PAID,
+            'payment_status' => 'paid',
             'contact_name' => 'Julia Veneese',
             'contact_phone' => '09171234567',
             'guest_email' => 'julia@example.test',
@@ -219,7 +219,7 @@ class GuestTrackingLinkTest extends TestCase
     {
         [, $token] = $this->guestOrder([
             'status' => OrderStatus::AWAITING_PAYMENT,
-            'payment_status' => Order::PAYMENT_UNPAID,
+            'payment_status' => 'unpaid',
             'order_number' => null,
         ]);
 

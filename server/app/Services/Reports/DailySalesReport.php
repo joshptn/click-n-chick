@@ -24,8 +24,9 @@ use Illuminate\Support\Collection;
  *   What money moved?      Only `payments` rows that record it, filed under the
  *                          moment it was paid or refunded.
  *
- * `orders.payment_status` alone never counts as money received: nothing but a
- * payment record proves it.
+ * Nothing but a payment record proves money received; since 2026-11-23 the
+ * payment is also the only record of what is owed back and what has been
+ * refunded.
  */
 class DailySalesReport
 {
@@ -84,7 +85,7 @@ class DailySalesReport
             'unverified_sales' => $this->unverified($fulfilled),
 
             'money' => $this->money($window, $filters, $cancelled),
-            'refunds' => $this->refunds($cancelled),
+            'refunds' => $this->refunds($window, $filters, $cancelled),
             'not_sold' => $notSold,
             'open' => $openOrders,
 
@@ -200,12 +201,7 @@ class DailySalesReport
 
     private function unverified(Builder $fulfilled): array
     {
-        $orders = (clone $fulfilled)->whereDoesntHave('payments', fn (Builder $payment) => $payment->verified());
-
-        return $this->totals($orders) + [
-            // Marked paid on the order with no payment behind it: demo data today.
-            'marked_paid_orders' => (clone $orders)->where('payment_status', Payment::STATUS_PAID)->count(),
-        ];
+        return $this->totals((clone $fulfilled)->whereDoesntHave('payments', fn (Builder $payment) => $payment->verified()));
     }
 
     private function money(array $window, array $filters, Builder $cancelled): array
@@ -214,10 +210,18 @@ class DailySalesReport
             ->where('payments.paid_at', '>=', $window[0])
             ->where('payments.paid_at', '<', $window[1]);
 
-        $received = $this->countAndValue(
-            $this->scoped(Order::query(), $filters)->whereHas('payments', $paidOnDay),
-            'amount'
-        );
+        // Every confirmed payment made that day, so an order paid twice counts
+        // both: its extra payment's refund is paid out of the same money
+        // (decided 2026-11-23). A payment is always for its order's total.
+        $receivedRow = $paidOnDay(Payment::query())
+            ->whereHas('order', fn (Builder $order) => $this->scoped($order, $filters))
+            ->join('orders', 'orders.id', '=', 'payments.order_id')
+            ->toBase()
+            ->selectRaw('COUNT(DISTINCT payments.order_id) AS orders')
+            ->selectRaw('SUM('.Order::TOTAL_SQL.') AS amount')
+            ->first();
+
+        $received = ['orders' => (int) $receivedRow->orders, 'amount' => $this->money2($receivedRow->amount)];
 
         $refundRow = Payment::query()
             ->whereNotNull('payments.refunded_at')
@@ -231,14 +235,14 @@ class DailySalesReport
 
         $settled = ['payments' => (int) $refundRow->payments, 'amount' => $this->money2($refundRow->amount)];
 
-        // A paid order cancelled once the kitchen had started: BR-20 keeps the
-        // money, but the food was not sold, so it stays out of sales.
-        $keptAmount = 'SUM('.Order::TOTAL_SQL.' - COALESCE(orders.refund_owed, 0))';
+        // A paid order the store cancelled without a refund (BR-21a) keeps the
+        // money, but the food was not sold, so it stays out of sales. Refunds
+        // are all or nothing, so "kept" is a cancelled paid order with no refund.
         $kept = $this->verified(clone $cancelled)
-            ->whereRaw(Order::TOTAL_SQL.' - COALESCE(orders.refund_owed, 0) > 0')
+            ->whereDoesntHave('payments', fn (Builder $payment) => $payment->refunds())
             ->toBase()
             ->selectRaw('COUNT(*) AS orders')
-            ->selectRaw($keptAmount.' AS amount')
+            ->selectRaw('SUM('.Order::TOTAL_SQL.') AS amount')
             ->first();
 
         return [
@@ -256,13 +260,13 @@ class DailySalesReport
             ->verified()
             ->where('payments.paid_at', '>=', $window[0])
             ->where('payments.paid_at', '<', $window[1])
-            // One row per order, for the same reason as verified().
-            ->whereIn('payments.id', Payment::query()->verified()->selectRaw('MAX(payments.id)')->groupBy('payments.order_id'))
+            // Every payment, as money received does (decided 2026-11-23): a
+            // second payment on one order is real money, refunded separately.
             ->whereHas('order', fn (Builder $order) => $this->scoped($order, $filters))
             ->join('orders', 'orders.id', '=', 'payments.order_id')
             ->toBase()
             ->select('payments.payment_method')
-            ->selectRaw('COUNT(*) AS orders')
+            ->selectRaw('COUNT(DISTINCT payments.order_id) AS orders')
             ->selectRaw('SUM('.Order::TOTAL_SQL.') AS amount')
             ->groupBy('payments.payment_method')
             ->orderByDesc('amount')
@@ -275,17 +279,31 @@ class DailySalesReport
             ->all();
     }
 
-    private function refunds(Builder $cancelled): array
+    /**
+     * Refunds owed (decided 2026-11-23: read from the payments): those on
+     * orders cancelled that day, and extra payments made that day on orders
+     * that went ahead. Awaiting: not refunded yet.
+     */
+    private function refunds(array $window, array $filters, Builder $cancelled): array
     {
-        $owed = (clone $cancelled)->where('refund_owed', '>', 0);
-        $sum = fn (Builder $orders) => [
-            'orders' => (clone $orders)->count(),
-            'amount' => $this->money2((clone $orders)->sum('refund_owed')),
+        $owed = Payment::query()
+            ->refunds()
+            ->where(fn (Builder $which) => $which
+                ->whereIn('payments.order_id', (clone $cancelled)->select('orders.id'))
+                ->orWhere(fn (Builder $extra) => $extra
+                    ->where('payments.paid_at', '>=', $window[0])
+                    ->where('payments.paid_at', '<', $window[1])
+                    ->whereHas('order', fn (Builder $order) => $this->scoped($order, $filters)
+                        ->where('orders.status', '!=', OrderStatus::CANCELLED))));
+
+        $sum = fn (Builder $payments) => [
+            'orders' => (clone $payments)->distinct()->count('payments.order_id'),
+            'amount' => $this->money2((clone $payments)->sum('payments.refund_amount')),
         ];
 
         return [
             'owed' => $sum($owed),
-            'awaiting' => $sum((clone $owed)->whereDoesntHave('payments', fn (Builder $payment) => $payment->whereNotNull('payments.refunded_at'))),
+            'awaiting' => $sum((clone $owed)->owed()),
         ];
     }
 

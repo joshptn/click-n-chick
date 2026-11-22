@@ -38,7 +38,7 @@ class OrderRecordsTest extends TestCase
 
     private function order(array $attributes = [], ?Food $food = null, int $quantity = 1): Order
     {
-        $order = Order::create($attributes + [
+        $order = $this->orderWith($attributes + [
             'user_id' => User::factory()->create(['first_name' => 'Julia', 'last_name' => 'Veneese'])->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -81,7 +81,9 @@ class OrderRecordsTest extends TestCase
     {
         $done = $this->close($this->order(), OrderStatus::COMPLETED);
         $delivered = $this->close($this->order(['order_type' => 'delivery']), OrderStatus::DELIVERED);
-        $cancelled = $this->close($this->order(), OrderStatus::CANCELLED);
+        // Cancelled by the store: an unpaid order nobody cancelled is a lapsed
+        // checkout, which was never an order (decided 2026-11-17).
+        $cancelled = $this->close($this->order(['cancelled_by' => $this->staff()->id]), OrderStatus::CANCELLED);
         $this->order(); // still placed
         $this->close($this->order(), OrderStatus::PREPARING);
 
@@ -111,7 +113,7 @@ class OrderRecordsTest extends TestCase
     {
         $older = $this->close($this->order(), OrderStatus::COMPLETED, CarbonImmutable::parse('2026-11-01 10:00', 'Asia/Manila'));
         $newer = $this->close($this->order(), OrderStatus::COMPLETED, CarbonImmutable::parse('2026-11-03 10:00', 'Asia/Manila'));
-        $middle = $this->close($this->order(), OrderStatus::CANCELLED, CarbonImmutable::parse('2026-11-02 10:00', 'Asia/Manila'));
+        $middle = $this->close($this->order(['cancelled_by' => $this->staff()->id]), OrderStatus::CANCELLED, CarbonImmutable::parse('2026-11-02 10:00', 'Asia/Manila'));
 
         $this->actingAs($this->staff(), 'sanctum')
             ->getJson('/api/agent/records?per_page=2')
@@ -162,7 +164,8 @@ class OrderRecordsTest extends TestCase
         $this->close($this->order(['order_type' => 'delivery', 'delivery_fee' => 50, 'total_amount' => 349, 'total_price' => 349]), OrderStatus::DELIVERED);
         $this->close($this->order(['discount_amount' => 59.8, 'total_amount' => 239.2, 'total_price' => 239.2]), OrderStatus::COMPLETED);
         $cancelled = $this->order(['payment_status' => 'paid']);
-        $cancelled->forceFill(['status' => OrderStatus::CANCELLED, 'refund_owed' => 299, 'cancelled_by' => $this->staff()->id])->save();
+        $cancelled->forceFill(['status' => OrderStatus::CANCELLED, 'cancelled_by' => $this->staff()->id])->save();
+        $cancelled->paidPayment->forceFill(['refund_amount' => 299, 'refund_status' => Payment::REFUND_MANUAL])->save();
         $this->close($this->order(['scheduled_for' => now()->addDays(3)]), OrderStatus::REJECTED);
 
         $response = $this->actingAs($this->staff(), 'sanctum')
@@ -190,10 +193,13 @@ class OrderRecordsTest extends TestCase
             ->assertJsonPath('data.0.outcome', 'rejected')
             ->assertJsonPath('data.0.is_advance', true);
 
-        $this->getJson('/api/agent/records?payment=refund_owed')
+        $this->getJson('/api/agent/records?outcome=refunds')
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $cancelled->id)
-            ->assertJsonPath('data.0.cancelled_by_store', true);
+            ->assertJsonPath('data.0.cancelled_by_store', true)
+            ->assertJsonPath('data.0.refund.state', 'by_hand')
+            ->assertJsonPath('summary.refunds', 1)
+            ->assertJsonPath('summary.refunds_to_do', 1);
     }
 
     public function test_search_finds_an_id_a_name_a_guest_and_a_dish_but_not_a_daily_number(): void
@@ -252,7 +258,6 @@ class OrderRecordsTest extends TestCase
             'delivery_fee' => 45,
             'total_amount' => 673,
             'total_price' => 673,
-            'payment_status' => 'paid',
             'full_address' => '12 Mabini St',
         ], $food, 2);
 

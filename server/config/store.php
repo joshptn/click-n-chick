@@ -16,6 +16,10 @@ return [
         'closes_at' => env('STORE_CLOSES_AT', '20:00'),
     ],
 
+    // Decided 2026-11-23: a customer may cancel a placed immediate order only
+    // once the store has had this long, from payment, to confirm it (BR-19).
+    'cancel_wait_minutes' => (int) env('STORE_CANCEL_WAIT_MINUTES', 15),
+
     'pickup' => [
         'lead_minutes' => (int) env('STORE_PICKUP_LEAD_MINUTES', 20),
         'last_order_buffer_minutes' => (int) env('STORE_PICKUP_BUFFER_MINUTES', 15),

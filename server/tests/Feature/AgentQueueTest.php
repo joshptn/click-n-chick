@@ -47,7 +47,7 @@ class AgentQueueTest extends TestCase
     /** A paid immediate order with its number, which is the only kind the board shows. */
     private function queued(string $type = 'pickup', string $status = OrderStatus::PLACED, ?CarbonImmutable $at = null): Order
     {
-        $order = Order::create([
+        $order = $this->orderWith([
             'user_id' => User::factory()->create()->id,
             'order_type' => $type,
             'status' => OrderStatus::PLACED,
@@ -144,7 +144,7 @@ class AgentQueueTest extends TestCase
     public function test_unpaid_checkouts_and_advance_orders_never_reach_the_board(): void
     {
         // Created today but never paid: no number, so not on the board.
-        Order::create([
+        $this->orderWith([
             'user_id' => User::factory()->create()->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::AWAITING_PAYMENT,
@@ -152,7 +152,7 @@ class AgentQueueTest extends TestCase
         ]);
 
         // Decided 2026-11-20: advance orders live on their own board only.
-        Order::create([
+        $this->orderWith([
             'user_id' => User::factory()->create()->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PREPARING,
@@ -190,7 +190,7 @@ class AgentQueueTest extends TestCase
         $addon = Addon::create(['addon_name' => 'Extra Gravy', 'addon_price' => 15]);
         $item->addons()->attach($addon->id, ['unit_price' => 15]);
 
-        Payment::create(['order_id' => $order->id, 'payment_method' => 'gcash', 'payment_status' => 'paid']);
+        Payment::create(['order_id' => $order->id, 'payment_method' => 'gcash', 'payment_status' => 'paid', 'paid_at' => now()]);
 
         $this->actingAs($this->staff(), 'sanctum')
             ->getJson('/api/agent/queue')
@@ -435,14 +435,14 @@ class AgentQueueTest extends TestCase
     public function test_a_paid_order_cancelled_by_the_shop_is_told_the_amount(): void
     {
         $order = $this->queued();
-        $order->forceFill(['payment_status' => 'paid'])->save();
+        $this->payFor($order);
 
         $this->actingAs($this->staff(), 'sanctum')
             ->postJson("/api/agent/orders/{$order->id}/cancel", ['reason' => 'We ran out of chicken.', 'refund' => true])
             ->assertOk();
 
         $this->assertStringContainsString(
-            '₱120.00 will be refunded',
+            '₱120.00 is on its way back to your GCash',
             Notification::where('user_id', $order->user_id)->latest('id')->value('body')
         );
     }

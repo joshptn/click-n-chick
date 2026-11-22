@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\OrderRecordResource;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\User;
 use App\Services\Orders\OrderStatus;
 use App\Services\Store\StoreAvailability;
@@ -23,6 +24,11 @@ use Illuminate\Validation\Rule;
  * Dates are the store's calendar days, and an order is filed under the day it
  * closed. Rows from before `closed_at` was stamped fall back to their last
  * update, which is when they closed.
+ *
+ * Refunds (decided 2026-11-23) is the one list that is not about how an order
+ * ended: every order with money owed back on a payment, open or closed (an
+ * extra payment can sit on an open order), filed under the day it was paid.
+ * A Store Agent ticks a refund by hand there (PaymentRefundController).
  */
 class OrderRecordController extends Controller
 {
@@ -45,7 +51,7 @@ class OrderRecordController extends Controller
 
     private const TOTAL = Order::TOTAL_SQL;
 
-    private const LIST_WITH = ['user:id,first_name,last_name', 'items.food:id,food_name'];
+    private const LIST_WITH = ['user:id,first_name,last_name', 'items.food:id,food_name', 'payments'];
 
     private const DETAIL_WITH = [
         'user:id,first_name,last_name,email,phone_number',
@@ -64,10 +70,10 @@ class OrderRecordController extends Controller
 
         $validated = $request->validate([
             'search' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'outcome' => ['sometimes', 'string', Rule::in(['all', ...array_keys(self::OUTCOMES)])],
+            'outcome' => ['sometimes', 'string', Rule::in(['all', ...array_keys(self::OUTCOMES), 'refunds'])],
             'order_type' => ['sometimes', 'string', Rule::in(['all', StoreAvailability::TYPE_PICKUP, StoreAvailability::TYPE_DELIVERY])],
             'kind' => ['sometimes', 'string', Rule::in(['all', 'regular', 'advance'])],
-            'payment' => ['sometimes', 'string', Rule::in(['all', 'paid', 'unpaid', 'refund_owed'])],
+            'payment' => ['sometimes', 'string', Rule::in(['all', 'paid', 'unpaid'])],
             'from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'to' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
             'sort' => ['sometimes', 'string', Rule::in(self::SORTS)],
@@ -81,8 +87,11 @@ class OrderRecordController extends Controller
         // within what the agent is looking at.
         $base = $this->filtered($validated);
 
-        $query = (clone $base)
-            ->when($outcome !== 'all', fn (Builder $query) => $query->whereIn('status', self::OUTCOMES[$outcome]))
+        $listed = $outcome === 'refunds'
+            ? $this->refunded($validated)
+            : (clone $base)->when($outcome !== 'all', fn (Builder $query) => $query->whereIn('status', self::OUTCOMES[$outcome]));
+
+        $query = $listed
             ->with(self::LIST_WITH)
             ->withExists(['payments as payment_verified' => fn (Builder $payment) => $payment->verified()])
             ->withSum('items as item_count', 'quantity');
@@ -102,7 +111,7 @@ class OrderRecordController extends Controller
                 'to' => $records->lastItem(),
                 'timezone' => $this->store->timezone(),
             ],
-            'summary' => $this->summary($base),
+            'summary' => $this->summary($base) + $this->refundCounts($validated),
         ]);
     }
 
@@ -114,7 +123,9 @@ class OrderRecordController extends Controller
         // A checkout nobody paid for was never an order the shop received.
         abort_if($order->isUnpaidCheckout(), 404);
 
-        if (! $order->isTerminal()) {
+        // Still open, unless money is owed back on it: an extra payment can
+        // sit on an order still being prepared, and is worked from Refunds.
+        if (! $order->isTerminal() && ! $order->payments()->refunds()->exists()) {
             return response()->json([
                 'message' => 'This order is still open, so it is not a record yet. Find it on All Orders or Advance Order Requests.',
                 'error_code' => 'ORDER_NOT_CLOSED',
@@ -136,29 +147,79 @@ class OrderRecordController extends Controller
         $query = Order::query()
             ->withoutUnpaidCheckouts()
             ->whereIn('status', OrderStatus::terminal())
+            ->when($filters['from'] ?? null, fn (Builder $query, string $from) => $query->whereRaw(
+                self::CLOSED_AT.' >= ?',
+                [$this->dayStart($from, $timezone)]
+            ))
+            ->when($filters['to'] ?? null, fn (Builder $query, string $to) => $query->whereRaw(
+                self::CLOSED_AT.' < ?',
+                [$this->dayAfter($to, $timezone)]
+            ));
+
+        return $this->narrow($query, $filters);
+    }
+
+    /** Every order with money owed back on a payment, open or closed, by the day it was paid. */
+    private function refunded(array $filters): Builder
+    {
+        $timezone = $this->store->timezone();
+
+        $query = Order::query()->whereHas('payments', fn (Builder $payment) => $payment
+            ->refunds()
+            ->when($filters['from'] ?? null, fn (Builder $q, string $from) => $q->where('payments.paid_at', '>=', $this->dayStart($from, $timezone)))
+            ->when($filters['to'] ?? null, fn (Builder $q, string $to) => $q->where('payments.paid_at', '<', $this->dayAfter($to, $timezone))));
+
+        return $this->narrow($query, $filters);
+    }
+
+    /** The filters every list shares: order type, kind, payment and the search box. */
+    private function narrow(Builder $query, array $filters): Builder
+    {
+        $query
             ->when(
                 ($filters['order_type'] ?? 'all') !== 'all',
                 fn (Builder $query) => $query->where('order_type', $filters['order_type'])
             )
             ->when(($filters['kind'] ?? 'all') === 'advance', fn (Builder $query) => $query->whereNotNull('scheduled_for'))
             ->when(($filters['kind'] ?? 'all') === 'regular', fn (Builder $query) => $query->whereNull('scheduled_for'))
-            ->when(($filters['payment'] ?? 'all') === 'paid', fn (Builder $query) => $query->where('payment_status', 'paid'))
-            ->when(($filters['payment'] ?? 'all') === 'unpaid', fn (Builder $query) => $query->where(
-                fn (Builder $inner) => $inner->whereNull('payment_status')->orWhere('payment_status', '!=', 'paid')
-            ))
-            ->when(($filters['payment'] ?? 'all') === 'refund_owed', fn (Builder $query) => $query->where('refund_owed', '>', 0))
-            ->when($filters['from'] ?? null, fn (Builder $query, string $from) => $query->whereRaw(
-                self::CLOSED_AT.' >= ?',
-                [CarbonImmutable::parse($from, $timezone)->startOfDay()->utc()->format('Y-m-d H:i:s')]
-            ))
-            ->when($filters['to'] ?? null, fn (Builder $query, string $to) => $query->whereRaw(
-                self::CLOSED_AT.' < ?',
-                [CarbonImmutable::parse($to, $timezone)->addDay()->startOfDay()->utc()->format('Y-m-d H:i:s')]
-            ));
+            ->when(($filters['payment'] ?? 'all') === 'paid', fn (Builder $query) => $query->paid())
+            ->when(($filters['payment'] ?? 'all') === 'unpaid', fn (Builder $query) => $query->unpaid());
 
         $this->search($query, (string) ($filters['search'] ?? ''));
 
         return $query;
+    }
+
+    private function dayStart(string $day, string $timezone): string
+    {
+        return CarbonImmutable::parse($day, $timezone)->startOfDay()->utc()->format('Y-m-d H:i:s');
+    }
+
+    private function dayAfter(string $day, string $timezone): string
+    {
+        return CarbonImmutable::parse($day, $timezone)->addDay()->startOfDay()->utc()->format('Y-m-d H:i:s');
+    }
+
+    /**
+     * The Refunds card: how many orders carry a refund, how many wait for a
+     * Store Agent to refund by hand, and what is still owed.
+     */
+    private function refundCounts(array $filters): array
+    {
+        $refunded = $this->refunded($filters);
+
+        $owed = Payment::query()
+            ->owed()
+            ->whereIn('order_id', (clone $refunded)->select('orders.id'))
+            ->sum('refund_amount');
+
+        return [
+            'refunds' => (clone $refunded)->count(),
+            'refunds_to_do' => (clone $refunded)
+                ->whereHas('payments', fn (Builder $payment) => $payment->refunds()->where('payments.refund_status', Payment::REFUND_MANUAL))
+                ->count(),
+            'refunds_owed' => round((float) $owed, 2),
+        ];
     }
 
     /**
@@ -225,7 +286,8 @@ class OrderRecordController extends Controller
      *
      * Totals are the order totals as recorded at checkout. Completed value is
      * what fulfilled orders came to; it is not settled revenue - payments are
-     * recorded separately and refunds owed are listed on their own.
+     * recorded separately, and refunds are counted from the payments
+     * (refundCounts).
      */
     private function summary(Builder $base): array
     {
@@ -234,7 +296,6 @@ class OrderRecordController extends Controller
             ->selectRaw('status, COUNT(*) AS total')
             ->selectRaw('SUM('.self::TOTAL.') AS value')
             ->selectRaw('SUM(COALESCE(orders.discount_amount, 0)) AS discounts')
-            ->selectRaw('SUM(COALESCE(orders.refund_owed, 0)) AS refunds')
             ->groupBy('status')
             ->get()
             ->keyBy('status');
@@ -251,7 +312,6 @@ class OrderRecordController extends Controller
             'rejected' => (int) $sum(self::OUTCOMES['rejected'], 'total'),
             'completed_value' => $sum(self::OUTCOMES['completed'], 'value'),
             'discounts_given' => $sum(self::OUTCOMES['completed'], 'discounts'),
-            'refunds_owed' => $sum(self::OUTCOMES['cancelled'], 'refunds'),
         ];
     }
 }

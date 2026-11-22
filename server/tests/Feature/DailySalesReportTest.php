@@ -47,7 +47,7 @@ class DailySalesReportTest extends TestCase
     {
         $total = $attributes['total_amount'] ?? 300;
 
-        $order = Order::create($attributes + [
+        $order = $this->orderWith($attributes + [
             'user_id' => $this->user()->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -214,7 +214,7 @@ class DailySalesReportTest extends TestCase
     public function test_nothing_is_verified_without_a_payment_record(): void
     {
         $this->order(['total_amount' => 300]);
-        $this->order(['total_amount' => 200, 'payment_status' => 'paid']);
+        $this->order(['total_amount' => 200]);
 
         $this->report()
             ->assertJsonPath('payments.recording', false)
@@ -222,7 +222,7 @@ class DailySalesReportTest extends TestCase
             ->assertJsonPath('verified_sales.total', 0)
             ->assertJsonPath('unverified_sales.orders', 2)
             ->assertJsonPath('unverified_sales.total', 500)
-            ->assertJsonPath('unverified_sales.marked_paid_orders', 1)
+            ->assertJsonMissingPath('unverified_sales.marked_paid_orders')
             ->assertJsonPath('money.received.amount', 0);
     }
 
@@ -253,7 +253,12 @@ class DailySalesReportTest extends TestCase
             ->assertJsonPath('money.received.amount', 400);
     }
 
-    public function test_a_retried_payment_does_not_count_an_order_twice(): void
+    /**
+     * A second payment on one order is one sale but two payments' worth of
+     * money (decided 2026-11-23: the extra one is refunded, and its refund is
+     * paid out of that money).
+     */
+    public function test_a_second_payment_is_money_received_but_not_a_second_sale(): void
     {
         $order = $this->order(['total_amount' => 300]);
         $this->pay($order);
@@ -261,10 +266,11 @@ class DailySalesReportTest extends TestCase
 
         $this->report()
             ->assertJsonPath('verified_sales.total', 300)
-            ->assertJsonPath('money.received.amount', 300)
+            ->assertJsonPath('money.received.orders', 1)
+            ->assertJsonPath('money.received.amount', 600)
             ->assertJsonCount(1, 'money.by_method')
             ->assertJsonPath('money.by_method.0.orders', 1)
-            ->assertJsonPath('money.by_method.0.amount', 300);
+            ->assertJsonPath('money.by_method.0.amount', 600);
     }
 
     public function test_money_is_dated_when_paid_and_the_sale_when_fulfilled(): void
@@ -287,14 +293,17 @@ class DailySalesReportTest extends TestCase
 
     public function test_refunds_owed_are_kept_apart_from_refunds_settled(): void
     {
-        $settled = $this->order(['total_amount' => 300, 'refund_owed' => 300], OrderStatus::CANCELLED);
+        $settled = $this->order(['total_amount' => 300], OrderStatus::CANCELLED);
         $this->pay($settled, self::DAY.' 09:00:00', [
             'refund_amount' => 300,
             'refund_status' => 'refunded',
             'refunded_at' => CarbonImmutable::parse(self::DAY.' 13:00:00', 'Asia/Manila'),
         ]);
 
-        $this->pay($this->order(['total_amount' => 200, 'refund_owed' => 200], OrderStatus::CANCELLED), self::DAY.' 09:30:00');
+        $this->pay($this->order(['total_amount' => 200], OrderStatus::CANCELLED), self::DAY.' 09:30:00', [
+            'refund_amount' => 200,
+            'refund_status' => Payment::REFUND_MANUAL,
+        ]);
 
         $this->report()
             ->assertJsonPath('fulfilled.total', 0)
@@ -309,10 +318,33 @@ class DailySalesReportTest extends TestCase
             ->assertJsonPath('money.kept_on_cancelled.orders', 0);
     }
 
+    /** Decided 2026-11-23: an order paid twice keeps one payment and refunds the other. */
+    public function test_an_extra_payment_counts_as_received_and_its_refund_as_paid_out(): void
+    {
+        $order = $this->order(['total_amount' => 300]);
+        $this->pay($order, self::DAY.' 09:00:00');
+        $this->pay($order, self::DAY.' 09:05:00', [
+            'refund_amount' => 300,
+            'refund_status' => Payment::REFUND_REFUNDED,
+            'refunded_at' => CarbonImmutable::parse(self::DAY.' 10:00:00', 'Asia/Manila'),
+        ]);
+
+        $this->report()
+            ->assertJsonPath('verified_sales.orders', 1)
+            ->assertJsonPath('verified_sales.total', 300)
+            ->assertJsonPath('money.received.orders', 1)
+            ->assertJsonPath('money.received.amount', 600)
+            ->assertJsonPath('money.refunds_settled.amount', 300)
+            ->assertJsonPath('money.net_received', 300)
+            ->assertJsonPath('refunds.owed.orders', 1)
+            ->assertJsonPath('refunds.owed.amount', 300)
+            ->assertJsonPath('refunds.awaiting.orders', 0);
+    }
+
     public function test_money_kept_on_a_late_cancellation_is_not_a_sale(): void
     {
         // BR-20: paid, cancelled after the kitchen started, nothing refunded.
-        $this->pay($this->order(['total_amount' => 350, 'refund_owed' => 0], OrderStatus::CANCELLED));
+        $this->pay($this->order(['total_amount' => 350], OrderStatus::CANCELLED), attributes: ['refund_amount' => 0]);
 
         $this->report()
             ->assertJsonPath('verified_sales.total', 0)

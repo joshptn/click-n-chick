@@ -76,8 +76,10 @@ class AdvanceRequestResource extends JsonResource
             'subtotal' => $this->subtotal,
             'discount_amount' => $this->discount_amount,
             'total_amount' => $this->total_amount,
-            'payment_status' => $this->payment_status,
+            'payment_status' => $this->paymentStatus(),
             'is_paid' => $this->isPaid(),
+            // GCash refunds go back through Xendit; QR Ph is refunded by hand (decided 2026-11-23).
+            'payment_method' => $this->paidPayment?->payment_method,
             'accepted_at' => $this->accepted_at?->setTimezone($timezone)->toIso8601String(),
             'preparation_time' => $this->preparation_time,
             // Collection less preparation time, rather than the 24-hour rule.
@@ -93,7 +95,8 @@ class AdvanceRequestResource extends JsonResource
             // than the customer or the payment deadline, which leave it empty.
             'cancelled_by_store' => $this->cancelled_by !== null
                 && (int) $this->cancelled_by !== (int) $this->user_id,
-            'refund_owed' => $this->refund_owed,
+            // The refund on the payment, decided 2026-11-23 (amount, state, method).
+            'refund' => $this->paidPayment?->refundSummary(),
             'closed_at' => $this->closed_at?->toIso8601String(),
 
             'created_at' => $this->created_at?->toIso8601String(),

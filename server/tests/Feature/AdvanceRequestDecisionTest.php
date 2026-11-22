@@ -55,7 +55,7 @@ class AdvanceRequestDecisionTest extends TestCase
             'prep_time' => 15,
         ]);
 
-        $order = Order::create(array_merge([
+        $order = $this->orderWith(array_merge([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::SUBMITTED,
@@ -83,7 +83,7 @@ class AdvanceRequestDecisionTest extends TestCase
     /** An immediate order, for the tests that check the two are kept apart. */
     private function immediateOrder(User $customer): Order
     {
-        return Order::create([
+        return $this->orderWith([
             'user_id' => $customer->id,
             'order_type' => 'pickup',
             'status' => OrderStatus::PLACED,
@@ -194,7 +194,7 @@ class AdvanceRequestDecisionTest extends TestCase
             ->assertJsonPath('order.status', OrderStatus::AWAITING_PAYMENT);
 
         $this->assertSame(OrderStatus::AWAITING_PAYMENT, $order->fresh()->status);
-        $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->assertSame('unpaid', $order->fresh()->paymentStatus());
         $this->assertNull($order->fresh()->closed_at);
     }
 
@@ -232,7 +232,7 @@ class AdvanceRequestDecisionTest extends TestCase
         $this->assertSame(OrderStatus::REJECTED, $fresh->status);
         $this->assertSame('We cannot produce that many on a Sunday.', $fresh->cancellation_reason);
         $this->assertSame((int) $agent->id, (int) $fresh->cancelled_by);
-        $this->assertSame(0.0, (float) $fresh->refund_owed);
+        $this->assertFalse($fresh->payments()->refunds()->exists());
         $this->assertNotNull($fresh->closed_at);
     }
 

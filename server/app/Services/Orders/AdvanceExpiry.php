@@ -148,7 +148,6 @@ final class AdvanceExpiry
                 'status' => OrderStatus::CANCELLED,
                 'cancellation_reason' => $reason,
                 'cancelled_by' => null,
-                'refund_owed' => 0,
             ])->save();
 
             return $locked;
@@ -207,12 +206,11 @@ final class AdvanceExpiry
         return $query
             ->whereNotNull('scheduled_for')
             ->whereIn('status', self::UNPAID_STATUSES)
-            ->where(fn (Builder $payment) => $payment->whereNull('payment_status')->orWhere('payment_status', '!=', 'paid'))
             ->whereDoesntHave('payments', fn (Builder $payment) => $payment->verified());
     }
 
     private function isPaid(Order $order): bool
     {
-        return $order->isPaid() || $order->payments()->verified()->exists();
+        return $order->payments()->verified()->exists();
     }
 }
