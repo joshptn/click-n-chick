@@ -9,7 +9,18 @@ import { StepUpCancelled } from "../../hooks/useStepUp";
  * Says what an account action does and waits to be confirmed. `acknowledge`
  * adds a tick the button waits for, for what cannot be undone.
  */
-function ConfirmActionModal({ opened, onClose, onConfirm, title, points = [], confirmLabel, danger = false, acknowledge }) {
+function ConfirmActionModal({
+  opened,
+  onClose,
+  onConfirm,
+  title,
+  points = [],
+  confirmLabel,
+  cancelLabel = "Cancel",
+  danger = false,
+  acknowledge,
+  zIndex,
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [understood, setUnderstood] = useState(false);
@@ -41,6 +52,7 @@ function ConfirmActionModal({ opened, onClose, onConfirm, title, points = [], co
       onClose={busy ? () => {} : onClose}
       centered
       radius={16}
+      zIndex={zIndex}
       title={<span className={`font-display text-[16px] font-bold ${danger ? "text-[#c4302b]" : "text-ink"}`}>{title}</span>}
     >
       <div data-testid="confirm-action">
@@ -74,8 +86,8 @@ function ConfirmActionModal({ opened, onClose, onConfirm, title, points = [], co
         )}
 
         <div className="mt-5 flex justify-end gap-2 text-[13px]">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
-            Cancel
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy} data-testid="confirm-cancel">
+            {cancelLabel}
           </Button>
           <button
             type="button"

@@ -23,7 +23,7 @@ import {
   reminderCoolingDown,
 } from "../../lib/agent";
 import { formatPeso } from "../../lib/menu";
-import { formatTime } from "../../lib/orders";
+import { discountLines, formatTime } from "../../lib/orders";
 
 const OUTCOME_TONES = {
   green: "bg-[#ecf9f0] text-[#2f9e44]",
@@ -159,7 +159,9 @@ function AdvanceDetailDrawer({ order, opened, onClose, busy, canAct, onAccept, o
             <Section title="Payment">
               <div className="flex flex-col gap-1.5">
                 {order.subtotal != null && <Money label="Subtotal" value={order.subtotal} />}
-                {Number(order.discount_amount) > 0 && <Money label="SC/PWD discount" value={order.discount_amount} negative />}
+                {discountLines(order).map((line) => (
+                  <Money key={line.key} label={line.label} value={line.amount} negative />
+                ))}
                 <div className="mt-1 border-t border-dashed border-[#ece7e0] pt-2">
                   <Money label="Total" value={order.total_amount} strong />
                 </div>

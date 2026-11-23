@@ -5,7 +5,7 @@ import {
   IconShoppingBag,
 } from "@tabler/icons-react";
 
-import { formatDay, formatTime, refundLine } from "../../lib/orders";
+import { discountLines, formatDay, formatTime, refundLine } from "../../lib/orders";
 import { formatPeso } from "../../lib/menu";
 
 /** Who collects, what was ordered and what it costs: the receipt's main card. */
@@ -107,12 +107,15 @@ export function OrderSummaryCard({ order }) {
           </div>
         )}
 
-        {order.discount_amount > 0 && (
-          <div className="flex items-center justify-between gap-3 font-display text-[12.5px] font-semibold text-brand-600">
-            <span>Discount</span>
-            <span>&minus;{formatPeso(order.discount_amount)}</span>
+        {discountLines(order, "Senior/PWD discount").map((line) => (
+          <div
+            key={line.key}
+            className="flex items-center justify-between gap-3 font-display text-[12.5px] font-semibold text-brand-600"
+          >
+            <span>{line.label}</span>
+            <span>&minus;{formatPeso(line.amount)}</span>
           </div>
-        )}
+        ))}
       </div>
 
       <div className="px-5 pb-5">

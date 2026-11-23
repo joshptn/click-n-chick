@@ -17,6 +17,7 @@ import { Line, Money, Section } from "./DetailParts";
 import RecordPayment from "./RecordPayment";
 import { initialsOf } from "../../lib/agent";
 import { formatPeso } from "../../lib/menu";
+import { discountLines } from "../../lib/orders";
 import {
   OUTCOME_PILL,
   durationLabel,
@@ -245,9 +246,9 @@ function RecordDetailPanel({ preview, record, isLoading, isError, error, onRetry
                   <Section title="Payment">
                     <div className="flex flex-col gap-1.5">
                       <Money label="Subtotal" value={record.subtotal} />
-                      {record.discount_amount > 0 && (
-                        <Money label="Senior / PWD discount" value={record.discount_amount} negative />
-                      )}
+                      {discountLines(record).map((line) => (
+                        <Money key={line.key} label={line.label} value={line.amount} negative />
+                      ))}
                       {delivery && <Money label="Delivery fee" value={record.delivery_fee} />}
                       <div className="mt-1.5 flex items-center justify-between rounded-[12px] border border-[#ffd6b3] bg-[#fff1e6] px-3.5 py-2.5">
                         <span className="font-display text-[12px] font-bold uppercase tracking-[0.3px] text-ink">Total amount</span>

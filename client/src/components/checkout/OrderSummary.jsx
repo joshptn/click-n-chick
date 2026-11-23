@@ -80,12 +80,20 @@ function OrderSummary({
           </div>
         )}
 
+        {/* Decided 2026-11-23: the VAT comes off first, then the rate. */}
+        {discount?.applied && Number(discount.vat_exempt_amount) > 0 && (
+          <div className="flex items-center justify-between gap-3 font-display text-[13px] font-semibold text-brand-600">
+            <span>VAT exemption</span>
+            <span>&minus;{formatPeso(discount.vat_exempt_amount)}</span>
+          </div>
+        )}
+
         {discount?.applied && (
           <div className="flex items-center justify-between gap-3 font-display text-[13px] font-semibold text-brand-600">
             <span>
               {discount.type_label} Discount ({discount.percentage}%)
             </span>
-            <span>&minus;{formatPeso(discount.amount)}</span>
+            <span>&minus;{formatPeso(discount.percentage_amount ?? discount.amount)}</span>
           </div>
         )}
       </div>

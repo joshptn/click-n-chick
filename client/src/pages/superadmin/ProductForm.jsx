@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Skeleton, Tooltip } from "@mantine/core";
+import { Skeleton } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconArrowLeft, IconChevronDown, IconInfoCircle, IconPhoto, IconRefresh, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconChevronDown, IconPhoto, IconRefresh, IconX } from "@tabler/icons-react";
 
 import toast from "../../components/app/Toast";
 import PasswordConfirmModal from "../../components/manager/PasswordConfirmModal";
@@ -20,9 +20,8 @@ import {
 } from "../../lib/catalog";
 import { thumbnailImage } from "../../lib/images";
 import { fetchCategories, formatPeso } from "../../lib/menu";
-import { SALES_STATUS_NOTE } from "../../lib/salesStatusPreview";
 
-const EMPTY = { food_name: "", category_id: "", description: "", price: "" };
+const EMPTY = { food_name: "", category_id: "", description: "", price: "", is_discountable: "none" };
 
 const fieldClass = (error) =>
   `w-full rounded-[10px] border bg-[#f9f8f6] px-3.5 font-display text-[14px] text-ink outline-none transition-colors placeholder:text-[#b8b2aa] focus:bg-white ${
@@ -192,6 +191,7 @@ function ProductForm() {
         category_id: food.category?.id ? String(food.category.id) : "",
         description: food.description ?? "",
         price: String(food.price ?? ""),
+        is_discountable: food.is_discountable ? "yes" : "none",
       });
     }
   }, [fresh, food, loadedId]);
@@ -443,18 +443,31 @@ function ProductForm() {
                       <FieldError message={errors.price} />
                     </div>
 
+                    {/* Decided 2026-11-23 (FR-05.9): whether a Senior Citizen or
+                        PWD can take the discount on this dish. Yes is stored,
+                        None is left null. No password. */}
                     <div>
-                      <span className="mb-2 flex items-center gap-1.5 font-display text-[13.5px] font-semibold text-ink">
-                        Sales Status
-                        <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
-                          <span className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-[#e4ddd3] px-1.5 font-display text-[9.5px] font-bold uppercase tracking-[0.4px] text-[#a39f9b]">
-                            Preview
-                            <IconInfoCircle size={11} stroke={2} />
-                          </span>
-                        </Tooltip>
-                      </span>
-                      <div className="flex h-[44px] items-center rounded-[10px] border border-dashed border-[#e4ddd3] bg-[#fdfbf8] px-3.5 font-display text-[13px] text-[#a39f9b]">
-                        Assigned from sales, not set by hand
+                      <Label htmlFor="is_discountable">Discount</Label>
+                      <div className="relative">
+                        <select
+                          id="is_discountable"
+                          value={values.is_discountable}
+                          onChange={set("is_discountable")}
+                          data-testid="product-discount"
+                          className={`${fieldClass(errors.is_discountable)} h-[44px] appearance-none pr-9`}
+                        >
+                          <option value="yes" className="text-ink">
+                            Yes
+                          </option>
+                          <option value="none" className="text-ink">
+                            None
+                          </option>
+                        </select>
+                        <IconChevronDown
+                          size={15}
+                          stroke={2}
+                          className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#a39f9b]"
+                        />
                       </div>
                     </div>
 

@@ -7,6 +7,7 @@ import {
   IconArchiveOff,
   IconCategory,
   IconCirclePlus,
+  IconDiscount2,
   IconInfoCircle,
   IconPencil,
   IconPhotoOff,
@@ -25,7 +26,7 @@ import LivePill from "../../components/staff/LivePill";
 import StaffLayout from "../../components/staff/StaffLayout";
 import Button from "../../components/ui/Button";
 import { useCatalog } from "../../hooks/useCatalog";
-import { STATUS_FILTERS, isArchived, matchesStatus } from "../../lib/catalog";
+import { DISCOUNT_FILTERS, STATUS_FILTERS, isArchived, matchesDiscount, matchesStatus } from "../../lib/catalog";
 import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
 import { SALES_STATUS_NOTE, SALES_STATUS_PREVIEW, matchesSalesStatus, salesStatusOf } from "../../lib/salesStatusPreview";
@@ -33,7 +34,19 @@ import { PRICE_FILTERS, SORTS, categoryTone, matchesPrice, matchesText } from ".
 
 const PAGE_TITLE = "Menu Management · Click n Chick";
 
-const DEFAULTS = { search: "", category: "all", status: "all", price: "any", sales: "all" };
+const DEFAULTS = { search: "", category: "all", status: "all", price: "any", discount: "all", sales: "all" };
+
+/** Discount: Yes on the product form (FR-05.9). */
+function DiscountTag({ food }) {
+  if (!food.is_discountable) return null;
+
+  return (
+    <span data-testid="discount-tag" className="inline-flex items-center gap-1 rounded-full bg-brand-50 font-display font-bold text-brand-700 px-2 py-0.5 text-[10px]">
+      <IconDiscount2 size={11} stroke={2.2} aria-hidden="true" />
+      Discount
+    </span>
+  );
+}
 
 const byName = SORTS.find((option) => option.key === "name").compare;
 
@@ -196,7 +209,10 @@ function TableView({ foods, loading, rowProps }) {
                   >
                     {food.food_name}
                   </span>
-                  <span className="mt-0.5 block font-display text-[10.5px] text-[#a39f9b]">ID: {food.id}</span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 font-display text-[10.5px] text-[#a39f9b]">
+                    ID: {food.id}
+                    <DiscountTag food={food} />
+                  </span>
                 </button>
                 <div>
                   <CategoryPill category={food.category} />
@@ -242,6 +258,7 @@ function CardView({ foods, loading, rowProps }) {
               <span className="mt-1 flex flex-wrap items-center gap-1.5">
                 <CategoryPill category={food.category} />
                 <span className="font-display text-[10.5px] text-[#a39f9b]">ID: {food.id}</span>
+                <DiscountTag food={food} />
               </span>
               <span className="mt-1 block font-display text-[13.5px] font-bold text-ink">{formatPeso(food.price)}</span>
             </button>
@@ -286,6 +303,7 @@ function MenuCatalog() {
         .filter((food) => filters.category === "all" || String(food.category?.id) === filters.category)
         .filter((food) => matchesStatus(food, filters.status))
         .filter((food) => matchesPrice(food, filters.price))
+        .filter((food) => matchesDiscount(food, filters.discount))
         .filter((food) => matchesSalesStatus(food, filters.sales))
         .sort(byName),
     [catalog.foods, filters]
@@ -415,6 +433,14 @@ function MenuCatalog() {
                   options={PRICE_FILTERS}
                   active={filters.price !== "any"}
                   testId="filter-price"
+                />
+                <FilterSelect
+                  label="Discount"
+                  value={filters.discount}
+                  onChange={set("discount")}
+                  options={DISCOUNT_FILTERS}
+                  active={filters.discount !== "all"}
+                  testId="filter-discount"
                 />
 
                 {/* Kept apart from the real filters: its values are a placeholder. */}

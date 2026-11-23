@@ -12,6 +12,7 @@ import {
   payByIfAccepted,
 } from "../../lib/agent";
 import { formatPeso } from "../../lib/menu";
+import { discountLines } from "../../lib/orders";
 
 /**
  * Accepting an advance request (decided 2026-11-20): the order is summarised,
@@ -98,12 +99,12 @@ function AcceptAdvanceModal({ order, opened, onClose, onConfirm, loading }) {
               ))}
             </ul>
 
-            {Number(order.discount_amount) > 0 && (
-              <div className="mt-2 flex justify-between font-display text-[12px] text-[#2f9e44]">
-                <span>SC/PWD discount</span>
-                <span>−{formatPeso(order.discount_amount)}</span>
+            {discountLines(order).map((line) => (
+              <div key={line.key} className="mt-2 flex justify-between font-display text-[12px] text-[#2f9e44]">
+                <span>{line.label}</span>
+                <span>−{formatPeso(line.amount)}</span>
               </div>
-            )}
+            ))}
             <div className="mt-2 flex justify-between border-t border-[#e8e1d6] pt-2 font-display text-[13.5px] font-bold text-ink">
               <span>Total</span>
               <span>{formatPeso(order.total_amount)}</span>

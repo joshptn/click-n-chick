@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   IconArrowLeft,
   IconClock,
+  IconDiscount2,
   IconMinus,
   IconPlus,
   IconShoppingBagPlus,
@@ -127,6 +128,14 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </span>
             <span className="font-display text-[13px] text-[#8d8884]">per serving</span>
           </p>
+
+          {/* Marked by the Store Manager (FR-05.9). */}
+          {detail.is_discountable && (
+            <span data-testid="food-discount-tag" className="inline-flex items-center gap-1 rounded-full bg-brand-50 font-display font-bold text-brand-700 mt-2.5 self-start px-2.5 py-1 text-[11px]">
+              <IconDiscount2 size={13} stroke={2.2} aria-hidden="true" />
+              SC/PWD discount
+            </span>
+          )}
 
           <hr className="my-5 border-0 border-t border-[#f0e9df]" />
 
