@@ -50,14 +50,14 @@ function decisionCopy({ kind, claim, reason }, percentage) {
         `They get the VAT exemption and ${percentage ?? 20}% discount on one marked item per order, once a day, from now on.`,
         "Make sure the ID photo is clear, valid, and matches the customer.",
       ],
-      confirmLabel: "Yes, approve",
+      confirmLabel: "Approve",
     };
   }
 
   return {
     title: `Reject ${name}'s application?`,
     points: [`They are told: "${reason}"`, "They can apply again with a new photo."],
-    confirmLabel: "Yes, reject",
+    confirmLabel: "Reject",
   };
 }
 
@@ -341,7 +341,6 @@ function DiscountRequests() {
         onClose={() => setConfirming(null)}
         onConfirm={decide}
         zIndex={400}
-        cancelLabel="No"
         danger={confirming?.kind === "reject"}
         {...(confirming ? decisionCopy(confirming, queue.percentage) : {})}
       />

@@ -4,11 +4,20 @@ import { IconArchive, IconArchiveOff, IconCirclePlus, IconGlassFull, IconPencil,
 
 import FilterBar, { FilterMeta } from "../staff/FilterBar";
 import FilterSelect from "../staff/FilterSelect";
+import TableFrame from "../staff/TableFrame";
 import Button from "../ui/Button";
-import { ADDON_STATUS_FILTERS, addonPriceText, matchesAddonStatus, matchesAddonText } from "../../lib/addons";
+import {
+  ADDON_PRICE_FILTERS,
+  ADDON_SORTS,
+  ADDON_STATUS_FILTERS,
+  addonPriceText,
+  matchesAddonPrice,
+  matchesAddonStatus,
+  matchesAddonText,
+} from "../../lib/addons";
 import { categoryTone } from "../../lib/stock";
 
-const DEFAULTS = { search: "", group: "all", status: "all" };
+const DEFAULTS = { search: "", group: "all", status: "all", price: "any", sort: "name" };
 
 const addonCount = (count) => `${count} ${count === 1 ? "add-on" : "add-ons"}`;
 
@@ -117,8 +126,9 @@ const GRID =
 
 function TableView({ addons, loading, rowProps }) {
   return (
-    <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-[#f0e9df]">
-      <div className="min-w-[960px]">
+    <TableFrame
+      minWidth="min-w-[960px]"
+      head={
         <div className={`${GRID} border-b border-[#f3ede4] px-5 py-3 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]`}>
           <span>Add-on name</span>
           <span>Group</span>
@@ -128,41 +138,41 @@ function TableView({ addons, loading, rowProps }) {
           <span>Status</span>
           <span className="text-right">Actions</span>
         </div>
-
-        {loading
-          ? [0, 1, 2, 3].map((key) => (
-              <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-5 py-3.5 last:border-b-0`}>
-                <Skeleton height={14} width="70%" />
-                <Skeleton height={20} width={70} radius="xl" />
-                <Skeleton height={14} width={80} />
-                <Skeleton height={18} width={110} radius="xl" />
-                <Skeleton height={14} width={60} />
-                <Skeleton height={26} width={86} radius="xl" />
-                <Skeleton height={30} width={180} radius={8} className="justify-self-end" />
+      }
+    >
+      {loading
+        ? [0, 1, 2, 3].map((key) => (
+            <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-5 py-3.5 last:border-b-0`}>
+              <Skeleton height={14} width="70%" />
+              <Skeleton height={20} width={70} radius="xl" />
+              <Skeleton height={14} width={80} />
+              <Skeleton height={18} width={110} radius="xl" />
+              <Skeleton height={14} width={60} />
+              <Skeleton height={26} width={86} radius="xl" />
+              <Skeleton height={30} width={180} radius={8} className="justify-self-end" />
+            </div>
+          ))
+        : addons.map((addon) => (
+            <div
+              key={addon.id}
+              data-testid="addon-row"
+              data-addon={addon.id}
+              className={`${GRID} border-b border-[#f6f1ea] px-5 py-3.5 transition-colors last:border-b-0 hover:bg-[#fffaf4]`}
+            >
+              <Name addon={addon} />
+              <div>
+                <GroupPill group={addon.addon_group} />
               </div>
-            ))
-          : addons.map((addon) => (
-              <div
-                key={addon.id}
-                data-testid="addon-row"
-                data-addon={addon.id}
-                className={`${GRID} border-b border-[#f6f1ea] px-5 py-3.5 transition-colors last:border-b-0 hover:bg-[#fffaf4]`}
-              >
-                <Name addon={addon} />
-                <div>
-                  <GroupPill group={addon.addon_group} />
-                </div>
-                <span className="font-display text-[13.5px] font-bold text-ink">{addonPriceText(addon)}</span>
-                <SizeList addon={addon} />
-                <Dishes addon={addon} />
-                <div>
-                  <StatusPill addon={addon} />
-                </div>
-                <Actions addon={addon} busy={rowProps.isBusy(`addon-${addon.id}`)} {...rowProps} />
+              <span className="font-display text-[13.5px] font-bold text-ink">{addonPriceText(addon)}</span>
+              <SizeList addon={addon} />
+              <Dishes addon={addon} />
+              <div>
+                <StatusPill addon={addon} />
               </div>
-            ))}
-      </div>
-    </div>
+              <Actions addon={addon} busy={rowProps.isBusy(`addon-${addon.id}`)} {...rowProps} />
+            </div>
+          ))}
+    </TableFrame>
   );
 }
 
@@ -210,8 +220,8 @@ function CardView({ addons, loading, rowProps }) {
 function AddonCatalog({ addons: source, wide, onAdd, onEdit, onDelete }) {
   const [filters, setFilters] = useState(DEFAULTS);
   const set = (key) => (value) => setFilters((current) => ({ ...current, [key]: value }));
-  const filtered = Object.keys(DEFAULTS).some((key) => filters[key] !== DEFAULTS[key]);
-  const clear = () => setFilters(DEFAULTS);
+  const filtered = Object.keys(DEFAULTS).some((key) => key !== "sort" && filters[key] !== DEFAULTS[key]);
+  const clear = () => setFilters((current) => ({ ...DEFAULTS, sort: current.sort }));
 
   const groups = useMemo(() => {
     const counts = source.addons.reduce((total, addon) => ({ ...total, [addon.addon_group]: (total[addon.addon_group] ?? 0) + 1 }), {});
@@ -224,15 +234,16 @@ function AddonCatalog({ addons: source, wide, onAdd, onEdit, onDelete }) {
   // A group emptied elsewhere cannot stay selected.
   const group = filters.group !== "all" && !groups.some((item) => item.key === filters.group) ? "all" : filters.group;
 
-  const visible = useMemo(
-    () =>
-      source.addons
-        .filter((addon) => matchesAddonText(addon, filters.search))
-        .filter((addon) => group === "all" || addon.addon_group === group)
-        .filter((addon) => matchesAddonStatus(addon, filters.status))
-        .sort((a, b) => a.addon_name.localeCompare(b.addon_name)),
-    [source.addons, filters, group]
-  );
+  const visible = useMemo(() => {
+    const sort = ADDON_SORTS.find((option) => option.key === filters.sort) ?? ADDON_SORTS[0];
+
+    return source.addons
+      .filter((addon) => matchesAddonText(addon, filters.search))
+      .filter((addon) => group === "all" || addon.addon_group === group)
+      .filter((addon) => matchesAddonStatus(addon, filters.status))
+      .filter((addon) => matchesAddonPrice(addon, filters.price))
+      .sort(sort.compare);
+  }, [source.addons, filters, group]);
 
   const archivedCount = source.addons.filter((addon) => !addon.is_available).length;
   const total = source.addons.length;
@@ -273,6 +284,15 @@ function AddonCatalog({ addons: source, wide, onAdd, onEdit, onDelete }) {
               active={filters.status !== "all"}
               testId="addon-filter-status"
             />
+            <FilterSelect
+              label="Price"
+              value={filters.price}
+              onChange={set("price")}
+              options={ADDON_PRICE_FILTERS}
+              active={filters.price !== "any"}
+              testId="addon-filter-price"
+            />
+            <FilterSelect label="Sort" value={filters.sort} onChange={set("sort")} options={ADDON_SORTS} active={false} testId="addon-filter-sort" />
             <FilterMeta onClear={filtered ? clear : undefined}>
               {!source.isLoading && (visible.length === total ? addonCount(total) : `${visible.length} of ${addonCount(total)}`)}
             </FilterMeta>

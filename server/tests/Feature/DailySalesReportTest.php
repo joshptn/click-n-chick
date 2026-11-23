@@ -217,7 +217,6 @@ class DailySalesReportTest extends TestCase
         $this->order(['total_amount' => 200]);
 
         $this->report()
-            ->assertJsonPath('payments.recording', false)
             ->assertJsonPath('verified_sales.orders', 0)
             ->assertJsonPath('verified_sales.total', 0)
             ->assertJsonPath('unverified_sales.orders', 2)
@@ -233,7 +232,6 @@ class DailySalesReportTest extends TestCase
         Payment::create(['order_id' => $order->id, 'payment_status' => Payment::STATUS_PAID, 'paid_at' => null]);
 
         $this->report()
-            ->assertJsonPath('payments.recording', false)
             ->assertJsonPath('verified_sales.orders', 0);
     }
 
@@ -243,7 +241,6 @@ class DailySalesReportTest extends TestCase
         $this->order(['total_amount' => 300]);
 
         $this->report()
-            ->assertJsonPath('payments.recording', true)
             ->assertJsonPath('fulfilled.total', 700)
             ->assertJsonPath('verified_sales.orders', 1)
             ->assertJsonPath('verified_sales.total', 400)

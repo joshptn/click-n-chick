@@ -140,6 +140,7 @@ function AdvanceHistoryModal({ opened, onClose }) {
             <div className={`transition-opacity ${list.isPlaceholder ? "opacity-60" : ""}`} aria-busy={list.isFetching}>
               {wide ? (
                 <RecordTable
+                  sticky={false}
                   records={list.records}
                   loading={list.isLoading}
                   selectedId={selectedId}

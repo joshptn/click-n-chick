@@ -285,7 +285,7 @@ export function cancelPrompt(order: Order | null) {
     action: withdrawing ? "Withdraw request" : "Cancel order",
     title: withdrawing ? "Withdraw this request?" : "Cancel this order?",
     body: `${outcome} ${consequence}${terms?.refundable ? "" : " This cannot be undone."}`,
-    confirm: withdrawing ? "Yes, withdraw it" : "Yes, cancel it",
+    confirm: withdrawing ? "Withdraw request" : "Cancel order",
     keep: withdrawing ? "Keep my request" : "Keep my order",
   };
 }

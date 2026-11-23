@@ -28,6 +28,7 @@ use Throwable;
  *   PATCH  /api/addons/{addon}/archive       Store Manager: archive or bring back
  *   DELETE /api/addons/{addon}               Store Manager: delete (past orders keep it)
  *   PATCH  /api/addons/{addon}/availability  Store Agent: switch it on or off
+ *   PATCH  /api/agent/addons/availability    Store Agent: switch the ticked ones together
  *   PATCH  /api/addons/{addon}/sizes/{size}  Store Agent: switch one size on or off
  *
  * The routes sit in the role groups; the catalogue writes check the role a
@@ -220,6 +221,42 @@ class AddonController extends Controller
             'updated',
             $addon->availability ? $addon->addon_name.' is back on the menu.' : $addon->addon_name.' is switched off.'
         );
+    }
+
+    /** PATCH /api/agent/addons/availability - the Store Agent's switch for the ticked add-ons together. */
+    public function bulkAvailability(Request $request)
+    {
+        $validated = $request->validate([
+            'addon_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'addon_ids.*' => ['integer', 'distinct', Rule::exists('addons', 'id')->whereNull('deleted_at')],
+            'is_available' => ['required', 'boolean'],
+        ]);
+
+        $available = (bool) $validated['is_available'];
+
+        $addons = Addon::query()
+            ->with(['sizes', 'foods' => fn ($query) => $query->select('food.id')])
+            ->whereKey($validated['addon_ids'])
+            ->orderBy('addon_name')
+            ->get();
+
+        $changing = $addons->filter(fn (Addon $addon) => (bool) $addon->availability !== $available);
+
+        if ($changing->isNotEmpty()) {
+            Addon::query()->whereKey($changing->modelKeys())->update(['availability' => $available]);
+        }
+
+        foreach ($changing as $addon) {
+            $addon->availability = $available;
+            $this->broadcast($addon, 'updated', $addon->foods->pluck('id')->map(fn ($id) => (int) $id)->all());
+        }
+
+        $count = $addons->count();
+
+        return response()->json([
+            'message' => ($count === 1 ? '1 add-on' : $count.' add-ons').($available ? ' back on the menu.' : ' switched off.'),
+            'data' => AddonResource::collection($addons),
+        ]);
     }
 
     /** The Store Agent's switch for one size, when it runs out or comes back. */

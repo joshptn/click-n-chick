@@ -187,6 +187,16 @@ export const STORE_BLOCKERS = ["STORE_CLOSED", "STORE_CLOSED_MANUALLY", "DELIVER
 export const ITEM_BLOCKERS = ["EMPTY_SELECTION", "ITEM_UNAVAILABLE", "ITEM_STOCK_SHORT"];
 export const DISCOUNT_BLOCKERS = ["DISCOUNT_NOT_ELIGIBLE", "DISCOUNT_ALREADY_USED"];
 
+/** What a mobile number field keeps as it is typed: digits only, at most 11 (09XXXXXXXXX). */
+export function mobileDigits(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\D/g, "").slice(0, 11);
+}
+
+/** A stored number as the field shows it: 09XXXXXXXXX when it is one. */
+export function mobileForField(value: string | null | undefined): string {
+  return toLocalMobile(value) || mobileDigits(value);
+}
+
 /** 09XXXXXXXXX from +639..., 639... or 09...; "" when it is not a PH mobile number. */
 export function toLocalMobile(value: string | null | undefined): string {
   const digits = String(value ?? "").replace(/[\s\-()]/g, "");

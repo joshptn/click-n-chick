@@ -121,7 +121,7 @@ function AccountMenu({ trigger = "pill", position = "bottom-end", showOrders = t
       <Modal
         opened={confirmingSignOut}
         onClose={() => setConfirmingSignOut(false)}
-        title="Are you sure you want to log out?"
+        title="Sign out of your account?"
         centered
         radius="md"
       >
@@ -131,16 +131,16 @@ function AccountMenu({ trigger = "pill", position = "bottom-end", showOrders = t
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirmingSignOut(false)} disabled={signingOut}>
-            No
+            Cancel
           </Button>
           <Button
-            variant="secondary"
+            variant="danger"
             size="sm"
             loading={signingOut}
-            loadingLabel="Logging out&hellip;"
+            loadingLabel="Signing out&hellip;"
             onClick={handleSignOut}
           >
-            Yes, log out
+            Sign out
           </Button>
         </div>
       </Modal>

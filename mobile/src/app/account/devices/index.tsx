@@ -42,8 +42,8 @@ export default function Devices() {
       "Sign out all other devices?",
       "Every device except this phone will be signed out straight away, including trusted ones. Each will need your password to sign in again.",
       [
-        { text: "No, cancel", style: "cancel" },
-        { text: "Yes, sign them out", style: "destructive", onPress: () => sweep.mutate() },
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out all", style: "destructive", onPress: () => sweep.mutate() },
       ]
     );
 

@@ -265,6 +265,7 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])-
     Route::patch('/agent/stock/count', [StockController::class, 'bulkStock']);
 
     Route::patch('/addons/{addon}/availability', [AddonController::class, 'availability']);
+    Route::patch('/agent/addons/availability', [AddonController::class, 'bulkAvailability']);
     Route::patch('/addons/{addon}/sizes/{size}', [AddonController::class, 'sizeAvailability'])
         ->whereIn('size', array_keys(Addon::SIZES));
 });

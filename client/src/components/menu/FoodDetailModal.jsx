@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@mantine/core";
+import { Modal, Popover } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconArrowLeft,
+  IconCheck,
   IconDiscount2,
   IconMinus,
   IconPlus,
@@ -21,46 +22,97 @@ function pickPrice(addon, size) {
   return Number(addon.sizes?.find((row) => row.size === size)?.price ?? addon.addon_price ?? 0);
 }
 
+/** The tile every add-on shares: its name, its price, and an orange edge once picked. */
+const tileClass = (on) =>
+  `block w-full cursor-pointer rounded-[12px] border-2 px-3 py-2.5 text-left transition-colors ${
+    on ? "border-brand-500 bg-[#fff6ee]" : "border-transparent bg-[#faf7f3] hover:bg-[#f4f1ec]"
+  }`;
+
 /**
- * An add-on that comes in sizes (decided 2026-11-24): the customer picks it by
- * picking a size, and picks the same size again to leave it off.
+ * An add-on that comes in sizes (decided 2026-11-24): a tile like the others.
+ * Tapping it opens a small list of its sizes; picking one adds it in that size,
+ * and the tile then shows the size and its price. Opened again, the list can
+ * change the size or leave the add-on off.
  */
 function SizedAddon({ addon, picked, onPick }) {
-  const checked = picked !== undefined;
+  const [open, setOpen] = useState(false);
+  const chosen = addon.sizes.find((size) => size.size === picked) ?? null;
+  const lowest = Math.min(...addon.sizes.map((size) => Number(size.price)));
+
+  const choose = (size) => {
+    onPick(addon.id, size);
+    setOpen(false);
+  };
 
   return (
-    <div
-      className={`col-span-2 rounded-[12px] border-2 px-3 py-2.5 transition-colors sm:col-span-3 ${
-        checked ? "border-brand-500 bg-[#fff6ee]" : "border-transparent bg-[#faf7f3]"
-      }`}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="[overflow-wrap:anywhere] font-display text-[12.5px] font-semibold leading-tight text-ink">{addon.addon_name}</span>
-        <span className="shrink-0 font-display text-[11.5px] font-semibold text-[#8d8884]">{checked ? "Tap again to remove" : "Pick a size"}</span>
-      </div>
-      <div role="radiogroup" aria-label={`${addon.addon_name} size`} className="mt-2 flex flex-wrap gap-1.5">
-        {addon.sizes.map((size) => {
-          const on = picked === size.size;
+    <Popover opened={open} onChange={setOpen} position="bottom-start" width={230} shadow="md" radius={12} withArrow arrowPosition="side" trapFocus returnFocus>
+      <Popover.Target>
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          data-testid={`addon-${addon.id}`}
+          className={tileClass(Boolean(chosen) || open)}
+        >
+          <span className="[overflow-wrap:anywhere] block font-display text-[12.5px] font-semibold leading-tight text-ink">{addon.addon_name}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <span className="font-display text-[12px] font-bold text-brand-600">
+              {chosen ? `+${formatPeso(chosen.price)}` : `From +${formatPeso(lowest)}`}
+            </span>
+            {chosen && (
+              <span className="rounded-full bg-brand-500 px-2 py-[1px] font-display text-[10px] font-bold text-white" data-testid={`addon-${addon.id}-chosen`}>
+                {chosen.label}
+              </span>
+            )}
+          </span>
+        </button>
+      </Popover.Target>
 
-          return (
-            <button
-              key={size.size}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              onClick={() => onPick(addon.id, on ? undefined : size.size)}
-              data-testid={`addon-${addon.id}-${size.size}`}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-display font-semibold transition-colors ${
-                on ? "border-brand-500 bg-brand-500" : "border-[#ece6de] bg-white hover:border-brand-300"
-              }`}
-            >
-              <span className={`text-[12px] ${on ? "text-white" : "text-ink"}`}>{size.label}</span>
-              <span className={`text-[12px] ${on ? "text-white" : "text-brand-600"}`}>+{formatPeso(size.price)}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+      <Popover.Dropdown p={6}>
+        <p className="m-0 px-2.5 pb-1.5 pt-1 font-display text-[11px] font-bold uppercase tracking-[0.5px] text-[#8d8884]">
+          {addon.addon_name} &middot; pick a size
+        </p>
+        <div role="radiogroup" aria-label={`${addon.addon_name} size`} className="flex flex-col">
+          {addon.sizes.map((size) => {
+            const on = picked === size.size;
+
+            return (
+              <button
+                key={size.size}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => choose(size.size)}
+                data-testid={`addon-${addon.id}-${size.size}`}
+                className={`flex w-full items-center justify-between gap-3 rounded-[8px] px-2.5 py-2 text-left transition-colors ${on ? "bg-[#fff6ee]" : "hover:bg-[#faf7f3]"}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`grid h-4 w-4 place-items-center rounded-full border-2 ${on ? "border-brand-500 bg-brand-500 text-white" : "border-[#d9d3cb] bg-white"}`}
+                  >
+                    {on && <IconCheck size={10} stroke={3.4} />}
+                  </span>
+                  <span className="font-display text-[13px] font-semibold text-ink">{size.label}</span>
+                </span>
+                <span className="font-display text-[12.5px] font-bold text-brand-600">+{formatPeso(size.price)}</span>
+              </button>
+            );
+          })}
+        </div>
+        {chosen && (
+          <button
+            type="button"
+            onClick={() => choose(undefined)}
+            data-testid={`addon-${addon.id}-remove`}
+            className="mt-1 w-full rounded-[8px] border-t border-[#f0e9df] px-2.5 py-2 text-left font-display font-semibold text-[#e5322d] transition-colors hover:bg-[#fdecec]"
+          >
+            <span className="text-[12.5px]">Leave it off</span>
+          </button>
+        )}
+      </Popover.Dropdown>
+    </Popover>
   );
 }
 
@@ -236,11 +288,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
                       return (
                         <label
                           key={addon.id}
-                          className={`cursor-pointer rounded-[12px] border-2 px-3 py-2.5 transition-colors ${
-                            checked
-                              ? "border-brand-500 bg-[#fff6ee]"
-                              : "border-transparent bg-[#faf7f3] hover:bg-[#f4f1ec]"
-                          }`}
+                          className={tileClass(checked)}
                         >
                           <input
                             type="checkbox"
@@ -263,7 +311,9 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </div>
           )}
 
-          <div className="sticky bottom-0 -mx-6 mt-7 flex items-center gap-3 border-t border-[#f0e9df] bg-white px-6 pb-1 pt-4 sm:-mx-8 sm:px-8">
+          {/* With little to show, the bar still sits at the bottom of the dialog. */}
+          <div aria-hidden="true" className="h-7 shrink-0" />
+          <div className="sticky bottom-0 -mx-6 mt-auto flex items-center gap-3 border-t border-[#f0e9df] bg-white px-6 pb-1 pt-4 sm:-mx-8 sm:px-8">
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
@@ -272,7 +322,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
                 aria-label={quantity <= 1 ? "Remove item" : "Decrease quantity"}
                 className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f1ec] text-ink transition-colors hover:bg-[#e9e3da] disabled:cursor-not-allowed disabled:text-[#c0bab2]"
               >
-                {quantity <= 1 ? <IconTrash size={15} stroke={2} /> : <IconMinus size={15} stroke={2.6} />}
+                {quantity <= 1 ? <IconTrash size={17} stroke={2} /> : <IconMinus size={15} stroke={2.6} />}
               </button>
 
               <span

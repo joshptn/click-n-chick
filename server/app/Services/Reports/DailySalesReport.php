@@ -72,10 +72,6 @@ class DailySalesReport
                 'kind' => $filters['kind'] ?? 'all',
             ],
 
-            // False until the first payment is ever recorded, so a page can say
-            // "not available" rather than show ₱0.00 as though nothing was earned.
-            'payments' => ['recording' => Payment::query()->verified()->exists()],
-
             'fulfilled' => $sales + [
                 'average_order' => $sales['orders'] > 0 ? round($sales['total'] / $sales['orders'], 2) : 0.0,
                 'discounted_orders' => (clone $fulfilled)->where('discount_amount', '>', 0)->count(),

@@ -27,6 +27,7 @@ import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
 import StaffLayout from "../../components/staff/StaffLayout";
+import TableFrame from "../../components/staff/TableFrame";
 import ViewSwitch from "../../components/staff/ViewSwitch";
 import Button from "../../components/ui/Button";
 import { useAddons } from "../../hooks/useAddons";
@@ -166,8 +167,9 @@ const GRID =
 
 function TableView({ foods, loading, rowProps }) {
   return (
-    <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-[#f0e9df]">
-      <div className="min-w-[940px]">
+    <TableFrame
+      minWidth="min-w-[940px]"
+      head={
         <div
           className={`${GRID} border-b border-[#f3ede4] px-5 py-3 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]`}
         >
@@ -184,57 +186,57 @@ function TableView({ foods, loading, rowProps }) {
           <span>Status</span>
           <span className="text-right">Actions</span>
         </div>
-
-        {loading
-          ? [0, 1, 2, 3, 4].map((key) => (
-              <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-5 py-3 last:border-b-0`}>
-                <Skeleton height={52} width={52} radius={10} />
-                <Skeleton height={14} width="70%" />
-                <Skeleton height={20} width={80} radius="xl" />
-                <Skeleton height={14} width={60} />
-                <Skeleton height={26} width={104} radius={8} />
-                <Skeleton height={26} width={86} radius="xl" />
-                <Skeleton height={30} width={180} radius={8} className="justify-self-end" />
-              </div>
-            ))
-          : foods.map((food) => (
-              <div
-                key={food.id}
-                data-testid="catalog-row"
-                data-food={food.id}
-                className={`${GRID} border-b border-[#f6f1ea] px-5 py-3 transition-colors last:border-b-0 hover:bg-[#fffaf4]`}
+      }
+    >
+      {loading
+        ? [0, 1, 2, 3, 4].map((key) => (
+            <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-5 py-3 last:border-b-0`}>
+              <Skeleton height={52} width={52} radius={10} />
+              <Skeleton height={14} width="70%" />
+              <Skeleton height={20} width={80} radius="xl" />
+              <Skeleton height={14} width={60} />
+              <Skeleton height={26} width={104} radius={8} />
+              <Skeleton height={26} width={86} radius="xl" />
+              <Skeleton height={30} width={180} radius={8} className="justify-self-end" />
+            </div>
+          ))
+        : foods.map((food) => (
+            <div
+              key={food.id}
+              data-testid="catalog-row"
+              data-food={food.id}
+              className={`${GRID} border-b border-[#f6f1ea] px-5 py-3 transition-colors last:border-b-0 hover:bg-[#fffaf4]`}
+            >
+              <Thumb food={food} onOpen={rowProps.onPreview} />
+              <button
+                type="button"
+                onClick={() => rowProps.onPreview(food)}
+                className="min-w-0 bg-transparent text-left"
               >
-                <Thumb food={food} onOpen={rowProps.onPreview} />
-                <button
-                  type="button"
-                  onClick={() => rowProps.onPreview(food)}
-                  className="min-w-0 bg-transparent text-left"
+                <span
+                  className={`[overflow-wrap:anywhere] block font-display text-[13.5px] font-semibold leading-snug ${isArchived(food) ? "text-[#a39f9b]" : "text-ink"}`}
                 >
-                  <span
-                    className={`[overflow-wrap:anywhere] block font-display text-[13.5px] font-semibold leading-snug ${isArchived(food) ? "text-[#a39f9b]" : "text-ink"}`}
-                  >
-                    {food.food_name}
-                  </span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 font-display text-[10.5px] text-[#a39f9b]">
-                    ID: {food.id}
-                    <DiscountTag food={food} />
-                  </span>
-                </button>
-                <div>
-                  <CategoryPill category={food.category} />
-                </div>
-                <span className="font-display text-[13.5px] font-bold text-ink">{formatPeso(food.price)}</span>
-                <div>
-                  <SalesPill food={food} />
-                </div>
-                <div>
-                  <StatusPill food={food} />
-                </div>
-                <Actions food={food} busy={rowProps.isBusy(food.id)} onArchive={rowProps.onArchive} onDelete={rowProps.onDelete} />
+                  {food.food_name}
+                </span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-1.5 font-display text-[10.5px] text-[#a39f9b]">
+                  ID: {food.id}
+                  <DiscountTag food={food} />
+                </span>
+              </button>
+              <div>
+                <CategoryPill category={food.category} />
               </div>
-            ))}
-      </div>
-    </div>
+              <span className="font-display text-[13.5px] font-bold text-ink">{formatPeso(food.price)}</span>
+              <div>
+                <SalesPill food={food} />
+              </div>
+              <div>
+                <StatusPill food={food} />
+              </div>
+              <Actions food={food} busy={rowProps.isBusy(food.id)} onArchive={rowProps.onArchive} onDelete={rowProps.onDelete} />
+            </div>
+          ))}
+    </TableFrame>
   );
 }
 

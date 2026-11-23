@@ -430,6 +430,56 @@ class AddonManagementTest extends TestCase
         $this->patchJson("/api/addons/{$tea->id}/sizes/jumbo", ['is_available' => false])->assertNotFound();
     }
 
+    public function test_the_agent_switches_the_ticked_add_ons_together(): void
+    {
+        $inasal = $this->food();
+        $tea = $this->sizedTea();
+        $fries = Addon::create(['addon_name' => 'Fries', 'addon_price' => 65, 'addon_group' => 'Sides']);
+        $rice = Addon::create(['addon_name' => 'Rice', 'addon_price' => 20, 'addon_group' => 'Sides']);
+        $inasal->addons()->sync([$tea->id, $fries->id, $rice->id]);
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/addons/availability', ['addon_ids' => [$tea->id, $fries->id], 'is_available' => false])
+            ->assertOk()
+            ->assertJsonPath('message', '2 add-ons switched off.')
+            ->assertJsonPath('data.0.addon_name', 'Fries')
+            ->assertJsonPath('data.0.is_available', false);
+
+        $this->assertSame(['Rice'], array_keys($this->offered($inasal)));
+        Event::assertDispatchedTimes(AddonBroadcast::class, 2);
+
+        // Already off: nothing to change or announce again.
+        $this->patchJson('/api/agent/addons/availability', ['addon_ids' => [$fries->id], 'is_available' => false])
+            ->assertOk()
+            ->assertJsonPath('message', '1 add-on switched off.');
+        Event::assertDispatchedTimes(AddonBroadcast::class, 2);
+
+        $this->patchJson('/api/agent/addons/availability', ['addon_ids' => [$tea->id, $fries->id], 'is_available' => true])
+            ->assertOk()
+            ->assertJsonPath('message', '2 add-ons back on the menu.');
+
+        $this->assertSame(['Fries', 'Iced Tea', 'Rice'], collect(array_keys($this->offered($inasal)))->sort()->values()->all());
+    }
+
+    public function test_only_real_add_ons_are_switched_and_only_by_the_agent(): void
+    {
+        $tea = $this->sizedTea();
+        $gone = Addon::create(['addon_name' => 'Gone', 'addon_price' => 10, 'addon_group' => 'Sides']);
+        $gone->delete();
+
+        $this->actingAs($this->agent(), 'sanctum')
+            ->patchJson('/api/agent/addons/availability', ['addon_ids' => [], 'is_available' => false])
+            ->assertJsonValidationErrors('addon_ids');
+        $this->patchJson('/api/agent/addons/availability', ['addon_ids' => [$gone->id], 'is_available' => false])
+            ->assertJsonValidationErrors('addon_ids.0');
+
+        $this->actingAs($this->manager(), 'sanctum')
+            ->patchJson('/api/agent/addons/availability', ['addon_ids' => [$tea->id], 'is_available' => false])
+            ->assertForbidden();
+
+        $this->assertTrue($tea->fresh()->availability);
+    }
+
     public function test_both_staff_roles_read_the_list_with_what_each_may_do(): void
     {
         $this->sizedTea();

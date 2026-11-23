@@ -23,6 +23,7 @@ import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StatusSummary from "../../components/staff/StatusSummary";
 import StockControl from "../../components/staff/StockControl";
+import TableFrame from "../../components/staff/TableFrame";
 import ViewSwitch from "../../components/staff/ViewSwitch";
 import Button from "../../components/ui/Button";
 import { useAddons } from "../../hooks/useAddons";
@@ -145,85 +146,90 @@ const GRID =
 const PICK_GRID =
   "grid grid-cols-[18px_52px_minmax(170px,2fr)_minmax(104px,1fr)_minmax(84px,0.8fr)_minmax(120px,1fr)_minmax(140px,0.7fr)_minmax(156px,1.5fr)] items-center gap-x-4";
 
-function TableView({ foods, loading, rowProps, selection }) {
+/** `bar`: the ticked-dishes bar, pinned with the column row above the rows. */
+function TableView({ foods, loading, rowProps, selection, bar }) {
   const grid = selection ? PICK_GRID : GRID;
 
   return (
-    <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-[#f0e9df]">
-      <div className={selection ? "min-w-[1000px]" : "min-w-[960px]"}>
-        <div
-          className={`${grid} border-b border-[#f3ede4] px-5 py-3 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]`}
-        >
-          {selection && (
-            <Checkbox
-              size="xs"
-              color="orange"
-              checked={selection.all}
-              indeterminate={selection.some}
-              onChange={(event) => selection.onPickAll(event.currentTarget.checked)}
-              aria-label="Select every dish shown"
-              data-testid="stock-pick-all"
-            />
-          )}
-          <span>Photo</span>
-          <span>Product</span>
-          <span>Category</span>
-          <span>Price</span>
-          <span className="inline-flex items-center gap-1">
-            Sales status
-            <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
-              <IconInfoCircle size={12} stroke={2} className="text-[#c4bdb4]" />
-            </Tooltip>
-          </span>
-          <span className="text-center">Availability</span>
-          <span className="text-center">Stock</span>
-        </div>
-
-        {loading
-          ? [0, 1, 2, 3, 4].map((key) => (
-              <div key={key} className={`${grid} border-b border-[#f6f1ea] px-5 py-3 last:border-b-0`}>
-                {selection && <Skeleton height={16} width={16} radius={4} />}
-                <Skeleton height={52} width={52} radius={10} />
-                <Skeleton height={14} width="70%" />
-                <Skeleton height={20} width={80} radius="xl" />
-                <Skeleton height={14} width={60} />
-                <Skeleton height={26} width={104} radius={8} />
-                <Skeleton height={28} width={40} radius="xl" className="justify-self-center" />
-                <Skeleton height={20} width={140} radius="xl" className="justify-self-center" />
+    <TableFrame
+      minWidth={selection ? "min-w-[1000px]" : "min-w-[960px]"}
+      head={
+        <>
+          {bar}
+          <div
+            className={`${grid} border-b border-[#f3ede4] px-5 py-3 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]`}
+          >
+            {selection && (
+              <Checkbox
+                size="xs"
+                color="orange"
+                checked={selection.all}
+                indeterminate={selection.some}
+                onChange={(event) => selection.onPickAll(event.currentTarget.checked)}
+                aria-label="Select every dish shown"
+                data-testid="stock-pick-all"
+              />
+            )}
+            <span>Photo</span>
+            <span>Product</span>
+            <span>Category</span>
+            <span>Price</span>
+            <span className="inline-flex items-center gap-1">
+              Sales status
+              <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
+                <IconInfoCircle size={12} stroke={2} className="text-[#c4bdb4]" />
+              </Tooltip>
+            </span>
+            <span className="text-center">Availability</span>
+            <span className="text-center">Stock</span>
+          </div>
+        </>
+      }
+    >
+      {loading
+        ? [0, 1, 2, 3, 4].map((key) => (
+            <div key={key} className={`${grid} border-b border-[#f6f1ea] px-5 py-3 last:border-b-0`}>
+              {selection && <Skeleton height={16} width={16} radius={4} />}
+              <Skeleton height={52} width={52} radius={10} />
+              <Skeleton height={14} width="70%" />
+              <Skeleton height={20} width={80} radius="xl" />
+              <Skeleton height={14} width={60} />
+              <Skeleton height={26} width={104} radius={8} />
+              <Skeleton height={28} width={40} radius="xl" className="justify-self-center" />
+              <Skeleton height={20} width={140} radius="xl" className="justify-self-center" />
+            </div>
+          ))
+        : foods.map((food) => (
+            <div
+              key={food.id}
+              data-testid="stock-row"
+              data-food={food.id}
+              className={`${grid} border-b border-[#f6f1ea] px-5 py-3 transition-colors last:border-b-0 ${
+                selection?.picked.has(food.id) ? "bg-[#fff6ec]" : "hover:bg-[#fffaf4]"
+              }`}
+            >
+              {selection && <PickBox food={food} selection={selection} />}
+              <Thumb food={food} />
+              <div className="min-w-0">
+                <p
+                  className={`[overflow-wrap:anywhere] m-0 font-display text-[13.5px] font-semibold leading-snug ${food.is_available ? "text-ink" : "text-[#a39f9b]"}`}
+                >
+                  {food.food_name}
+                </p>
+                <p className="m-0 mt-0.5 font-display text-[10.5px] text-[#a39f9b]">ID: {food.id}</p>
               </div>
-            ))
-          : foods.map((food) => (
-              <div
-                key={food.id}
-                data-testid="stock-row"
-                data-food={food.id}
-                className={`${grid} border-b border-[#f6f1ea] px-5 py-3 transition-colors last:border-b-0 ${
-                  selection?.picked.has(food.id) ? "bg-[#fff6ec]" : "hover:bg-[#fffaf4]"
-                }`}
-              >
-                {selection && <PickBox food={food} selection={selection} />}
-                <Thumb food={food} />
-                <div className="min-w-0">
-                  <p
-                    className={`[overflow-wrap:anywhere] m-0 font-display text-[13.5px] font-semibold leading-snug ${food.is_available ? "text-ink" : "text-[#a39f9b]"}`}
-                  >
-                    {food.food_name}
-                  </p>
-                  <p className="m-0 mt-0.5 font-display text-[10.5px] text-[#a39f9b]">ID: {food.id}</p>
-                </div>
-                <div>
-                  <CategoryPill category={food.category} />
-                </div>
-                <span className="font-display text-[13.5px] font-bold text-ink">{formatPeso(food.price)}</span>
-                <div>
-                  <SalesPill food={food} />
-                </div>
-                <AvailabilityToggle food={food} canManage={rowProps.canManage} onToggle={rowProps.onToggle} />
-                <StockControl food={food} {...rowProps} busy={rowProps.isBusy(food.id)} />
+              <div>
+                <CategoryPill category={food.category} />
               </div>
-            ))}
-      </div>
-    </div>
+              <span className="font-display text-[13.5px] font-bold text-ink">{formatPeso(food.price)}</span>
+              <div>
+                <SalesPill food={food} />
+              </div>
+              <AvailabilityToggle food={food} canManage={rowProps.canManage} onToggle={rowProps.onToggle} />
+              <StockControl food={food} {...rowProps} busy={rowProps.isBusy(food.id)} />
+            </div>
+          ))}
+    </TableFrame>
   );
 }
 
@@ -339,16 +345,23 @@ function SharedStock({ foods, onStep, onSoldOut }) {
   );
 }
 
-/** Its columns repeat PICK_GRID's, so the shared controls sit above their own. */
-function SelectionBar({ foods, onClear, onSwitch, onStep, onSoldOut }) {
+/**
+ * In the table it is a row of PICK_GRID inside the pinned head, so the shared
+ * controls sit right above their own columns; above the cards it pins itself.
+ */
+function SelectionBar({ foods, onClear, onSwitch, onStep, onSoldOut, inTable = false }) {
   const anyOn = foods.some((food) => food.is_available);
 
   return (
     <div
       data-testid="stock-selection"
-      className="sticky top-[58px] z-20 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] bg-white px-3.5 py-2.5 shadow-[0_8px_20px_-12px_rgba(65,33,17,0.35)] ring-1 ring-[#ffd6b3] lg:top-2 xl:grid xl:grid-cols-[18px_52px_minmax(170px,2fr)_minmax(104px,1fr)_minmax(84px,0.8fr)_minmax(120px,1fr)_minmax(140px,0.7fr)_minmax(156px,1.5fr)] xl:px-5"
+      className={
+        inTable
+          ? `${PICK_GRID} border-b border-[#ffd6b3] bg-[#fff6ec] px-5 py-2.5`
+          : "sticky top-[58px] z-20 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] bg-white px-3.5 py-2.5 shadow-[0_8px_20px_-12px_rgba(65,33,17,0.35)] ring-1 ring-[#ffd6b3]"
+      }
     >
-      <div className="flex w-full items-center gap-3 xl:col-span-6 xl:w-auto">
+      <div className={`flex items-center gap-3 ${inTable ? "col-span-6" : "w-full"}`}>
         <span className="font-display text-[12.5px] font-semibold text-ink">{dishCount(foods.length)} selected</span>
         <button type="button" onClick={onClear} className="bg-transparent font-semibold text-brand-600 hover:text-brand-800">
           <span className="text-[11.5px]">Clear</span>
@@ -476,6 +489,20 @@ function ProductAvailability() {
         onPickAll: (on) => setPicked(on ? new Set(visible.map((food) => food.id)) : new Set()),
       }
     : null;
+
+  const selectionBar =
+    selection && pickedFoods.length > 0
+      ? (inTable) => (
+          <SelectionBar
+            inTable={inTable}
+            foods={pickedFoods}
+            onClear={clearPicked}
+            onSwitch={(on) => setConfirming({ mode: on ? "on" : "off", foods: pickedFoods })}
+            onStep={(by) => stock.stepMany(pickedFoods, by)}
+            onSoldOut={() => setConfirming({ mode: "sold_out", foods: pickedFoods })}
+          />
+        )
+      : null;
 
   const confirmAction = () =>
     confirming.mode === "sold_out" ? stock.soldOutMany(confirming.foods) : stock.switchMany(confirming.foods, confirming.mode === "on");
@@ -636,15 +663,7 @@ function ProductAvailability() {
                 }
               />
 
-              {selection && pickedFoods.length > 0 && (
-                <SelectionBar
-                  foods={pickedFoods}
-                  onClear={clearPicked}
-                  onSwitch={(on) => setConfirming({ mode: on ? "on" : "off", foods: pickedFoods })}
-                  onStep={(by) => stock.stepMany(pickedFoods, by)}
-                  onSoldOut={() => setConfirming({ mode: "sold_out", foods: pickedFoods })}
-                />
-              )}
+              {selectionBar && !wide && selectionBar(false)}
 
               {stock.isError ? (
                 <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
@@ -671,7 +690,7 @@ function ProductAvailability() {
                   )}
                 </div>
               ) : wide ? (
-                <TableView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} />
+                <TableView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} bar={selectionBar?.(true)} />
               ) : (
                 <CardView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} />
               )}

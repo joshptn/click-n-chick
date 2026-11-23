@@ -21,7 +21,7 @@ import Input from "../ui/Input";
 import PickerField from "../ui/PickerField";
 import TimeDialPicker from "../ui/TimeDialPicker";
 import { formatClock, isoToClock, timeWindow } from "../../lib/timeWindow";
-import { FULFILMENT, blockerFor, reverseGeocode } from "../../lib/checkout";
+import { FULFILMENT, blockerFor, mobileDigits, reverseGeocode } from "../../lib/checkout";
 import { formatPeso } from "../../lib/menu";
 
 
@@ -96,6 +96,7 @@ function DispatchStep({
   storeStatus,
   showFieldErrors = false,
   requireEmail = false,
+  guest = false,
   onContinue,
   onBack,
 }) {
@@ -281,10 +282,10 @@ function DispatchStep({
                       type="tel"
                       inputMode="numeric"
                       value={value.contactPhone}
-                      onChange={(event) => onChange({ contactPhone: event.target.value })}
+                      onChange={(event) => onChange({ contactPhone: mobileDigits(event.target.value) })}
                       placeholder="Enter your 11-digit mobile number"
                       autoComplete="tel"
-                      maxLength={13}
+                      maxLength={11}
                       invalid={Boolean(phoneBlocker)}
                     />
                   )}
@@ -411,30 +412,50 @@ function DispatchStep({
           ) : (
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="First Name" error={nameBlocker?.message}>
-                  {(id) => (
-                    <Input
-                      id={id}
-                      value={value.firstName}
-                      onChange={(event) => onChange({ firstName: event.target.value })}
-                      placeholder="Julia"
-                      autoComplete="given-name"
-                      invalid={Boolean(nameBlocker)}
-                    />
-                  )}
-                </Field>
+                {/* A guest names who collects it in one field (decided 2026-11-24);
+                    an account keeps its first and last name from the profile. */}
+                {guest ? (
+                  <Field label="Pickup Person" error={nameBlocker?.message}>
+                    {(id) => (
+                      <Input
+                        id={id}
+                        value={value.contactName}
+                        onChange={(event) => onChange({ contactName: event.target.value })}
+                        placeholder="Julia Veneese"
+                        autoComplete="name"
+                        invalid={Boolean(nameBlocker)}
+                        data-testid="pickup-person"
+                      />
+                    )}
+                  </Field>
+                ) : (
+                  <>
+                    <Field label="First Name" error={nameBlocker?.message}>
+                      {(id) => (
+                        <Input
+                          id={id}
+                          value={value.firstName}
+                          onChange={(event) => onChange({ firstName: event.target.value })}
+                          placeholder="Julia"
+                          autoComplete="given-name"
+                          invalid={Boolean(nameBlocker)}
+                        />
+                      )}
+                    </Field>
 
-                <Field label="Last Name">
-                  {(id) => (
-                    <Input
-                      id={id}
-                      value={value.lastName}
-                      onChange={(event) => onChange({ lastName: event.target.value })}
-                      placeholder="Veneese"
-                      autoComplete="family-name"
-                    />
-                  )}
-                </Field>
+                    <Field label="Last Name">
+                      {(id) => (
+                        <Input
+                          id={id}
+                          value={value.lastName}
+                          onChange={(event) => onChange({ lastName: event.target.value })}
+                          placeholder="Veneese"
+                          autoComplete="family-name"
+                        />
+                      )}
+                    </Field>
+                  </>
+                )}
 
                 <Field label="Mobile Number" error={phoneBlocker?.message}>
                   {(id) => (
@@ -443,10 +464,10 @@ function DispatchStep({
                       type="tel"
                       inputMode="numeric"
                       value={value.contactPhone}
-                      onChange={(event) => onChange({ contactPhone: event.target.value })}
+                      onChange={(event) => onChange({ contactPhone: mobileDigits(event.target.value) })}
                       placeholder="09123456789"
                       autoComplete="tel"
-                      maxLength={13}
+                      maxLength={11}
                       invalid={Boolean(phoneBlocker)}
                     />
                   )}

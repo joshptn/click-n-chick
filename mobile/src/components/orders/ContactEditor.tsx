@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { toLocalMobile } from "../../api/checkout";
+import { mobileDigits, mobileForField, toLocalMobile } from "../../api/checkout";
 import type { ContactChanges, Order } from "../../api/orders";
 import { colors } from "../../theme/colors";
 import { AppText } from "../AppText";
@@ -28,7 +28,7 @@ export function ContactEditor({ order, onSave }: { order: Order; onSave: (change
   const [error, setError] = useState<string | null>(null);
 
   const currentName = order.contact.name ?? "";
-  const currentPhone = toLocalMobile(order.contact.phone) || (order.contact.phone ?? "");
+  const currentPhone = mobileForField(order.contact.phone);
 
   const start = () => {
     setName(currentName);
@@ -39,7 +39,7 @@ export function ContactEditor({ order, onSave }: { order: Order; onSave: (change
 
   const changes: ContactChanges = {};
   if (name.trim() !== currentName) changes.contact_name = name.trim();
-  if (phone.trim() !== currentPhone) changes.contact_phone = phone.trim();
+  if (phone !== currentPhone) changes.contact_phone = phone;
 
   const changed = Object.keys(changes).length > 0;
   // Grey until something changed and both are valid, as checkout's buttons.
@@ -103,9 +103,10 @@ export function ContactEditor({ order, onSave }: { order: Order; onSave: (change
         <TextField
           label="Mobile number"
           value={phone}
-          onChangeText={(text) => setPhone(text.slice(0, 20))}
+          onChangeText={(text) => setPhone(mobileDigits(text))}
           placeholder="09123456789"
-          keyboardType="phone-pad"
+          keyboardType="number-pad"
+          maxLength={11}
           autoComplete="tel"
           editable={!saving}
           error={phoneError}

@@ -25,7 +25,7 @@ function ManageCategoriesModal({ opened, onClose, categories, counts, onAdd, onR
       size="md"
       title={
         <span className="block">
-          <span className="block font-display text-[17px] font-bold text-cocoa-900">Manage Categories</span>
+          <span className="block font-display text-[17px] font-bold text-cocoa-900 py-2">Manage Categories</span>
           <span className="block font-display text-[12px] font-normal text-[#8d8884]">
             Rename a category, or delete one that has no dishes
           </span>

@@ -96,7 +96,8 @@ export const CartLineRow = memo(function CartLineRow({
           testID={`decrease-${line.id}`}
         >
           {line.quantity <= 1 ? (
-            <IconTrash size={13} color={colors.orange} strokeWidth={2.2} />
+            // The trash glyph reads small beside + and -, so it is drawn a size up.
+            <IconTrash size={15} color={colors.orange} strokeWidth={2.2} />
           ) : (
             <IconMinus size={13} color={colors.orange} strokeWidth={3} />
           )}

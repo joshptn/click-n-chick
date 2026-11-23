@@ -4,16 +4,20 @@ import { motion } from "framer-motion";
 const MotionSpan = motion.span;
 
 /**
- * The three-step progress rail at the top of checkout.
+ * The progress rail at the top of checkout: three steps for an account, two
+ * for a guest, who has no discount step.
  *
- * Purely a readout of `current`/`completed` - it never navigates. Steps are
+ * Its width follows the number of steps and each line runs the whole way to
+ * the next step, so a guest's two steps join up rather than leaving a gap
+ * (fixed 2026-11-24). Purely a readout of `current`/`completed` - it never navigates. Steps are
  * reached by finishing the one before, so a clickable rail would offer a route
  * the flow does not actually allow.
  */
 function CheckoutStepper({ steps, current, completed = [] }) {
   return (
     <ol
-      className="m-0 flex w-full max-w-[520px] list-none items-center gap-1 p-0 sm:gap-2"
+      className="m-0 flex w-full list-none items-center gap-1 p-0 sm:gap-2"
+      style={{ maxWidth: steps.length * 175 }}
       aria-label="Checkout progress"
     >
       {steps.map((step, index) => {
@@ -52,7 +56,7 @@ function CheckoutStepper({ steps, current, completed = [] }) {
             </div>
 
             {!isLast && (
-              <span className="mx-1 h-px w-full min-w-[16px] max-w-[90px] flex-1 overflow-hidden bg-[#e5e0d8] sm:mx-2">
+              <span className="mx-1 h-px w-full min-w-[16px] flex-1 overflow-hidden bg-[#e5e0d8] sm:mx-2">
                 <MotionSpan
                   initial={false}
                   animate={{ scaleX: isDone ? 1 : 0 }}

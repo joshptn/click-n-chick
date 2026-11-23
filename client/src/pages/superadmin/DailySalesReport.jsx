@@ -41,8 +41,6 @@ import {
 
 const PAGE_TITLE = "Daily Sales Report · Click n Chick";
 
-const NOT_AVAILABLE = "Not available";
-
 const orderCount = (count) => `${count} ${count === 1 ? "order" : "orders"}`;
 
 const ICON_TONES = {
@@ -53,7 +51,7 @@ const ICON_TONES = {
   purple: "bg-[#f3ecff] text-[#7c3aed]",
 };
 
-function Stat({ icon, tone, value, label, note, muted = false, testId }) {
+function Stat({ icon, tone, value, label, note, testId }) {
   const Icon = icon;
 
   return (
@@ -64,7 +62,7 @@ function Stat({ icon, tone, value, label, note, muted = false, testId }) {
       <span className={`grid h-9 w-9 place-items-center rounded-[10px] ${ICON_TONES[tone]}`}>
         <Icon size={18} stroke={2} />
       </span>
-      <span className={`mt-3 truncate font-display font-bold leading-tight ${muted ? "text-[15px] text-[#a39f9b]" : "text-[20px] text-ink"}`}>
+      <span className="mt-3 truncate font-display text-[20px] font-bold leading-tight text-ink">
         {value}
       </span>
       <span className="mt-0.5 font-display text-[12px] font-medium text-[#5f5b58]">{label}</span>
@@ -83,7 +81,7 @@ function Panel({ title, hint, children, testId }) {
   );
 }
 
-function Row({ label, detail, value, strong = false, muted = false, tone = "" }) {
+function Row({ label, detail, value, strong = false, tone = "" }) {
   return (
     <div className={`flex items-baseline justify-between gap-3 font-display ${strong ? "border-t border-dashed border-[#ece7e0] pt-2" : ""}`}>
       <span className={`min-w-0 ${strong ? "text-[13px] font-bold text-ink" : "text-[12.5px] text-[#5f5b58]"}`}>
@@ -91,7 +89,7 @@ function Row({ label, detail, value, strong = false, muted = false, tone = "" })
         {detail && <span className="ml-1.5 text-[11px] text-[#a39f9b]">{detail}</span>}
       </span>
       <span
-        className={`shrink-0 tabular-nums ${muted ? "text-[11.5px] text-[#a39f9b]" : strong ? "text-[14px] font-bold text-ink" : `text-[13px] font-semibold ${tone || "text-ink"}`}`}
+        className={`shrink-0 tabular-nums ${strong ? "text-[14px] font-bold text-ink" : `text-[13px] font-semibold ${tone || "text-ink"}`}`}
       >
         {value}
       </span>
@@ -147,10 +145,8 @@ function FulfilmentRows({ report }) {
 }
 
 function ReportBody({ report }) {
-  const live = report.payments.recording;
   const { fulfilled, unverified_sales: unverified, verified_sales: verified, money, refunds, not_sold: notSold } = report;
   const deducted = (amount) => `${amount > 0 ? "−" : ""}${formatPeso(amount)}`;
-  const moneyValue = (amount, deduction = false) => (!live ? NOT_AVAILABLE : deduction ? deducted(amount) : formatPeso(amount));
 
   return (
     <>
@@ -159,10 +155,9 @@ function ReportBody({ report }) {
           testId="stat-verified"
           icon={IconShieldCheck}
           tone="green"
-          value={live ? formatPeso(verified.total) : NOT_AVAILABLE}
-          muted={!live}
+          value={formatPeso(verified.total)}
           label="Verified Sales"
-          note={live ? `${orderCount(verified.orders)} fulfilled and paid` : "Payments not connected yet"}
+          note={`${orderCount(verified.orders)} fulfilled and paid`}
         />
         <Stat
           testId="stat-fulfilled"
@@ -222,18 +217,14 @@ function ReportBody({ report }) {
         <Panel
           testId="panel-money"
           title="Money received"
-          hint={
-            live
-              ? "From payment records, dated when the money moved. An advance order can be paid on a different day from its collection."
-              : "Filled in from payment records once online payment is connected."
-          }
+          hint="From payment records, dated when the money moved. An advance order can be paid on a different day from its collection."
         >
-          <Row label="Payments received" detail={live ? orderCount(money.received.orders) : undefined} value={moneyValue(money.received.amount)} muted={!live} />
-          <Row label="Refunds paid out" value={moneyValue(money.refunds_settled.amount, true)} muted={!live} tone={money.refunds_settled.amount > 0 ? "text-[#e5322d]" : ""} />
-          <Row label="Net received" value={moneyValue(money.net_received)} strong={live} muted={!live} />
-          <Row label="Kept on cancelled orders" detail={live && money.kept_on_cancelled.orders > 0 ? orderCount(money.kept_on_cancelled.orders) : undefined} value={moneyValue(money.kept_on_cancelled.amount)} muted={!live} />
+          <Row label="Payments received" detail={orderCount(money.received.orders)} value={formatPeso(money.received.amount)} />
+          <Row label="Refunds paid out" value={deducted(money.refunds_settled.amount)} tone={money.refunds_settled.amount > 0 ? "text-[#e5322d]" : ""} />
+          <Row label="Net received" value={formatPeso(money.net_received)} strong />
+          <Row label="Kept on cancelled orders" detail={money.kept_on_cancelled.orders > 0 ? orderCount(money.kept_on_cancelled.orders) : undefined} value={formatPeso(money.kept_on_cancelled.amount)} />
 
-          {live && money.by_method.length > 0 && (
+          {money.by_method.length > 0 && (
             <div className="mt-1 flex flex-col gap-2 rounded-[10px] bg-[#faf6f0] px-3 py-2.5">
               {money.by_method.map((method) => (
                 <Row key={method.method ?? "none"} label={methodLabel(method.method)} detail={orderCount(method.orders)} value={formatPeso(method.amount)} />
@@ -353,7 +344,6 @@ function DailySalesReport() {
   const select = (record) => write({ order: record ? String(record.id) : null }, { keepPage: true });
 
   const filtered = filters.type !== "all" || filters.kind !== "all";
-  const live = report?.payments.recording;
   const mismatched = report?.fulfilled.mismatched_orders ?? 0;
   const meta = list.meta;
   const preview = list.records.find((record) => String(record.id) === selectedId) ?? null;
@@ -440,12 +430,6 @@ function DailySalesReport() {
             <ReportSkeleton />
           ) : (
             <div className={`flex flex-col gap-3 transition-opacity ${isPlaceholder ? "opacity-60" : ""}`} aria-busy={isPlaceholder}>
-              {!live && (
-                <Notice testId="payments-notice">
-                  <strong className="font-semibold">Online payment is not connected yet, so no money is confirmed as received.</strong>{" "}
-                  Figures below show orders as recorded at checkout.
-                </Notice>
-              )}
               {mismatched > 0 && (
                 <Notice tone="red" testId="mismatch-notice">
                   {orderCount(mismatched)} on this day {mismatched === 1 ? "has" : "have"} stored amounts that do not add up. Totals use the amount
@@ -472,7 +456,7 @@ function DailySalesReport() {
                 <>
                   <ReportBody report={report} />
 
-                  <section className="overflow-hidden rounded-[16px] bg-white ring-1 ring-[#f0e9df]" data-testid="report-orders">
+                  <section className="rounded-[16px] bg-white ring-1 ring-[#f0e9df]" data-testid="report-orders">
                     <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                       <div>
                         <h2 className="m-0 font-display text-[14px] font-bold text-ink">Orders closed this day</h2>

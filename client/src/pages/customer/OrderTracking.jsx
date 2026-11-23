@@ -426,7 +426,7 @@ function OrderTracking({ guest = false }) {
             {prompt.keep}
           </Button>
           <Button
-            variant="secondary"
+            variant="danger"
             size="sm"
             loading={cancelling.isPending}
             loadingLabel="Working&hellip;"

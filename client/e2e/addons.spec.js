@@ -101,7 +101,25 @@ test.describe("Add-ons", () => {
     await large.uncheck();
     await expect(page.getByText("Iced Tea (Large) is switched off.")).toBeVisible();
     await expect(large).not.toBeChecked();
+
+    // The ticked add-ons switch together, after a confirmation.
+    await row.getByTestId("addon-pick").check();
+    const bar = page.getByTestId("addon-selection");
+    await expect(bar).toContainText("1 add-on selected");
+    // Mantine's switch input has no size of its own; its label is what is clicked.
+    await bar.getByText("On Menu", { exact: true }).click();
+    await page.getByTestId("confirm-submit").click();
+    await expect(page.getByText("1 add-on switched off.")).toBeVisible();
+    await expect(row.getByTestId("addon-availability-switch")).not.toBeChecked();
+    await bar.getByText("Switched off", { exact: true }).click();
+    await page.getByTestId("confirm-submit").click();
+    await expect(page.getByText("1 add-on back on the menu.")).toBeVisible();
+
+    // Iced Tea is the only add-on here, so ticking it ticks "every add-on shown".
+    await expect(page.getByTestId("addon-pick-all")).toBeChecked();
     await shot(page, "agent-addons");
+    await page.getByTestId("addon-pick-all").uncheck();
+    await expect(bar).toBeHidden();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(row).toBeVisible();
@@ -114,10 +132,18 @@ test.describe("Add-ons", () => {
 
     await page.getByRole("button", { name: "View Chicken Inasal" }).first().click();
 
+    // A tile like the others; its sizes show once it is tapped.
+    const tea = page.getByTestId(/^addon-\d+$/).filter({ hasText: "Iced Tea" });
+    await expect(tea).toContainText("From +₱45.00");
+    await expect(page.getByTestId(/^addon-\d+-small$/)).toHaveCount(0);
+
+    await tea.click();
     await expect(page.getByTestId(/^addon-\d+-small$/)).toBeVisible();
     await expect(page.getByTestId(/^addon-\d+-large$/)).toHaveCount(0);
+    await shot(page, "customer-dish-size-picker");
 
     await page.getByTestId(/^addon-\d+-small$/).click();
+    await expect(tea).toContainText("Small");
     await expect(page.getByRole("button", { name: /Add to Cart — ₱205\.00/ })).toBeVisible();
     await shot(page, "customer-dish-sizes");
 

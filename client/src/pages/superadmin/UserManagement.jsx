@@ -13,6 +13,7 @@ import UserFormModal from "../../components/manager/UserFormModal";
 import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import StaffLayout from "../../components/staff/StaffLayout";
+import TableFrame from "../../components/staff/TableFrame";
 import StatusSummary from "../../components/staff/StatusSummary";
 import Button from "../../components/ui/Button";
 import { useStepUp } from "../../hooks/useStepUp";
@@ -136,8 +137,9 @@ function UserName({ user }) {
 
 function UserTable({ users, loading, actions }) {
   return (
-    <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-[#f0e9df]">
-      <div className="min-w-[980px]">
+    <TableFrame
+      minWidth="min-w-[980px]"
+      head={
         <div className={`${GRID} border-b border-[#f3ede4] px-4 py-3 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]`}>
           <span>User</span>
           <span>Email</span>
@@ -148,51 +150,51 @@ function UserTable({ users, loading, actions }) {
           <span>Joined</span>
           <span>Actions</span>
         </div>
-
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map((key) => (
-              <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-4 py-3.5 last:border-b-0`}>
-                <Skeleton height={32} />
-                <Skeleton height={14} />
-                <Skeleton height={14} />
-                <Skeleton height={20} radius="xl" />
-                <Skeleton height={20} radius="xl" />
-                <Skeleton height={14} width={30} />
-                <Skeleton height={14} />
-                <Skeleton height={20} />
-              </div>
-            ))
-          : users.map((user) => (
-              <div
-                key={user.id}
-                onClick={() => actions.open(user)}
-                data-testid="user-row"
-                data-user={user.id}
-                className={`${GRID} cursor-pointer border-b border-[#f6f1ea] px-4 py-2.5 transition-colors last:border-b-0 hover:bg-[#fffaf4]`}
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <Avatar user={user} />
-                  <UserName user={user} />
-                </span>
-                <span className="truncate font-display text-[12.5px] text-[#5f5b58]" title={user.email}>
-                  {user.email}
-                </span>
-                <span className="font-display text-[12.5px] tabular-nums text-[#5f5b58]">{user.phone_masked ?? "—"}</span>
-                <span>
-                  <RolePill role={user.role} />
-                </span>
-                <span>
-                  <StatusPill status={user.status} />
-                </span>
-                <span>
-                  <DiscountPill discount={user.discount} />
-                </span>
-                <span className="font-display text-[12px] text-[#8d8884]">{formatRecordDate(user.joined_at)}</span>
-                <RowActions user={user} actions={actions} />
-              </div>
-            ))}
-      </div>
-    </div>
+      }
+    >
+      {loading
+        ? [0, 1, 2, 3, 4, 5].map((key) => (
+            <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-4 py-3.5 last:border-b-0`}>
+              <Skeleton height={32} />
+              <Skeleton height={14} />
+              <Skeleton height={14} />
+              <Skeleton height={20} radius="xl" />
+              <Skeleton height={20} radius="xl" />
+              <Skeleton height={14} width={30} />
+              <Skeleton height={14} />
+              <Skeleton height={20} />
+            </div>
+          ))
+        : users.map((user) => (
+            <div
+              key={user.id}
+              onClick={() => actions.open(user)}
+              data-testid="user-row"
+              data-user={user.id}
+              className={`${GRID} cursor-pointer border-b border-[#f6f1ea] px-4 py-2.5 transition-colors last:border-b-0 hover:bg-[#fffaf4]`}
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                <Avatar user={user} />
+                <UserName user={user} />
+              </span>
+              <span className="truncate font-display text-[12.5px] text-[#5f5b58]" title={user.email}>
+                {user.email}
+              </span>
+              <span className="font-display text-[12.5px] tabular-nums text-[#5f5b58]">{user.phone_masked ?? "—"}</span>
+              <span>
+                <RolePill role={user.role} />
+              </span>
+              <span>
+                <StatusPill status={user.status} />
+              </span>
+              <span>
+                <DiscountPill discount={user.discount} />
+              </span>
+              <span className="font-display text-[12px] text-[#8d8884]">{formatRecordDate(user.joined_at)}</span>
+              <RowActions user={user} actions={actions} />
+            </div>
+          ))}
+    </TableFrame>
   );
 }
 
@@ -362,7 +364,7 @@ function UserManagement() {
         "Past orders and payments are kept for the store's records, shown as “Deleted customer”.",
         "This action cannot be undone. To block access for now, suspend the account instead.",
       ],
-      confirmLabel: "Yes, remove user",
+      confirmLabel: "Remove user",
       danger: true,
       acknowledge: `I understand that ${user.name ?? user.email} will be permanently deleted.`,
       run: async () => {

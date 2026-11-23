@@ -438,16 +438,16 @@ function Security() {
             onClick={() => setConfirming(null)}
             disabled={revokeMutation.isPending}
           >
-            No, cancel
+            Cancel
           </Button>
           <Button
-            variant="secondary"
+            variant="danger"
             size="sm"
             loading={revokeMutation.isPending}
             loadingLabel="Signing out&hellip;"
             onClick={() => revokeMutation.mutate(confirming)}
           >
-            Yes, sign out
+            Sign out
           </Button>
         </div>
       </Modal>
@@ -547,16 +547,16 @@ function Security() {
             onClick={() => setConfirmingSweep(false)}
             disabled={sweepMutation.isPending}
           >
-            No, cancel
+            Cancel
           </Button>
           <Button
-            variant="secondary"
+            variant="danger"
             size="sm"
             loading={sweepMutation.isPending}
             loadingLabel="Signing out&hellip;"
             onClick={() => sweepMutation.mutate()}
           >
-            Yes, sign them out
+            Sign out all
           </Button>
         </div>
       </Modal>

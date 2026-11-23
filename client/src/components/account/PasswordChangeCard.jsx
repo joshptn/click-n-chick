@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@mantine/core";
-import { IconAlertCircle, IconLock, IconShieldExclamation } from "@tabler/icons-react";
+import { IconAlertCircle, IconEye, IconEyeOff, IconLock, IconShieldExclamation } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
 import Button from "../ui/Button";
@@ -30,22 +30,37 @@ import { unmetPasswordRules } from "../../lib/passwordRules";
 
 const EMPTY = { current: "", next: "", confirm: "" };
 
+/** A password box with the eye that shows what was typed, as on the sign-in page. */
 function PasswordField({ id, label, value, onChange, autoComplete, disabled, describedBy }) {
+  const [shown, setShown] = useState(false);
+
   return (
     <div>
       <label htmlFor={id} className="block font-display text-[12.5px] font-semibold text-ink">
         {label}
       </label>
-      <input
-        id={id}
-        type="password"
-        value={value}
-        onChange={onChange}
-        autoComplete={autoComplete}
-        disabled={disabled}
-        aria-describedby={describedBy}
-        className="mt-1.5 h-[46px] w-full rounded-[10px] border border-[#ece7e0] bg-[#faf8f5] px-3.5 font-display text-[14px] text-ink outline-none transition-colors focus:border-brand-500 focus:bg-white disabled:opacity-60"
-      />
+      <div className="relative mt-1.5">
+        <input
+          id={id}
+          type={shown ? "text" : "password"}
+          value={value}
+          onChange={onChange}
+          autoComplete={autoComplete}
+          disabled={disabled}
+          aria-describedby={describedBy}
+          className="h-[46px] w-full rounded-[10px] border border-[#ece7e0] bg-[#faf8f5] pl-3.5 pr-11 font-display text-[14px] text-ink outline-none transition-colors focus:border-brand-500 focus:bg-white disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={() => setShown((current) => !current)}
+          aria-label={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          aria-pressed={shown}
+          data-testid={`${id}-reveal`}
+          className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-transparent text-[#b8b2aa] transition-colors hover:text-brand-600"
+        >
+          {shown ? <IconEyeOff size={18} stroke={1.8} /> : <IconEye size={18} stroke={1.8} />}
+        </button>
+      </div>
     </div>
   );
 }

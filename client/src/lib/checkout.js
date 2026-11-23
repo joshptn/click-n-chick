@@ -55,6 +55,16 @@ export function isoToPickupTime(iso) {
   return `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
 }
 
+/** What a mobile number field keeps as it is typed: digits only, at most 11 (09XXXXXXXXX). */
+export function mobileDigits(value) {
+  return String(value ?? "").replace(/\D/g, "").slice(0, 11);
+}
+
+/** A stored number as the field shows it: 09XXXXXXXXX when it is one. */
+export function mobileForField(value) {
+  return toLocalMobile(value) || mobileDigits(value);
+}
+
 export function toLocalMobile(value) {
   const digits = String(value ?? "").replace(/[\s\-()]/g, "");
   const international = digits.match(/^\+?63(9\d{9})$/);

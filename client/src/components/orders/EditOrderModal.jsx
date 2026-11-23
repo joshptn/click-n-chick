@@ -3,7 +3,7 @@ import { Modal } from "@mantine/core";
 import { IconAlertTriangle, IconPhone, IconUser } from "@tabler/icons-react";
 
 import Button from "../ui/Button";
-import { toLocalMobile } from "../../lib/checkout";
+import { mobileDigits, mobileForField } from "../../lib/checkout";
 
 /**
  * Change the order's contact name and mobile number (BR-21b), the only details
@@ -18,7 +18,7 @@ function EditOrderModal({ order, opened, onClose, onSave, isSaving, error }) {
     if (!opened || !order) return;
 
     setName(order.contact?.name ?? "");
-    setPhone(toLocalMobile(order.contact?.phone) || (order.contact?.phone ?? ""));
+    setPhone(mobileForField(order.contact?.phone));
   }, [opened, order]);
 
   if (!order) return null;
@@ -26,9 +26,7 @@ function EditOrderModal({ order, opened, onClose, onSave, isSaving, error }) {
   const changes = {};
 
   if (name.trim() !== (order.contact?.name ?? "")) changes.contact_name = name.trim();
-  if (phone.trim() !== (toLocalMobile(order.contact?.phone) || (order.contact?.phone ?? ""))) {
-    changes.contact_phone = phone.trim();
-  }
+  if (phone !== mobileForField(order.contact?.phone)) changes.contact_phone = phone;
 
   const nothingChanged = Object.keys(changes).length === 0;
   const fieldClass =
@@ -54,10 +52,11 @@ function EditOrderModal({ order, opened, onClose, onSave, isSaving, error }) {
           <IconPhone size={16} stroke={2} aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a39f9b]" />
           <input
             type="tel"
-            inputMode="tel"
+            inputMode="numeric"
             placeholder="09123456789"
+            maxLength={11}
             value={phone}
-            onChange={(event) => setPhone(event.target.value.slice(0, 20))}
+            onChange={(event) => setPhone(mobileDigits(event.target.value))}
             className={fieldClass}
           />
         </span>

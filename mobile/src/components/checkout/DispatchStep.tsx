@@ -7,6 +7,7 @@ import {
   blockerFor,
   checkoutApi,
   isEmail,
+  mobileDigits,
   toLocalMobile,
   type CheckoutScope,
   type Fulfilment,
@@ -217,11 +218,11 @@ export function DispatchStep({ values, onChange, quote, quoting, scope, onMapTou
       <TextField
         label="Mobile Number"
         value={values.phone}
-        onChangeText={(phone) => onChange({ phone })}
+        onChangeText={(phone) => onChange({ phone: mobileDigits(phone) })}
         placeholder="09123456789"
-        keyboardType="phone-pad"
+        keyboardType="number-pad"
         autoComplete="tel"
-        maxLength={13}
+        maxLength={11}
         error={phoneError}
         testID="contact-phone"
       />

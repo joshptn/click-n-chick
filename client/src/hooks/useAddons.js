@@ -2,7 +2,15 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import toast from "../components/app/Toast";
-import { ADDONS_KEY, archiveAddon, deleteAddon, fetchAddons, setAddonAvailability, setAddonSize } from "../lib/addons";
+import {
+  ADDONS_KEY,
+  archiveAddon,
+  deleteAddon,
+  fetchAddons,
+  setAddonAvailability,
+  setAddonSize,
+  setAvailabilityOfAddons,
+} from "../lib/addons";
 
 /** The list with one add-on replaced by the server's answer. */
 function withAddon(data, addon) {
@@ -110,6 +118,32 @@ export function useAddons() {
     },
   });
 
+  // The ticked add-ons together. Awaited by the confirmation, which shows a refusal.
+  const switchMany = useMutation({
+    mutationFn: ({ addons, on }) => setAvailabilityOfAddons(addons.map((addon) => addon.id), on),
+    onMutate: async ({ addons, on }) => {
+      await queryClient.cancelQueries({ queryKey: ADDONS_KEY });
+
+      const previous = queryClient.getQueryData(ADDONS_KEY);
+      const ids = new Set(addons.map((addon) => addon.id));
+
+      if (previous?.data) {
+        queryClient.setQueryData(ADDONS_KEY, {
+          ...previous,
+          data: previous.data.map((item) => (ids.has(item.id) ? { ...item, is_available: on } : item)),
+        });
+      }
+
+      return { previous };
+    },
+    onSuccess: (response) => {
+      (response?.data ?? []).forEach((addon) => queryClient.setQueryData(ADDONS_KEY, (current) => withAddon(current, addon)));
+      toast.success(response?.message, "Saved");
+    },
+    onError: (_error, _vars, context) => rollback(context),
+    onSettled: settle,
+  });
+
   const archive = useMutation({
     mutationFn: ({ addon, archived }) => archiveAddon(addon.id, archived),
     onMutate: ({ addon }) => mark(`addon-${addon.id}`, true),
@@ -141,6 +175,7 @@ export function useAddons() {
 
     toggle: (addon, on) => toggle.mutate({ addon, on }),
     toggleSize: (addon, size, on) => toggleSize.mutate({ addon, size, on }),
+    switchMany: (addons, on) => switchMany.mutateAsync({ addons, on }),
     archive: (addon, archived) => archive.mutate({ addon, archived }),
     remove,
     settle,

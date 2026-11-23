@@ -18,6 +18,7 @@ import Button from "../../components/ui/Button";
 import DiscountCard from "../../components/account/DiscountCard";
 import PasswordChangeCard from "../../components/account/PasswordChangeCard";
 import toast from "../../components/app/Toast";
+import { mobileDigits, mobileForField } from "../../lib/checkout";
 import {
   applyForDiscount,
   createAddress,
@@ -79,7 +80,7 @@ function SectionCard({ icon, title, subtitle, children }) {
   );
 }
 
-function TextField({ id, label, required, value, onChange, disabled, hint, maxLength, type = "text", error }) {
+function TextField({ id, label, required, value, onChange, disabled, hint, maxLength, type = "text", error, ...input }) {
   const counter = maxLength && !disabled ? `${value.length}/${maxLength}` : null;
 
   return (
@@ -96,6 +97,7 @@ function TextField({ id, label, required, value, onChange, disabled, hint, maxLe
           onChange={onChange}
           disabled={disabled}
           maxLength={maxLength}
+          {...input}
           aria-describedby={hint ? `${id}-hint` : undefined}
           aria-invalid={error ? "true" : undefined}
           className={`h-[46px] w-full rounded-[10px] border bg-[#faf8f5] px-3.5 font-display text-[14px] text-ink outline-none transition-colors focus:bg-white disabled:cursor-not-allowed disabled:text-[#8d8884] ${
@@ -150,7 +152,7 @@ function Profile() {
     setForm({
       first_name: user.first_name ?? "",
       last_name: user.last_name ?? "",
-      phone_number: user.phone_number ?? "",
+      phone_number: mobileForField(user.phone_number),
     });
     setConsent(Boolean(data?.profile?.privacy_consent));
   }, [user, data?.profile?.privacy_consent]);
@@ -230,13 +232,16 @@ function Profile() {
     return (
       form.first_name !== (user.first_name ?? "") ||
       form.last_name !== (user.last_name ?? "") ||
-      form.phone_number !== (user.phone_number ?? "") ||
+      form.phone_number !== mobileForField(user.phone_number) ||
       consent !== Boolean(data?.profile?.privacy_consent)
     );
   }, [form, consent, user, data?.profile?.privacy_consent]);
 
-  const set = (key) => (e) => {
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  /** `clean`: how the field keeps what is typed (the phone keeps digits only). */
+  const set = (key, clean = (value) => value) => (e) => {
+    const value = clean(e.target.value);
+
+    setForm((prev) => ({ ...prev, [key]: value }));
     setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
@@ -250,7 +255,7 @@ function Profile() {
     // Only sent when it actually changed: the server refuses a phone edit while
     // the number is load-bearing, and re-sending an unchanged value would turn
     // "save my name" into that refusal.
-    if (form.phone_number !== (user?.phone_number ?? "")) {
+    if (form.phone_number !== mobileForField(user?.phone_number)) {
       body.phone_number = form.phone_number;
     }
 
@@ -432,8 +437,12 @@ function Profile() {
                         id="phone"
                         label="Mobile Number"
                         required
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        placeholder="09XXXXXXXXX"
                         value={form.phone_number}
-                        onChange={set("phone_number")}
+                        onChange={set("phone_number", mobileDigits)}
                         disabled={Boolean(phoneLockReason)}
                         maxLength={11}
                         hint={phoneLockReason}
