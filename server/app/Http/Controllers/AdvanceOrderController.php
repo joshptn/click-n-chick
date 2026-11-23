@@ -13,6 +13,7 @@ use App\Services\Orders\DiscountUsage;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
+use App\Services\Orders\PriceCheck;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -60,6 +61,10 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                 'blockers' => $quote['blockers'],
                 'quote' => $quote,
             ], 409);
+        }
+
+        if ($refusal = PriceCheck::refusal($input[PriceCheck::FIELD] ?? null, (float) $quote['total'])) {
+            return response()->json($refusal + ['quote' => $quote], 409);
         }
 
         $collectAt = CarbonImmutable::parse($quote['schedule']['requested_at']);
@@ -146,6 +151,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
             'cart_item_ids.*' => ['integer'],
             'scheduled_for' => ['nullable', 'string', 'max:64'],
             'apply_discount' => ['sometimes', 'boolean'],
+            PriceCheck::FIELD => PriceCheck::RULE,
         ]);
     }
 

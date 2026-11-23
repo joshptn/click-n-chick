@@ -134,9 +134,17 @@ export const checkoutApi = {
   quote: (scope: CheckoutScope, input: QuoteInput, signal?: AbortSignal) =>
     api.post<Quote>(`${base(scope)}/checkout/quote`, input, { ...auth(scope), signal }),
 
-  /** Creates the order waiting for payment and opens Xendit's page for it. */
-  place: (scope: CheckoutScope, input: QuoteInput) =>
-    api.post<Placed>(scope === "guest" ? "/api/guest/orders" : "/api/order/place", input, auth(scope)),
+  /**
+   * Creates the order waiting for payment and opens Xendit's page for it.
+   * `expectedTotal`: the total on screen; refused (PRICE_CHANGED) if prices
+   * moved since.
+   */
+  place: (scope: CheckoutScope, input: QuoteInput, expectedTotal?: number | null) =>
+    api.post<Placed>(
+      scope === "guest" ? "/api/guest/orders" : "/api/order/place",
+      expectedTotal == null ? input : { ...input, expected_total: expectedTotal },
+      auth(scope)
+    ),
 
   search: async (scope: CheckoutScope, query: string, signal?: AbortSignal) =>
     (await api.get<{ results: Place[] }>(`${base(scope)}/geocode/search`, { ...auth(scope), params: { q: query }, signal })).results,
@@ -149,12 +157,20 @@ export const paymentApi = {
   /**
    * Open the payment page again (the same one while it is still open).
    * `reviewed`: the customer came through Review Advance Order, which the
-   * API records (decided 2026-11-20).
+   * API records (decided 2026-11-20). `expectedTotal`: the total on screen;
+   * an advance order is priced again when paid, and a total that moved is
+   * refused (PRICE_CHANGED) rather than charged.
    */
-  pay: (target: PaymentTarget, reviewed = false) =>
-    target.token
-      ? api.post<PaymentStart>("/api/guest/order/pay", undefined, holding(target.token))
-      : api.post<PaymentStart>(`/api/orders/${target.orderId}/pay`, reviewed ? { reviewed: true } : undefined),
+  pay: (target: PaymentTarget, reviewed = false, expectedTotal?: number | null) => {
+    if (target.token) return api.post<PaymentStart>("/api/guest/order/pay", undefined, holding(target.token));
+
+    const body = {
+      ...(reviewed ? { reviewed: true } : {}),
+      ...(expectedTotal == null ? {} : { expected_total: expectedTotal }),
+    };
+
+    return api.post<PaymentStart>(`/api/orders/${target.orderId}/pay`, Object.keys(body).length ? body : undefined);
+  },
 
   /** Where the payment stands; the API asks Xendit while it is still open. */
   status: (target: PaymentTarget, signal?: AbortSignal) =>

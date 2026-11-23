@@ -14,6 +14,7 @@ use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
 use App\Services\Orders\OrderStatus;
+use App\Services\Orders\PriceCheck;
 use App\Services\Payments\CheckoutResponder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -54,6 +55,7 @@ class OrderController extends Controller implements HasMiddleware
             'contact_name' => ['nullable', 'string', 'max:255'],
             'contact_phone' => ['nullable', 'string', 'max:20'],
             'apply_discount' => ['sometimes', 'boolean'],
+            PriceCheck::FIELD => PriceCheck::RULE,
         ]);
 
         $validated['fulfilment_type'] = $validated['fulfilment_type'] ?? $validated['type'] ?? null;
@@ -75,6 +77,10 @@ class OrderController extends Controller implements HasMiddleware
                 'blockers' => $quote['blockers'],
                 'quote' => $quote,
             ], 409);
+        }
+
+        if ($refusal = PriceCheck::refusal($validated[PriceCheck::FIELD] ?? null, (float) $quote['total'])) {
+            return response()->json($refusal + ['quote' => $quote], 409);
         }
 
         try {

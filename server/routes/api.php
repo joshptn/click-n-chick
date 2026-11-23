@@ -12,6 +12,7 @@ use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\GuestOrderController;
+use App\Http\Controllers\MenuPriceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderModificationController;
@@ -266,6 +267,10 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::patch('/foods/{food}', [FoodController::class, 'update']);
     Route::delete('/foods/{food}', [FoodController::class, 'destroy']);
     Route::patch('/foods/{food}/archive', [FoodController::class, 'archive']);
+    // Bulk price change by a peso amount (FR-07.7): preview, then apply.
+    Route::post('/foods/prices/preview', [MenuPriceController::class, 'preview']);
+    Route::post('/foods/prices', [MenuPriceController::class, 'apply'])
+        ->middleware('throttle:user-update');
 
     Route::post('/category', [CategoryController::class, 'store']);
     Route::put('/category/{category}', [CategoryController::class, 'update']);

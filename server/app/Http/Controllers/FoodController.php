@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Events\MenuBroadcast;
 use App\Http\Resources\FoodResource;
-use App\Jobs\NotifyEveryAccount;
 use App\Models\Food;
 use App\Services\Auth\PasswordConfirmation;
+use App\Services\Catalog\PriceAnnouncer;
 use App\Services\Stock\StockReservation;
 use App\Utils\Image;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -117,8 +117,9 @@ class FoodController extends Controller implements HasMiddleware
      * PUT|PATCH /api/foods/{food} - edit a dish (UC-MENU-011, -013, -014).
      *
      * A new price asks for the Manager's password first and, once saved, tells
-     * every account (UC-NOTIF-009). Carts already float to it (BR-18); an order
-     * keeps the price it was placed at. A new photo replaces the old one only
+     * every account (UC-NOTIF-009) and every open cart and checkout, which
+     * refetch (BR-18). An immediate order keeps the price it was placed at; an
+     * unpaid advance order takes the new one when it is paid (AdvanceRepricing). A new photo replaces the old one only
      * after it has uploaded, so a failed upload leaves the dish as it was.
      */
     public function update(Request $request, Food $food)
@@ -317,20 +318,13 @@ class FoodController extends Controller implements HasMiddleware
         }
     }
 
+    /** Live to open carts and checkouts, and as a notice to every account (BR-18). */
     private function announcePriceChange(Food $food, int $previous): void
     {
-        $body = $food->food_name.' is now '.$this->peso((int) $food->price).', changed from '.$this->peso($previous).'.';
-
-        try {
-            NotifyEveryAccount::dispatch('Price update', $body);
-        } catch (Throwable $e) {
-            Log::warning('Could not announce a price change.', ['food' => $food->id, 'error' => $e->getMessage()]);
-        }
-    }
-
-    private function peso(int $amount): string
-    {
-        return '₱'.number_format($amount);
+        app(PriceAnnouncer::class)->announce(
+            $food->food_name.' is now '.PriceAnnouncer::peso((int) $food->price).', changed from '.PriceAnnouncer::peso($previous).'.',
+            [(int) $food->id],
+        );
     }
 
     private function forgetImage(?string $url): void

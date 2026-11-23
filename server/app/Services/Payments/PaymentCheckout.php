@@ -118,12 +118,14 @@ class PaymentCheckout
                 return $session;
             }
 
-            if ($session->isUsable()) {
+            // Only for the amount the order now comes to: an advance order
+            // priced again since (AdvanceRepricing) needs a page of its own.
+            if ($session->isUsable() && abs($session->amount - (float) ($order->total_amount ?? $order->total_price)) < 0.005) {
                 return $session;
             }
 
-            // About to lapse, or already closed: close it so it cannot be paid
-            // alongside the new one.
+            // About to lapse, already closed, or for another amount: close it so
+            // it cannot be paid alongside the new one.
             if ($session->status === GatewaySession::ACTIVE) {
                 try {
                     $session = $this->gateway->cancelSession($session->id);

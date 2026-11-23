@@ -165,7 +165,7 @@ export default function Checkout() {
   const discountReady = discountChoice !== null && settled && Boolean(quote?.can_place);
 
   const place = useMutation({
-    mutationFn: () => checkoutApi.place(scope, input),
+    mutationFn: () => checkoutApi.place(scope, input, quote?.total),
     onSuccess: async (result) => {
       // The ordered lines have left the cart.
       void queryClient.invalidateQueries({ queryKey: ["cart"] });

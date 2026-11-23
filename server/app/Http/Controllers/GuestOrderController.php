@@ -14,6 +14,7 @@ use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderCancellation;
 use App\Services\Orders\OrderPlacement;
 use App\Services\Orders\OrderStatus;
+use App\Services\Orders\PriceCheck;
 use App\Services\Payments\CheckoutResponder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -60,6 +61,10 @@ class GuestOrderController extends Controller
                 'blockers' => $quote['blockers'],
                 'quote' => $quote,
             ], 409);
+        }
+
+        if ($refusal = PriceCheck::refusal($input[PriceCheck::FIELD] ?? null, (float) $quote['total'])) {
+            return response()->json($refusal + ['quote' => $quote], 409);
         }
 
         try {
@@ -234,6 +239,7 @@ class GuestOrderController extends Controller
             'contact_phone' => ['nullable', 'string', 'max:20'],
             'contact_email' => ['nullable', 'string', 'max:255'],
             'apply_discount' => ['sometimes', 'boolean'],
+            PriceCheck::FIELD => PriceCheck::RULE,
         ]);
     }
 }

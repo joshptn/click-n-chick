@@ -50,7 +50,9 @@ export type AdvanceSent = {
 
 export const advanceApi = {
   quote: (input: AdvanceInput, signal?: AbortSignal) => api.post<AdvanceQuote>("/api/advance-orders/quote", input, { signal }),
-  submit: (input: AdvanceInput) => api.post<AdvanceSent>("/api/advance-orders", input),
+  /** `expectedTotal`: the total on screen; refused (PRICE_CHANGED) if prices moved since. */
+  submit: (input: AdvanceInput, expectedTotal?: number | null) =>
+    api.post<AdvanceSent>("/api/advance-orders", expectedTotal == null ? input : { ...input, expected_total: expectedTotal }),
 };
 
 export const SCHEDULE_BLOCKERS = [

@@ -69,6 +69,14 @@ export function useRealtimeConnection() {
     echo
       .channel("menu")
       .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }))
+      // Prices changed, one dish or a bulk change (FR-02.5). Carts are priced
+      // on every read, so refetching is what makes their totals float.
+      .listen(".prices", () => {
+        void queryClient.invalidateQueries({ queryKey: ["foods"] });
+        void queryClient.invalidateQueries({ queryKey: ["cart"] });
+        void queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+        void queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+      })
       .listen(".category", (payload: { event?: string }) => {
         void queryClient.invalidateQueries({ queryKey: ["categories"] });
         if (payload?.event === "renamed") void queryClient.invalidateQueries({ queryKey: ["foods"] });

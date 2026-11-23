@@ -224,6 +224,8 @@ function Checkout() {
       ...quoteInput,
       full_address: dispatchState.destination?.full_address ?? null,
       location: dispatchState.destination?.locality ?? null,
+      // The total on screen: refused (PRICE_CHANGED) if prices moved since.
+      expected_total: quote.total,
     };
 
     captcha.run((recaptchaToken) => submitOrder(payload, recaptchaToken));

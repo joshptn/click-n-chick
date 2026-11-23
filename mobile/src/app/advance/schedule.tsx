@@ -110,7 +110,7 @@ export default function AdvanceSchedule() {
   const discountReady = discountChoice !== null && settled && Boolean(quote?.can_submit);
 
   const submit = useMutation({
-    mutationFn: () => advanceApi.submit(input),
+    mutationFn: () => advanceApi.submit(input, quote?.total),
     onSuccess: (payload) => {
       void queryClient.invalidateQueries({ queryKey: cartKey("account", "advance") });
       void queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
