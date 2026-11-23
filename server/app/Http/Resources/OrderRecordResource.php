@@ -113,7 +113,9 @@ class OrderRecordResource extends JsonResource
                 'addons' => $item->relationLoaded('addons')
                     ? $item->addons->map(fn ($addon) => [
                         'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
+                        // With the size picked: "Iced Tea (Large)".
+                        'addon_name' => $addon->chosen_name,
+                        'size' => $addon->pickedSize(),
                         'unit_price' => $addon->pivot?->unit_price === null ? null : (float) $addon->pivot->unit_price,
                     ])->values()
                     : [],

@@ -47,9 +47,10 @@ class OrderQueueResource extends JsonResource
                 'id' => $item->id,
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'quantity' => $item->quantity,
-                // The kitchen cooks to the add-ons, so they ride with the line.
+                // The kitchen cooks to the add-ons, so they ride with the line,
+                // each with the size picked: "Iced Tea (Large)".
                 'addons' => $item->relationLoaded('addons')
-                    ? $item->addons->pluck('addon_name')->values()
+                    ? $item->addons->map(fn ($addon) => $addon->chosen_name)->values()
                     : [],
             ])->values()),
 

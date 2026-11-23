@@ -11,6 +11,8 @@ class OrderItemAddon extends Model
     protected $fillable = [
         'order_item_id',
         'addon_id',
+        // The size picked, or null for an add-on without sizes.
+        'size',
         'unit_price',
     ];
 

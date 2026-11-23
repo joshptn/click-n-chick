@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\CartItem;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -23,13 +22,11 @@ class Food extends Model
         'thumbnail',
         'food_name',
         'price',
-        'size',
         'stock_quantity',
         'is_available',
         'is_best_seller',
         // Senior/PWD discount: true for Yes, null for None (FR-05.9).
         'is_discountable',
-        'prep_time',
         'description',
     ];
 
@@ -50,7 +47,6 @@ class Food extends Model
         return [
             'price' => 'integer',
             'stock_quantity' => 'integer',
-            'prep_time' => 'integer',
             'is_available' => 'boolean',
             'is_best_seller' => 'boolean',
             'is_discountable' => 'boolean',

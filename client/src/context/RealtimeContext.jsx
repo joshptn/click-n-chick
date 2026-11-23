@@ -130,6 +130,17 @@ export function RealtimeProvider({ children }) {
         queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
         queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
       })
+      // An add-on, or one of its sizes, added, changed, switched or deleted
+      // (decided 2026-11-24): the dish screens offer it, carts price it, and
+      // both staff pages list it.
+      .listen(".addon", () => {
+        queryClient.invalidateQueries({ queryKey: ["addons"] });
+        queryClient.invalidateQueries({ queryKey: ["foods"] });
+        queryClient.invalidateQueries({ queryKey: ["food"] });
+        queryClient.invalidateQueries({ queryKey: ["cart"] });
+        queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+        queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+      })
       // A category added, renamed or deleted by the Store Manager. A rename also
       // changes the name every dish in it carries, so the dishes come too.
       .listen(".category", (payload) => {

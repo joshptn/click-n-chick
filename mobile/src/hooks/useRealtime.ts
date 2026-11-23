@@ -12,7 +12,7 @@ import { useUser } from "./useUser";
 /**
  * Live updates (Laravel Reverb), as the web's RealtimeProvider:
  *
- *   menu                      public: availability, stock, prices, categories
+ *   menu                      public: availability, stock, prices, add-ons, categories
  *   store                     public: ordering paused, delivery, hours
  *   private-notifications.id  the signed-in customer's own notices
  *
@@ -73,6 +73,14 @@ export function useRealtimeConnection() {
       // on every read, so refetching is what makes their totals float.
       .listen(".prices", () => {
         void queryClient.invalidateQueries({ queryKey: ["foods"] });
+        void queryClient.invalidateQueries({ queryKey: ["cart"] });
+        void queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+        void queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+      })
+      // An add-on, or one of its sizes, changed or switched (decided 2026-11-24).
+      .listen(".addon", () => {
+        void queryClient.invalidateQueries({ queryKey: ["foods"] });
+        void queryClient.invalidateQueries({ queryKey: ["food"] });
         void queryClient.invalidateQueries({ queryKey: ["cart"] });
         void queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
         void queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });

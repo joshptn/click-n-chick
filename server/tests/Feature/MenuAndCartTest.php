@@ -51,7 +51,6 @@ class MenuAndCartTest extends TestCase
             'stock_quantity' => 10,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 15,
         ], $overrides));
     }
 
@@ -427,7 +426,7 @@ class MenuAndCartTest extends TestCase
         // alone left every upload unauthenticated.
         config()->set('cloudinary.cloud_url', 'cloudinary://123456789:sekrit@my-cloud');
 
-        $cloudinary = new CloudinaryService();
+        $cloudinary = new CloudinaryService;
 
         $this->assertTrue($cloudinary->isConfigured());
         $this->assertSame('my-cloud', $cloudinary->credentials()['cloud_name']);
@@ -441,7 +440,7 @@ class MenuAndCartTest extends TestCase
         config()->set('filesystems.disks.cloudinary.key', '123');
         config()->set('filesystems.disks.cloudinary.secret', 'sekrit');
 
-        $this->assertTrue((new CloudinaryService())->isConfigured());
+        $this->assertTrue((new CloudinaryService)->isConfigured());
     }
 
     public function test_cloudinary_reports_itself_unconfigured_rather_than_half_working(): void
@@ -449,7 +448,7 @@ class MenuAndCartTest extends TestCase
         config()->set('cloudinary.cloud_url', 'cloudinary://:@');
         config()->set('filesystems.disks.cloudinary.cloud', null);
 
-        $cloudinary = new CloudinaryService();
+        $cloudinary = new CloudinaryService;
 
         $this->assertFalse($cloudinary->isConfigured());
         $this->assertStringContainsString('CLOUDINARY_URL', $cloudinary->unavailableReason());

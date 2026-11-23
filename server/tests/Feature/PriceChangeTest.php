@@ -90,7 +90,6 @@ class PriceChangeTest extends TestCase
             'is_available' => true,
             'is_best_seller' => false,
             'is_discountable' => $marked ? true : null,
-            'prep_time' => 15,
         ]);
     }
 

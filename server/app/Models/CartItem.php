@@ -56,10 +56,11 @@ class CartItem extends Model
         return $this->belongsTo(CartItem::class, 'parent_cart_item_id');
     }
 
-    /** ERD add-on mechanism, via the cart_item_addons join table. */
+    /** ERD add-on mechanism, via the cart_item_addons join table, with the size picked. */
     public function selectedAddons()
     {
         return $this->belongsToMany(Addon::class, 'cart_item_addons')
+            ->withPivot('size')
             ->withTimestamps();
     }
 

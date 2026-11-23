@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\DB;
  *
  * Run when the customer opens the payment (OrderPaymentController), never
  * before: until then the order keeps the figures the Store Agent accepted.
- * Each line takes its dish's current price and its add-ons' current prices;
- * a dish or add-on no longer in the catalogue keeps the price it had.
+ * Each line takes its dish's current price and its add-ons' current prices, in
+ * the size picked; a dish, add-on or size no longer in the catalogue keeps the
+ * price it had.
  *
  * A discount the order was placed with is worked out again on the new prices,
  * as a quote would (FR-05.4): one unit of the highest-priced marked dish, at
@@ -33,7 +34,7 @@ final class AdvanceRepricing
      */
     public function quote(Order $order): ?array
     {
-        $items = $order->items()->with(['food', 'addonSelections.addon'])->get();
+        $items = $order->items()->with(['food', 'addonSelections.addon.sizes'])->get();
 
         if ($items->isEmpty()) {
             return null;
@@ -124,7 +125,7 @@ final class AdvanceRepricing
 
         $addons = $item->addonSelections->map(fn (OrderItemAddon $selection) => [
             'id' => (int) $selection->id,
-            'unit_price' => round((float) ($selection->addon?->addon_price ?? $selection->unit_price), 2),
+            'unit_price' => round((float) ($selection->addon?->priceFor($selection->size) ?? $selection->unit_price), 2),
         ])->all();
 
         $food = $item->food;

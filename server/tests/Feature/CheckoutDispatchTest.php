@@ -117,7 +117,6 @@ class CheckoutDispatchTest extends TestCase
             'stock_quantity' => 10,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 20,
         ], $overrides));
     }
 

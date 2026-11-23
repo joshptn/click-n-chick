@@ -189,8 +189,15 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                       {formatPeso(line.subtotal)}
                     </p>
 
-                    {!line.is_orderable && (
+                    {!line.is_orderable ? (
                       <p className="m-0 font-display text-[11px] font-semibold text-[#e5322d]">Sold out</p>
+                    ) : (
+                      // Switched off since it went in the cart (decided 2026-11-24).
+                      line.unavailable_addons?.length > 0 && (
+                        <p className="m-0 font-display text-[11px] font-semibold text-[#e5322d]" data-testid="cart-addon-unavailable">
+                          {line.unavailable_addons.join(", ")} not available now
+                        </p>
+                      )
                     )}
                   </div>
 

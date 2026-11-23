@@ -4,9 +4,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FOODS_KEY, fetchFood, stockColor, stockLabel, type Food } from "../../api/menu";
+import { FOODS_KEY, fetchFood, stockColor, stockLabel, type Addon, type Food } from "../../api/menu";
 import { AppText } from "../../components/AppText";
-import { IconArrowLeft, IconClock, IconDiscount, IconMinus, IconPlus, IconShoppingBagPlus, IconTrash } from "../../components/icons";
+import { IconArrowLeft, IconDiscount, IconMinus, IconPlus, IconShoppingBagPlus, IconTrash } from "../../components/icons";
 import { DishImage } from "../../components/menu/DishImage";
 import { useCart } from "../../hooks/useCart";
 import { formatPeso } from "../../lib/money";
@@ -14,6 +14,59 @@ import { colors } from "../../theme/colors";
 
 /** Without a stock count, the most the API takes in one line. */
 const MAX_QUANTITY = 99;
+
+/** What a picked add-on costs: its size's price, or its one price. */
+function pickPrice(addon: Addon | undefined, size: string | null): number {
+  if (!addon) return 0;
+  if (!size) return Number(addon.addon_price ?? 0);
+
+  return Number(addon.sizes?.find((row) => row.size === size)?.price ?? addon.addon_price ?? 0);
+}
+
+/**
+ * An add-on that comes in sizes (decided 2026-11-24): picked by picking a size,
+ * and left off by picking the same size again.
+ */
+function SizedAddon({ addon, picked, onPick }: { addon: Addon; picked: string | null | undefined; onPick: (id: number, size: string | undefined) => void }) {
+  const checked = picked !== undefined;
+
+  return (
+    <View style={[styles.sized, checked && styles.tileChecked]} testID={`addon-${addon.id}`}>
+      <View style={styles.sizedHead}>
+        <AppText family="display" weight="semibold" size={12.5} color={colors.authInk} numberOfLines={2} style={styles.sizedName}>
+          {addon.addon_name}
+        </AppText>
+        <AppText family="display" weight="semibold" size={11} color={colors.ink300}>
+          {checked ? "Tap again to remove" : "Pick a size"}
+        </AppText>
+      </View>
+      <View style={styles.sizes} accessibilityRole="radiogroup">
+        {(addon.sizes ?? []).map((size) => {
+          const on = picked === size.size;
+
+          return (
+            <Pressable
+              key={size.size}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={`${addon.addon_name}, ${size.label}, plus ${formatPeso(size.price)}`}
+              onPress={() => onPick(addon.id, on ? undefined : size.size)}
+              style={[styles.sizePill, on && styles.sizePillOn]}
+              testID={`addon-${addon.id}-${size.size}`}
+            >
+              <AppText family="display" weight="semibold" size={12} color={on ? colors.white : colors.authInk}>
+                {size.label}
+              </AppText>
+              <AppText family="display" weight="bold" size={12} color={on ? colors.white : colors.orange}>
+                +{formatPeso(size.price)}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 /** The menu listing's copy of a dish, which already carries its add-ons. */
 function fromListing(queryClient: ReturnType<typeof useQueryClient>, id: number): Food | undefined {
@@ -55,13 +108,11 @@ export default function FoodDetail() {
   const food = listed ?? data?.data;
 
   const [quantity, setQuantity] = useState(1);
-  const [addons, setAddons] = useState<number[]>([]);
+  // add-on id -> the size picked, or null for one without sizes
+  const [picks, setPicks] = useState<Record<number, string | null>>({});
 
   const groups = useMemo(() => food?.addon_groups ?? [], [food]);
-  const prices = useMemo(
-    () => new Map(groups.flatMap((group) => group.addons).map((addon) => [addon.id, Number(addon.addon_price)])),
-    [groups]
-  );
+  const index = useMemo(() => new Map(groups.flatMap((group) => group.addons).map((addon) => [addon.id, addon])), [groups]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/home"));
 
@@ -90,15 +141,29 @@ export default function FoodDetail() {
   const orderable = advance || food.is_orderable;
   const label = advance ? null : stockLabel(food);
   const maxQuantity = advance ? MAX_QUANTITY : Math.max(1, food.stock_quantity ?? MAX_QUANTITY);
-  const addonsTotal = addons.reduce((sum, addonId) => sum + (prices.get(addonId) ?? 0), 0);
+  const addonsTotal = Object.entries(picks).reduce((sum, [addonId, size]) => sum + pickPrice(index.get(Number(addonId)), size), 0);
   const lineTotal = (Number(food.price) + addonsTotal) * quantity;
   const adding = addingFoodId === food.id;
 
-  const toggle = (addonId: number) =>
-    setAddons((prev) => (prev.includes(addonId) ? prev.filter((x) => x !== addonId) : [...prev, addonId]));
+  /** `size`: the size picked, null for an add-on without sizes, undefined to leave it off. */
+  const pick = (addonId: number, size: string | null | undefined) =>
+    setPicks((current) => {
+      const next = { ...current };
+
+      if (size === undefined) delete next[addonId];
+      else next[addonId] = size;
+
+      return next;
+    });
+
+  const toggle = (addonId: number) => pick(addonId, addonId in picks ? undefined : null);
 
   const add = () => {
-    addItem({ foodId: food.id, quantity, addonIds: addons })
+    addItem({
+      foodId: food.id,
+      quantity,
+      addons: Object.entries(picks).map(([addonId, size]) => ({ id: Number(addonId), size })),
+    })
       .then(back)
       .catch(() => {});
   };
@@ -136,14 +201,6 @@ export default function FoodDetail() {
                 </AppText>
               </View>
             )}
-            {food.prep_time ? (
-              <View style={styles.prep}>
-                <IconClock size={13} color={colors.white} strokeWidth={2.2} />
-                <AppText family="display" weight="semibold" size={11.5} color={colors.white} style={styles.tagText}>
-                  {food.prep_time} mins
-                </AppText>
-              </View>
-            ) : null}
           </View>
         </View>
 
@@ -209,7 +266,11 @@ export default function FoodDetail() {
                   </AppText>
                   <View style={styles.tiles}>
                     {group.addons.map((addon) => {
-                      const checked = addons.includes(addon.id);
+                      if (addon.sizes && addon.sizes.length > 0) {
+                        return <SizedAddon key={addon.id} addon={addon} picked={picks[addon.id]} onPick={pick} />;
+                      }
+
+                      const checked = addon.id in picks;
 
                       return (
                         <Pressable
@@ -305,15 +366,6 @@ const styles = StyleSheet.create({
   },
   photoTags: { position: "absolute", left: 16, bottom: 14, flexDirection: "row", gap: 8 },
   bestSeller: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.orange },
-  prep: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "rgba(43,21,10,0.78)",
-  },
   tagText: { lineHeight: 15 },
   body: { padding: 20, gap: 4 },
   priceRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 4 },
@@ -346,6 +398,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#faf7f3",
   },
   tileChecked: { borderColor: colors.orange, backgroundColor: "#fff6ee" },
+  sized: {
+    width: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+    backgroundColor: "#faf7f3",
+    gap: 8,
+  },
+  sizedHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
+  sizedName: { flexShrink: 1 },
+  sizes: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  sizePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#ece6de",
+    backgroundColor: colors.white,
+  },
+  sizePillOn: { borderColor: colors.orange, backgroundColor: colors.orange },
   footer: {
     position: "absolute",
     left: 0,

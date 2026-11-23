@@ -74,11 +74,13 @@ function useCartStore(mode, enabled, scope) {
   }, []);
 
   const addItem = useMutation({
-    mutationFn: ({ foodId, quantity = 1, addonIds = [] }) =>
+    // `addons`: [{ id, size }], the size picked for a sized add-on (decided
+    // 2026-11-24). `addonIds` is for a quick add with none.
+    mutationFn: ({ foodId, quantity = 1, addons = [], addonIds = [] }) =>
       api.post(`${base}/items`, {
         food_id: foodId,
         quantity,
-        addon_ids: addonIds,
+        addons: [...addons, ...addonIds.map((id) => ({ id }))],
         mode,
       }),
     onSuccess: (payload) => {

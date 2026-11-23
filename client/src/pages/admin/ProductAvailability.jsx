@@ -15,6 +15,7 @@ import {
 
 import AuthContext from "../../context/AuthContext";
 import ConfirmActionModal from "../../components/manager/ConfirmActionModal";
+import AddonAvailability from "../../components/staff/AddonAvailability";
 import FilterBar, { FilterMeta } from "../../components/staff/FilterBar";
 import FilterSelect from "../../components/staff/FilterSelect";
 import LivePill from "../../components/staff/LivePill";
@@ -22,7 +23,10 @@ import ReadOnlyNotice from "../../components/staff/ReadOnlyNotice";
 import StaffLayout from "../../components/staff/StaffLayout";
 import StatusSummary from "../../components/staff/StatusSummary";
 import StockControl from "../../components/staff/StockControl";
+import ViewSwitch from "../../components/staff/ViewSwitch";
 import Button from "../../components/ui/Button";
+import { useAddons } from "../../hooks/useAddons";
+import { useMenuView } from "../../hooks/useMenuView";
 import { useStock } from "../../hooks/useStock";
 import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
@@ -413,13 +417,16 @@ function confirmCopy({ mode, foods }) {
  *
  * The agent changes two things here - how many of a dish are left, and whether
  * it is on the menu - one dish at a time or for the ticked dishes together.
- * Names, prices, categories and photos are the Store Manager's and are shown
- * read-only. Sales, cancellations and other agents' changes arrive over the
- * `menu` channel.
+ * The Add-ons view switches add-ons, and each size one comes in, on and off
+ * (decided 2026-11-24). Names, prices, categories and photos are the Store
+ * Manager's and are shown read-only. Sales, cancellations and other agents'
+ * changes arrive over the `menu` channel.
  */
 function ProductAvailability() {
   const { user } = useContext(AuthContext);
   const stock = useStock();
+  const addons = useAddons();
+  const [view, setView] = useMenuView();
   const wide = useMediaQuery("(min-width: 64em)", true);
   const [filters, setFilters] = useState(DEFAULTS);
   const [picked, setPicked] = useState(() => new Set());
@@ -427,6 +434,7 @@ function ProductAvailability() {
 
   // The server's word decides; the role is only a fallback while it loads.
   const canManage = stock.meta ? Boolean(stock.meta.can_manage) : user?.role === ROLES.ADMIN;
+  const canManageAddons = addons.meta ? Boolean(addons.meta.can_manage) : user?.role === ROLES.ADMIN;
   const threshold = stock.meta?.low_stock_threshold ?? 5;
 
   const set = (key) => (value) => setFilters((current) => ({ ...current, [key]: value }));
@@ -513,136 +521,161 @@ function ProductAvailability() {
                 <LivePill />
               </div>
               <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">
-                Adjust stock and switch dishes on or off. Names, prices and categories are set by the Store Manager.
+                {view === "addons"
+                  ? "Switch add-ons, and each size they come in, on or off. Names, prices and sizes are set by the Store Manager."
+                  : "Adjust stock and switch dishes on or off. Names, prices and categories are set by the Store Manager."}
               </p>
             </div>
-          </div>
 
-          <div className="mt-4">
-            <StatusSummary
-              columns={summaryCards}
-              loading={stock.isLoading}
-              onSelect={(key) => set("stock")(filters.stock === key ? "all" : key)}
+            <ViewSwitch
+              value={view}
+              onChange={setView}
+              counts={{
+                dishes: stock.isLoading ? undefined : stock.foods.length,
+                addons: addons.isLoading ? undefined : addons.addons.length,
+              }}
+              className="w-full md:w-auto"
             />
           </div>
+
+          {view === "dishes" && (
+            <div className="mt-4">
+              <StatusSummary
+                columns={summaryCards}
+                loading={stock.isLoading}
+                onSelect={(key) => set("stock")(filters.stock === key ? "all" : key)}
+              />
+            </div>
+          )}
         </header>
 
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 sm:px-6 lg:px-7">
-          {!canManage && stock.meta && (
-            <ReadOnlyNotice>Stock and availability are changed by the Store Agent (BR-29). You are viewing them read-only.</ReadOnlyNotice>
-          )}
-
-          <FilterBar
-            testId="stock-filters"
-            search={{
-              value: filters.search,
-              onChange: set("search"),
-              placeholder: "Search dish name or ID…",
-              title: "Search by dish name, ID or category",
-              label: "Search dishes",
-            }}
-            tabs={{
-              items: [
-                { key: "all", label: "ALL", count: stock.isLoading ? undefined : stock.foods.length },
-                ...stock.categories.map((category) => ({ key: String(category.id), label: category.name, count: categoryCounts[category.id] ?? 0 })),
-              ],
-              value: filters.category,
-              onChange: set("category"),
-              label: "Filter by category",
-              testIdPrefix: "category",
-            }}
-            searchBelow
-            below={
-              <>
-                <FilterSelect
-                  label="Stock"
-                  value={filters.stock}
-                  onChange={set("stock")}
-                  options={STOCK_FILTERS}
-                  active={filters.stock !== "all"}
-                  testId="filter-stock"
-                />
-                <FilterSelect
-                  label="Price"
-                  value={filters.price}
-                  onChange={set("price")}
-                  options={PRICE_FILTERS}
-                  active={filters.price !== "any"}
-                  testId="filter-price"
-                />
-                <FilterSelect
-                  label="Sort"
-                  value={filters.sort}
-                  onChange={set("sort")}
-                  options={SORTS}
-                  active={false}
-                  testId="filter-sort"
-                />
-
-                {/* Kept apart from the real filters: its values are a placeholder. */}
-                <div className="col-span-2 flex h-[34px] items-center gap-1.5 rounded-full border border-dashed border-[#e4ddd3] bg-[#fdfbf8] pl-2.5 pr-0.5 sm:col-span-1 [&_select]:h-[28px]">
-                  <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
-                    <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-[0.5px] text-[#a39f9b]">
-                      Preview
-                      <IconInfoCircle size={12} stroke={2} />
-                    </span>
-                  </Tooltip>
-                  <FilterSelect
-                    label="Sales status (preview)"
-                    value={filters.sales}
-                    onChange={set("sales")}
-                    options={[{ key: "all", label: "Any sales status" }, ...SALES_STATUS_PREVIEW]}
-                    active={filters.sales !== "all"}
-                    testId="filter-sales"
-                  />
-                </div>
-
-                <FilterMeta onClear={filtered ? () => setFilters((current) => ({ ...DEFAULTS, sort: current.sort })) : undefined}>
-                  {!stock.isLoading &&
-                    (visible.length === stock.foods.length ? `${stock.foods.length} dishes` : `${visible.length} of ${stock.foods.length} dishes`)}
-                </FilterMeta>
-              </>
-            }
-          />
-
-          {selection && pickedFoods.length > 0 && (
-            <SelectionBar
-              foods={pickedFoods}
-              onClear={clearPicked}
-              onSwitch={(on) => setConfirming({ mode: on ? "on" : "off", foods: pickedFoods })}
-              onStep={(by) => stock.stepMany(pickedFoods, by)}
-              onSoldOut={() => setConfirming({ mode: "sold_out", foods: pickedFoods })}
-            />
-          )}
-
-          {stock.isError ? (
-            <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
-              <p className="m-0 font-display text-[15px] font-semibold text-ink">The menu could not be loaded.</p>
-              <p className="m-0 font-display text-[13px] text-[#8d8884]">{stock.error?.message}</p>
-              <Button size="sm" variant="outline" onClick={() => stock.refetch()}>
-                <IconRefresh size={16} stroke={2} />
-                Try again
-              </Button>
-            </div>
-          ) : !stock.isLoading && visible.length === 0 ? (
-            <div
-              data-testid="stock-empty"
-              className="flex flex-col items-center gap-2 rounded-[16px] border border-dashed border-[#e7dfd4] bg-white/60 px-6 py-12 text-center"
-            >
-              <IconToolsKitchen2 size={28} stroke={1.6} className="text-[#cfc7bd]" />
-              <p className="m-0 font-display text-[14px] font-semibold text-ink">
-                {stock.foods.length === 0 ? "There are no dishes on the menu yet." : "No dish matches these filters."}
-              </p>
-              {filtered && (
-                <Button size="sm" variant="ghost" onClick={() => setFilters((current) => ({ ...DEFAULTS, sort: current.sort }))}>
-                  Clear filters
-                </Button>
+          {view === "addons" ? (
+            <>
+              {!canManageAddons && addons.meta && (
+                <ReadOnlyNotice>Add-ons and their sizes are switched by the Store Agent (BR-29). You are viewing them read-only.</ReadOnlyNotice>
               )}
-            </div>
-          ) : wide ? (
-            <TableView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} />
+              <AddonAvailability addons={addons} wide={wide} canManage={canManageAddons} />
+            </>
           ) : (
-            <CardView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} />
+            <>
+              {!canManage && stock.meta && (
+                <ReadOnlyNotice>Stock and availability are changed by the Store Agent (BR-29). You are viewing them read-only.</ReadOnlyNotice>
+              )}
+
+              <FilterBar
+                testId="stock-filters"
+                search={{
+                  value: filters.search,
+                  onChange: set("search"),
+                  placeholder: "Search dish name or ID…",
+                  title: "Search by dish name, ID or category",
+                  label: "Search dishes",
+                }}
+                tabs={{
+                  items: [
+                    { key: "all", label: "ALL", count: stock.isLoading ? undefined : stock.foods.length },
+                    ...stock.categories.map((category) => ({ key: String(category.id), label: category.name, count: categoryCounts[category.id] ?? 0 })),
+                  ],
+                  value: filters.category,
+                  onChange: set("category"),
+                  label: "Filter by category",
+                  testIdPrefix: "category",
+                }}
+                searchBelow
+                below={
+                  <>
+                    <FilterSelect
+                      label="Stock"
+                      value={filters.stock}
+                      onChange={set("stock")}
+                      options={STOCK_FILTERS}
+                      active={filters.stock !== "all"}
+                      testId="filter-stock"
+                    />
+                    <FilterSelect
+                      label="Price"
+                      value={filters.price}
+                      onChange={set("price")}
+                      options={PRICE_FILTERS}
+                      active={filters.price !== "any"}
+                      testId="filter-price"
+                    />
+                    <FilterSelect
+                      label="Sort"
+                      value={filters.sort}
+                      onChange={set("sort")}
+                      options={SORTS}
+                      active={false}
+                      testId="filter-sort"
+                    />
+
+                    {/* Kept apart from the real filters: its values are a placeholder. */}
+                    <div className="col-span-2 flex h-[34px] items-center gap-1.5 rounded-full border border-dashed border-[#e4ddd3] bg-[#fdfbf8] pl-2.5 pr-0.5 sm:col-span-1 [&_select]:h-[28px]">
+                      <Tooltip label={SALES_STATUS_NOTE} multiline w={240} withArrow>
+                        <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-[0.5px] text-[#a39f9b]">
+                          Preview
+                          <IconInfoCircle size={12} stroke={2} />
+                        </span>
+                      </Tooltip>
+                      <FilterSelect
+                        label="Sales status (preview)"
+                        value={filters.sales}
+                        onChange={set("sales")}
+                        options={[{ key: "all", label: "Any sales status" }, ...SALES_STATUS_PREVIEW]}
+                        active={filters.sales !== "all"}
+                        testId="filter-sales"
+                      />
+                    </div>
+
+                    <FilterMeta onClear={filtered ? () => setFilters((current) => ({ ...DEFAULTS, sort: current.sort })) : undefined}>
+                      {!stock.isLoading &&
+                        (visible.length === stock.foods.length ? `${stock.foods.length} dishes` : `${visible.length} of ${stock.foods.length} dishes`)}
+                    </FilterMeta>
+                  </>
+                }
+              />
+
+              {selection && pickedFoods.length > 0 && (
+                <SelectionBar
+                  foods={pickedFoods}
+                  onClear={clearPicked}
+                  onSwitch={(on) => setConfirming({ mode: on ? "on" : "off", foods: pickedFoods })}
+                  onStep={(by) => stock.stepMany(pickedFoods, by)}
+                  onSoldOut={() => setConfirming({ mode: "sold_out", foods: pickedFoods })}
+                />
+              )}
+
+              {stock.isError ? (
+                <div className="flex flex-col items-center gap-3 rounded-[16px] bg-white px-6 py-12 text-center ring-1 ring-[#f0e9df]">
+                  <p className="m-0 font-display text-[15px] font-semibold text-ink">The menu could not be loaded.</p>
+                  <p className="m-0 font-display text-[13px] text-[#8d8884]">{stock.error?.message}</p>
+                  <Button size="sm" variant="outline" onClick={() => stock.refetch()}>
+                    <IconRefresh size={16} stroke={2} />
+                    Try again
+                  </Button>
+                </div>
+              ) : !stock.isLoading && visible.length === 0 ? (
+                <div
+                  data-testid="stock-empty"
+                  className="flex flex-col items-center gap-2 rounded-[16px] border border-dashed border-[#e7dfd4] bg-white/60 px-6 py-12 text-center"
+                >
+                  <IconToolsKitchen2 size={28} stroke={1.6} className="text-[#cfc7bd]" />
+                  <p className="m-0 font-display text-[14px] font-semibold text-ink">
+                    {stock.foods.length === 0 ? "There are no dishes on the menu yet." : "No dish matches these filters."}
+                  </p>
+                  {filtered && (
+                    <Button size="sm" variant="ghost" onClick={() => setFilters((current) => ({ ...DEFAULTS, sort: current.sort }))}>
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+              ) : wide ? (
+                <TableView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} />
+              ) : (
+                <CardView foods={visible} loading={stock.isLoading} rowProps={rowProps} selection={selection} />
+              )}
+            </>
           )}
         </div>
       </main>

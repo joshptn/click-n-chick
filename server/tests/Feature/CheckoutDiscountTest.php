@@ -89,7 +89,6 @@ class CheckoutDiscountTest extends TestCase
             'is_available' => true,
             'is_best_seller' => false,
             'is_discountable' => true,
-            'prep_time' => 20,
         ]);
 
         $lineId = $this->actingAs($user, 'sanctum')
@@ -111,7 +110,6 @@ class CheckoutDiscountTest extends TestCase
             'is_available' => true,
             'is_best_seller' => false,
             'is_discountable' => $marked ? true : null,
-            'prep_time' => 15,
         ]);
     }
 

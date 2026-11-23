@@ -6,6 +6,7 @@ use App\Events\MenuBroadcast;
 use App\Http\Resources\FoodResource;
 use App\Models\Food;
 use App\Services\Auth\PasswordConfirmation;
+use App\Services\Catalog\AddonCarts;
 use App\Services\Catalog\PriceAnnouncer;
 use App\Services\Stock\StockReservation;
 use App\Utils\Image;
@@ -15,6 +16,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -56,7 +58,7 @@ class FoodController extends Controller implements HasMiddleware
         $category = $validated['category'] ?? null;
 
         $foods = Food::query()
-            ->with(['category', 'addons'])
+            ->with(['category', 'addons.sizes'])
             ->withHeldQuantity()
             ->when($category !== null && $category !== '' && $category !== 'all', function ($query) use ($category) {
                 is_numeric($category)
@@ -102,13 +104,17 @@ class FoodController extends Controller implements HasMiddleware
             'is_discountable' => $this->discountable($validated['is_discountable'] ?? null),
         ]);
 
+        if (array_key_exists('addon_ids', $validated)) {
+            $food->addons()->sync($validated['addon_ids'] ?? []);
+        }
+
         return $this->answer($food, 'created', $food->food_name.' was added to the menu.', 201);
     }
 
     public function show(Food $food)
     {
         return response()->json([
-            'data' => new FoodResource($food->load(['category', 'addons'])),
+            'data' => new FoodResource($food->load(['category', 'addons.sizes'])),
             'meta' => FoodResource::meta(),
         ]);
     }
@@ -174,6 +180,13 @@ class FoodController extends Controller implements HasMiddleware
 
         $food->save();
 
+        // Left alone when the form does not send it. Picks of an add-on the
+        // dish no longer offers come out of carts.
+        if (array_key_exists('addon_ids', $validated)) {
+            $food->addons()->sync($validated['addon_ids'] ?? []);
+            app(AddonCarts::class)->tidyDish($food);
+        }
+
         if ($newThumbnail !== null) {
             $this->forgetImage($oldThumbnail);
         }
@@ -207,7 +220,7 @@ class FoodController extends Controller implements HasMiddleware
             'message' => $food->is_available
                 ? $food->food_name.' is back on the menu.'
                 : $food->food_name.' was archived. Customers no longer see it on the menu.',
-            'data' => new FoodResource($food->load(['category', 'addons'])),
+            'data' => new FoodResource($food->load(['category', 'addons.sizes'])),
         ]);
     }
 
@@ -269,6 +282,9 @@ class FoodController extends Controller implements HasMiddleware
             'category_id' => ['required', 'integer', 'exists:categories,id'],
             'is_available' => ['sometimes', 'boolean'],
             'is_discountable' => ['sometimes', 'nullable', 'boolean'],
+            // The add-ons offered with it. Sent empty (null) to offer none.
+            'addon_ids' => ['sometimes', 'nullable', 'array', 'max:200'],
+            'addon_ids.*' => ['integer', 'distinct', Rule::exists('addons', 'id')->whereNull('deleted_at')],
         ];
     }
 
@@ -298,7 +314,7 @@ class FoodController extends Controller implements HasMiddleware
 
     private function answer(Food $food, string $event, string $message, int $status = 200)
     {
-        $food->load(['category', 'addons']);
+        $food->load(['category', 'addons.sizes']);
 
         $this->broadcast($food, $event);
 

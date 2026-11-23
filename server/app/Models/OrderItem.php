@@ -40,11 +40,15 @@ class OrderItem extends Model
         return $this->belongsTo(Food::class)->withTrashed();
     }
 
-    /** Add-ons selected for this line, with the price snapshot on the pivot. */
+    /**
+     * Add-ons selected for this line, with the price snapshot and the size on
+     * the pivot. Includes deleted add-ons: an order keeps what it was sold with.
+     */
     public function addons()
     {
         return $this->belongsToMany(Addon::class, 'order_item_addons')
-            ->withPivot('unit_price')
+            ->withPivot('unit_price', 'size')
+            ->withTrashed()
             ->withTimestamps();
     }
 

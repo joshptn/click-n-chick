@@ -6,6 +6,7 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\User;
+use App\Services\Catalog\AddonPicks;
 use Illuminate\Support\Collection;
 
 class AdvanceQuote
@@ -86,7 +87,7 @@ class AdvanceQuote
             return collect();
         }
 
-        $query = $cart->items()->with(['food', 'selectedAddons']);
+        $query = $cart->items()->with(['food', 'selectedAddons.sizes']);
 
         if ($ids !== null) {
             $clean = collect($ids)->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
@@ -102,7 +103,8 @@ class AdvanceQuote
             ->filter(fn (CartItem $item) => $item->food !== null)
             ->map(function (CartItem $item) {
                 $food = $item->food;
-                $addons = $item->selectedAddons;
+                // Each in the size picked; today's switches do not apply to another day.
+                $addons = $item->selectedAddons->map(fn ($addon) => AddonPicks::describe($addon))->values();
 
                 $addonTotal = (float) $addons->sum('addon_price');
                 $unitPrice = (float) $food->price + $addonTotal;
@@ -115,11 +117,7 @@ class AdvanceQuote
                     'quantity' => $item->quantity,
                     'base_price' => (float) $food->price,
                     'is_discountable' => (bool) $food->is_discountable,
-                    'addons' => $addons->map(fn ($addon) => [
-                        'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
-                        'addon_price' => (float) $addon->addon_price,
-                    ])->values()->all(),
+                    'addons' => $addons->all(),
                     'addons_total' => $addonTotal,
                     'unit_price' => $unitPrice,
                     'subtotal' => round($unitPrice * $item->quantity, 2),

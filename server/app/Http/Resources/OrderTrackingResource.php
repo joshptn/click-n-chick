@@ -79,7 +79,9 @@ class OrderTrackingResource extends JsonResource
                 'addons' => $item->relationLoaded('addons')
                     ? $item->addons->map(fn ($addon) => [
                         'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
+                        // With the size picked: "Iced Tea (Large)".
+                        'addon_name' => $addon->chosen_name,
+                        'size' => $addon->pickedSize(),
                     ])->values()
                     : [],
             ])->values()),

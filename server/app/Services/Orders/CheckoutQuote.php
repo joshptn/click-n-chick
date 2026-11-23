@@ -7,6 +7,7 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\User;
+use App\Services\Catalog\AddonPicks;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -49,6 +50,11 @@ class CheckoutQuote
                     ? $unavailable->first()['food_name'].' just sold out. Remove it to continue.'
                     : $unavailable->count().' of your items just sold out. Remove them to continue.',
             ];
+        }
+
+        // An add-on, or its size, switched off since it went in the cart.
+        if ($addonBlocker = AddonPicks::blocker($lines->filter(fn (array $line) => $line['is_orderable']))) {
+            $blockers[] = $addonBlocker;
         }
 
         // The same dish can sit on two lines with different add-ons, so the count
@@ -144,7 +150,7 @@ class CheckoutQuote
             return collect();
         }
 
-        $query = $cart->items()->with(['food' => fn ($food) => $food->withHeldQuantity(), 'selectedAddons']);
+        $query = $cart->items()->with(['food' => fn ($food) => $food->withHeldQuantity(), 'selectedAddons.sizes']);
 
         if ($ids !== null) {
             $clean = collect($ids)->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
@@ -158,7 +164,8 @@ class CheckoutQuote
 
         return $query->orderByDesc('id')->get()->map(function (CartItem $item) {
             $food = $item->food;
-            $addons = $item->selectedAddons;
+            // Each in the size picked, at what it costs today.
+            $addons = $item->selectedAddons->map(fn ($addon) => AddonPicks::describe($addon))->values();
 
             $addonTotal = (float) $addons->sum('addon_price');
             $unitPrice = (float) ($food->price ?? 0) + $addonTotal;
@@ -171,12 +178,9 @@ class CheckoutQuote
                 'quantity' => $item->quantity,
                 'base_price' => (float) ($food->price ?? 0),
                 'is_discountable' => (bool) ($food?->is_discountable ?? false),
-                'addons' => $addons->map(fn ($addon) => [
-                    'id' => $addon->id,
-                    'addon_name' => $addon->addon_name,
-                    'addon_price' => (float) $addon->addon_price,
-                ])->values()->all(),
+                'addons' => $addons->all(),
                 'addons_total' => $addonTotal,
+                'unavailable_addons' => $addons->where('is_available', false)->pluck('addon_name')->values()->all(),
                 'unit_price' => $unitPrice,
                 'subtotal' => round($unitPrice * $item->quantity, 2),
                 'is_orderable' => $food?->is_orderable ?? false,

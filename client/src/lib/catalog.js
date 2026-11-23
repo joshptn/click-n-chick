@@ -42,6 +42,12 @@ export function saveFood({ id, values, image, password }) {
   // Discount: Yes is stored, None is left null by the server (FR-05.9).
   form.append("is_discountable", values.is_discountable === "yes" ? "1" : "0");
 
+  // The add-ons offered with it. Empty is sent as "" (none); null leaves them as they are.
+  if (Array.isArray(values.addon_ids)) {
+    if (values.addon_ids.length === 0) form.append("addon_ids", "");
+    else values.addon_ids.forEach((addonId) => form.append("addon_ids[]", String(addonId)));
+  }
+
   if (image) form.append("thumbnail", image);
   if (password) form.append("password", password);
 

@@ -34,7 +34,6 @@ class GuestCartMergeTest extends TestCase
             'stock_quantity' => 20,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 20,
         ], $overrides));
     }
 

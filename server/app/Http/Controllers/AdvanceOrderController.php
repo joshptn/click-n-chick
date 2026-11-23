@@ -104,6 +104,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                         OrderItemAddon::create([
                             'order_item_id' => $item->id,
                             'addon_id' => $addon['id'],
+                            'size' => $addon['size'] ?? null,
                             'unit_price' => $addon['addon_price'],
                         ]);
                     }

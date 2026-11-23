@@ -381,7 +381,6 @@ class OrderTrackingTest extends TestCase
             'thumbnail' => 'https://example.test/chicken.jpg',
             'stock_quantity' => 10,
             'is_available' => true,
-            'prep_time' => 20,
         ]);
 
         $addon = Addon::create([

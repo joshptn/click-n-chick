@@ -3,7 +3,6 @@ import { Modal } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconArrowLeft,
-  IconClock,
   IconDiscount2,
   IconMinus,
   IconPlus,
@@ -14,9 +13,61 @@ import {
 import DishImage from "./DishImage";
 import { fetchFood, formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
+/** What a picked add-on costs: its size's price, or its one price. */
+function pickPrice(addon, size) {
+  if (!addon) return 0;
+  if (!size) return Number(addon.addon_price ?? 0);
+
+  return Number(addon.sizes?.find((row) => row.size === size)?.price ?? addon.addon_price ?? 0);
+}
+
+/**
+ * An add-on that comes in sizes (decided 2026-11-24): the customer picks it by
+ * picking a size, and picks the same size again to leave it off.
+ */
+function SizedAddon({ addon, picked, onPick }) {
+  const checked = picked !== undefined;
+
+  return (
+    <div
+      className={`col-span-2 rounded-[12px] border-2 px-3 py-2.5 transition-colors sm:col-span-3 ${
+        checked ? "border-brand-500 bg-[#fff6ee]" : "border-transparent bg-[#faf7f3]"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="[overflow-wrap:anywhere] font-display text-[12.5px] font-semibold leading-tight text-ink">{addon.addon_name}</span>
+        <span className="shrink-0 font-display text-[11.5px] font-semibold text-[#8d8884]">{checked ? "Tap again to remove" : "Pick a size"}</span>
+      </div>
+      <div role="radiogroup" aria-label={`${addon.addon_name} size`} className="mt-2 flex flex-wrap gap-1.5">
+        {addon.sizes.map((size) => {
+          const on = picked === size.size;
+
+          return (
+            <button
+              key={size.size}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onPick(addon.id, on ? undefined : size.size)}
+              data-testid={`addon-${addon.id}-${size.size}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-display font-semibold transition-colors ${
+                on ? "border-brand-500 bg-brand-500" : "border-[#ece6de] bg-white hover:border-brand-300"
+              }`}
+            >
+              <span className={`text-[12px] ${on ? "text-white" : "text-ink"}`}>{size.label}</span>
+              <span className={`text-[12px] ${on ? "text-white" : "text-brand-600"}`}>+{formatPeso(size.price)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdvance = false }) {
   const [quantity, setQuantity] = useState(1);
-  const [selectedAddons, setSelectedAddons] = useState([]);
+  // add-on id -> the size picked, or null for one without sizes
+  const [picks, setPicks] = useState({});
 
   // The menu listing already carries everything shown here, add-ons included,
   // and it is the copy realtime keeps current. Only a dish handed over without
@@ -34,7 +85,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
 
   useEffect(() => {
     setQuantity(1);
-    setSelectedAddons([]);
+    setPicks({});
   }, [food?.id, opened]);
 
   const addonGroups = useMemo(() => detail?.addon_groups ?? [], [detail]);
@@ -44,10 +95,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
     [addonGroups]
   );
 
-  const addonsTotal = selectedAddons.reduce(
-    (sum, id) => sum + Number(addonIndex.get(id)?.addon_price ?? 0),
-    0
-  );
+  const addonsTotal = Object.entries(picks).reduce((sum, [id, size]) => sum + pickPrice(addonIndex.get(Number(id)), size), 0);
 
   if (!detail) return null;
   
@@ -57,11 +105,25 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
 
   const maxQuantity = isAdvance ? 99 : (detail.stock_quantity ?? 99);
 
-  const toggleAddon = (id) =>
-    setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  /** `size`: the size picked, null for an add-on without sizes, undefined to leave it off. */
+  const pick = (id, size) =>
+    setPicks((current) => {
+      const next = { ...current };
+
+      if (size === undefined) delete next[id];
+      else next[id] = size;
+
+      return next;
+    });
+
+  const toggleAddon = (id) => pick(id, id in picks ? undefined : null);
 
   const handleAdd = () => {
-    onAdd({ foodId: detail.id, quantity, addonIds: selectedAddons });
+    onAdd({
+      foodId: detail.id,
+      quantity,
+      addons: Object.entries(picks).map(([id, size]) => ({ id: Number(id), size })),
+    });
   };
 
   return (
@@ -98,12 +160,6 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </span>
           )}
 
-          {detail.prep_time ? (
-            <span className="absolute bottom-5 left-5 inline-flex items-center gap-1.5 rounded-full bg-cocoa-900/80 px-3 py-1.5 font-display text-[11.5px] font-semibold text-white backdrop-blur-sm">
-              <IconClock size={13} stroke={2.2} aria-hidden="true" />
-              {detail.prep_time} mins
-            </span>
-          ) : null}
         </div>
         <div className="flex max-h-[88dvh] min-h-0 flex-col overflow-y-auto overflow-x-hidden bg-white px-6 pb-6 pt-5 contain-paint sm:px-8">
 
@@ -171,7 +227,11 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
 
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     {group.addons.map((addon) => {
-                      const checked = selectedAddons.includes(addon.id);
+                      if (addon.sizes?.length > 0) {
+                        return <SizedAddon key={addon.id} addon={addon} picked={picks[addon.id]} onPick={pick} />;
+                      }
+
+                      const checked = addon.id in picks;
 
                       return (
                         <label

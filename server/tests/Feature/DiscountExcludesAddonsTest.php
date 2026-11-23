@@ -76,7 +76,6 @@ class DiscountExcludesAddonsTest extends TestCase
             'is_available' => true,
             'is_best_seller' => false,
             'is_discountable' => true,
-            'prep_time' => 15,
         ]);
 
         $addon = Addon::create([

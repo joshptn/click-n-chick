@@ -18,10 +18,11 @@ import {
   imageProblem,
   saveFood,
 } from "../../lib/catalog";
+import { ADDONS_KEY, addonPriceText, fetchAddons } from "../../lib/addons";
 import { thumbnailImage } from "../../lib/images";
 import { fetchCategories, formatPeso } from "../../lib/menu";
 
-const EMPTY = { food_name: "", category_id: "", description: "", price: "", is_discountable: "none" };
+const EMPTY = { food_name: "", category_id: "", description: "", price: "", is_discountable: "none", addon_ids: [] };
 
 const fieldClass = (error) =>
   `w-full rounded-[10px] border bg-[#f9f8f6] px-3.5 font-display text-[14px] text-ink outline-none transition-colors placeholder:text-[#b8b2aa] focus:bg-white ${
@@ -144,6 +145,96 @@ function ImagePicker({ current, file, onPick, onClear, error }) {
 }
 
 /**
+ * The add-ons offered with the dish (decided 2026-11-24), by group. The same
+ * link the add-on form sets from the other side.
+ */
+function AddonPicker({ addons, loading, failed, value, onChange }) {
+  const picked = new Set(value);
+
+  const groups = addons.reduce((all, addon) => {
+    (all[addon.addon_group] ??= []).push(addon);
+
+    return all;
+  }, {});
+
+  const toggle = (id) => onChange(picked.has(id) ? value.filter((item) => item !== id) : [...value, id]);
+
+  if (loading) return <Skeleton height={72} radius={12} />;
+
+  if (failed) {
+    return <p className="m-0 font-display text-[12.5px] text-[#e5322d]">The add-ons could not be loaded, so this dish keeps the ones it has.</p>;
+  }
+
+  if (addons.length === 0) {
+    return (
+      <p className="m-0 font-display text-[12.5px] text-[#8d8884]">
+        There are no add-ons yet. Add them from Menu Management, under Add-ons.
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-[12px] border border-[#ece8e2] bg-white px-3.5 py-3" data-testid="product-addons">
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <span className="font-display text-[11.5px] text-[#8d8884]">
+          {value.length === 0 ? "None picked" : `${value.length} picked`}
+        </span>
+        <span className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(addons.map((addon) => String(addon.id)))}
+            className="rounded-full bg-[#fff6ec] px-2.5 py-1 font-display font-semibold text-brand-600 hover:bg-[#ffecd9]"
+          >
+            <span className="text-[11px]">Every add-on</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            disabled={value.length === 0}
+            className="rounded-full px-2.5 py-1 font-display font-semibold text-[#8d8884] hover:bg-[#f4f1ec] disabled:opacity-40"
+          >
+            <span className="text-[11px]">None</span>
+          </button>
+        </span>
+      </div>
+
+      {Object.keys(groups)
+        .sort((a, b) => a.localeCompare(b))
+        .map((group) => (
+          <div key={group} className="mb-2.5 last:mb-0">
+            <p className="m-0 mb-1.5 font-display text-[10.5px] font-bold uppercase tracking-[0.6px] text-[#a39f9b]">{group}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {groups[group]
+                .sort((a, b) => a.addon_name.localeCompare(b.addon_name))
+                .map((addon) => {
+                  const on = picked.has(String(addon.id));
+
+                  return (
+                    <button
+                      key={addon.id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      onClick={() => toggle(String(addon.id))}
+                      data-testid={`product-addon-${addon.id}`}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-display font-semibold transition-colors ${
+                        on ? "border-brand-400 bg-[#fff6ec] text-brand-700" : "border-[#ece8e2] bg-[#f9f8f6] text-[#5f5b58] hover:bg-white"
+                      }`}
+                    >
+                      <span className="text-[12px]">{addon.addon_name}</span>
+                      <span className={`text-[12px] font-medium ${on ? "text-brand-600" : "text-[#a39f9b]"}`}>{addonPriceText(addon)}</span>
+                      {!addon.is_available && <span className="text-[10.5px] font-medium text-[#a39f9b]">(archived)</span>}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+/**
  * Add Product and Edit Product (UC-MENU-010, -011, -013, -014).
  *
  * One form for both. A new dish needs a photo; an edit keeps the photo it has
@@ -166,6 +257,7 @@ function ProductForm() {
   const [loadedId, setLoadedId] = useState(null);
 
   const categories = useQuery({ queryKey: CATEGORIES_KEY, queryFn: fetchCategories, staleTime: 60 * 1000 });
+  const addons = useQuery({ queryKey: ADDONS_KEY, queryFn: ({ signal }) => fetchAddons({ signal }), staleTime: 15 * 1000 });
 
   const existing = useQuery({
     queryKey: catalogItemKey(id),
@@ -192,6 +284,7 @@ function ProductForm() {
         description: food.description ?? "",
         price: String(food.price ?? ""),
         is_discountable: food.is_discountable ? "yes" : "none",
+        addon_ids: (food.addon_ids ?? []).map(String),
       });
     }
   }, [fresh, food, loadedId]);
@@ -209,7 +302,8 @@ function ProductForm() {
   const priceChanged = editing && food && values.price !== "" && Number(values.price) !== Number(food.price);
 
   const save = useMutation({
-    mutationFn: (password) => saveFood({ id, values, image, password }),
+    // Without the add-on list the picks are unknown, so the dish keeps the ones it has.
+    mutationFn: (password) => saveFood({ id, values: addons.isError ? { ...values, addon_ids: null } : values, image, password }),
     onSuccess: (response) => {
       const saved = response?.data;
 
@@ -469,6 +563,19 @@ function ProductForm() {
                           className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[#a39f9b]"
                         />
                       </div>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <Label>Add-ons</Label>
+                      <AddonPicker
+                        addons={addons.data?.data ?? []}
+                        loading={addons.isPending}
+                        failed={addons.isError}
+                        value={values.addon_ids}
+                        onChange={(ids) => setValues((current) => ({ ...current, addon_ids: ids }))}
+                      />
+                      <p className="m-0 mt-1.5 font-display text-[11.5px] text-[#a39f9b]">Optional — customers can pick these with the dish</p>
+                      <FieldError message={errors.addon_ids} />
                     </div>
 
                     <div className="sm:col-span-2">
