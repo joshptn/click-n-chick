@@ -64,6 +64,8 @@ class OrderRecordResource extends JsonResource
 
             'total' => (float) ($this->total_amount ?? $this->total_price ?? 0),
             'discount_amount' => (float) $this->discount_amount,
+            // The VAT part of discount_amount, shown as its own line.
+            'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
             'payment_status' => $paid === null ? 'unpaid' : 'paid',
             'payment_verified' => (bool) ($this->payment_verified ?? $paid !== null),
             // Decided 2026-11-23: the refund lives on the payment. An extra
@@ -111,7 +113,9 @@ class OrderRecordResource extends JsonResource
                 'addons' => $item->relationLoaded('addons')
                     ? $item->addons->map(fn ($addon) => [
                         'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
+                        // With the size picked: "Iced Tea (Large)".
+                        'addon_name' => $addon->chosen_name,
+                        'size' => $addon->pickedSize(),
                         'unit_price' => $addon->pivot?->unit_price === null ? null : (float) $addon->pivot->unit_price,
                     ])->values()
                     : [],

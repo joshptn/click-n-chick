@@ -94,7 +94,8 @@ function AdvanceCheckout() {
   }, [cartCount, cartLoading, navigate]);
 
   const submit = useMutation({
-    mutationFn: () => submitAdvanceOrder(quoteInput),
+    // With the total on screen: refused (PRICE_CHANGED) if prices moved since.
+    mutationFn: () => submitAdvanceOrder({ ...quoteInput, expected_total: quote?.total }),
     onSuccess: (payload) => {
       queryClient.invalidateQueries({ queryKey: ["cart", CART_MODE.ADVANCE] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -102,6 +103,7 @@ function AdvanceCheckout() {
       navigate(`/advance-order/sent/${payload.order.id}`, { replace: true, state: { order: payload.order } });
     },
     onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
       toast.error(error.message, "Could not send your request");
     },
   });

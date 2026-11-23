@@ -64,7 +64,10 @@ export type Order = {
     addons: { id: number; addon_name: string }[];
   }[];
   subtotal: number;
+  /** Everything the Senior/PWD discount took off, VAT exemption included. */
   discount_amount: number;
+  /** The VAT part of discount_amount (decided 2026-11-23). */
+  vat_exempt_amount: number;
   delivery_fee: number;
   total: number;
 };
@@ -230,6 +233,22 @@ export function statusTone(order: Order): "live" | "done" | "cancelled" {
 }
 
 /**
+ * A placed order's Senior/PWD saving as receipt lines (decided 2026-11-23, as on
+ * the web): the VAT exemption, then the discount itself. discount_amount is
+ * everything taken off; an order discounted before the VAT exemption has no VAT line.
+ */
+export function discountLines(order: Pick<Order, "discount_amount" | "vat_exempt_amount">): { key: string; label: string; amount: number }[] {
+  const total = Number(order.discount_amount) || 0;
+
+  if (total <= 0) return [];
+
+  const vat = Math.min(Number(order.vat_exempt_amount) || 0, total);
+  const lines = vat > 0 ? [{ key: "vat", label: "VAT exemption", amount: vat }] : [];
+
+  return [...lines, { key: "discount", label: "Senior/PWD discount", amount: Math.round((total - vat) * 100) / 100 }];
+}
+
+/**
  * The refund under a cancelled paid order's total (decided 2026-11-23, as on
  * the web): "Refund pending", "Refunded", or "Refunded amount" ₱0.00 when the
  * store chose no refund. Null for an order that is not cancelled or never paid.
@@ -266,7 +285,7 @@ export function cancelPrompt(order: Order | null) {
     action: withdrawing ? "Withdraw request" : "Cancel order",
     title: withdrawing ? "Withdraw this request?" : "Cancel this order?",
     body: `${outcome} ${consequence}${terms?.refundable ? "" : " This cannot be undone."}`,
-    confirm: withdrawing ? "Yes, withdraw it" : "Yes, cancel it",
+    confirm: withdrawing ? "Withdraw request" : "Cancel order",
     keep: withdrawing ? "Keep my request" : "Keep my order",
   };
 }

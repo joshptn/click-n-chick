@@ -300,6 +300,11 @@ export function rejectDiscountClaim(id, reason) {
   return api.post(`/api/admin/discount-claims/${id}/reject`, { rejection_reason: reason });
 }
 
+/** Back to Pending; the server asks for the password every time (decided 2026-11-23). */
+export function undoDiscountClaim(id, password) {
+  return api.post(`/api/admin/discount-claims/${id}/undo`, { password });
+}
+
 const ADVANCE_NOTICE_TYPES = ["advance_request", "advance_due", "advance_order"];
 
 /**

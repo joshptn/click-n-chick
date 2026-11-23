@@ -151,6 +151,22 @@ export function itemsSummary(items = []) {
 }
 
 /**
+ * A placed order's Senior/PWD saving as receipt lines (decided 2026-11-23): the
+ * VAT exemption, then the discount itself. discount_amount is everything taken
+ * off; an order discounted before the VAT exemption has no VAT line.
+ */
+export function discountLines(order, label = "SC/PWD discount") {
+  const total = Number(order?.discount_amount) || 0;
+
+  if (total <= 0) return [];
+
+  const vat = Math.min(Number(order?.vat_exempt_amount) || 0, total);
+  const lines = vat > 0 ? [{ key: "vat", label: "VAT exemption", amount: vat }] : [];
+
+  return [...lines, { key: "discount", label, amount: Math.round((total - vat) * 100) / 100 }];
+}
+
+/**
  * The refund under a cancelled paid order's total (decided 2026-11-23):
  * "Refund pending", "Refunded", or "Refunded amount" ₱0.00 when the store
  * chose no refund. Null for an order that is not cancelled or never paid.
@@ -190,7 +206,7 @@ export function cancelPrompt(order) {
     action: withdrawing ? "Withdraw request" : "Cancel order",
     title: withdrawing ? "Withdraw this request?" : "Cancel this order?",
     body: `${outcome} ${consequence}`,
-    confirm: withdrawing ? "Yes, withdraw it" : "Yes, cancel it",
+    confirm: withdrawing ? "Withdraw request" : "Cancel order",
     keep: withdrawing ? "Keep my request" : "Keep my order",
     refundable: Boolean(terms?.refundable),
   };

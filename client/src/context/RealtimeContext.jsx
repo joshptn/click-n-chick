@@ -121,6 +121,26 @@ export function RealtimeProvider({ children }) {
     echo.channel("menu")
       .subscribed(() => markSubscribed("menu"))
       .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }))
+      // Prices changed, one dish or a bulk change (FR-02.5). Carts are priced
+      // on every read, so refetching is what makes their totals float; open
+      // checkout quotes are asked again too.
+      .listen(".prices", () => {
+        queryClient.invalidateQueries({ queryKey: ["foods"] });
+        queryClient.invalidateQueries({ queryKey: ["cart"] });
+        queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+        queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+      })
+      // An add-on, or one of its sizes, added, changed, switched or deleted
+      // (decided 2026-11-24): the dish screens offer it, carts price it, and
+      // both staff pages list it.
+      .listen(".addon", () => {
+        queryClient.invalidateQueries({ queryKey: ["addons"] });
+        queryClient.invalidateQueries({ queryKey: ["foods"] });
+        queryClient.invalidateQueries({ queryKey: ["food"] });
+        queryClient.invalidateQueries({ queryKey: ["cart"] });
+        queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+        queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+      })
       // A category added, renamed or deleted by the Store Manager. A rename also
       // changes the name every dish in it carries, so the dishes come too.
       .listen(".category", (payload) => {

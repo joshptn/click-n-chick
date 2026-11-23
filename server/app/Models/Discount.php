@@ -26,6 +26,8 @@ class Discount extends Model
 
     public const MINIMUM_PERCENTAGE = 20.00;
 
+    public const VAT_RATE = 12.00;
+
     public static function currentPercentage(): float
     {
         return max(
@@ -49,7 +51,7 @@ class Discount extends Model
     protected function casts(): array
     {
         return [
-            'vat_exempt' => 'boolean',
+            'is_latest' => 'boolean',
             'verified_at' => 'datetime',
         ];
     }

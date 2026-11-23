@@ -7,6 +7,7 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\User;
+use App\Services\Catalog\AddonPicks;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -49,6 +50,11 @@ class CheckoutQuote
                     ? $unavailable->first()['food_name'].' just sold out. Remove it to continue.'
                     : $unavailable->count().' of your items just sold out. Remove them to continue.',
             ];
+        }
+
+        // An add-on, or its size, switched off since it went in the cart.
+        if ($addonBlocker = AddonPicks::blocker($lines->filter(fn (array $line) => $line['is_orderable']))) {
+            $blockers[] = $addonBlocker;
         }
 
         // The same dish can sit on two lines with different add-ons, so the count
@@ -103,11 +109,11 @@ class CheckoutQuote
             $blockers[] = $contact['blocker'];
         }
 
-        $discountBase = round((float) $lines->sum(
-            fn (array $line) => $line['base_price'] * $line['quantity']
-        ), 2);
+        // One unit of the highest-priced dish marked for it (FR-05.4).
+        $discountLine = StatutoryDiscount::pick($lines);
+        $discountBase = (float) ($discountLine['base_price'] ?? 0);
 
-        $discount = $this->discount($user, $discountBase, (bool) ($input['apply_discount'] ?? false));
+        $discount = $this->discount($user, $discountLine, (bool) ($input['apply_discount'] ?? false));
 
         if ($discount['blocker']) {
             $blockers[] = $discount['blocker'];
@@ -144,7 +150,7 @@ class CheckoutQuote
             return collect();
         }
 
-        $query = $cart->items()->with(['food' => fn ($food) => $food->withHeldQuantity(), 'selectedAddons']);
+        $query = $cart->items()->with(['food' => fn ($food) => $food->withHeldQuantity(), 'selectedAddons.sizes']);
 
         if ($ids !== null) {
             $clean = collect($ids)->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
@@ -158,7 +164,8 @@ class CheckoutQuote
 
         return $query->orderByDesc('id')->get()->map(function (CartItem $item) {
             $food = $item->food;
-            $addons = $item->selectedAddons;
+            // Each in the size picked, at what it costs today.
+            $addons = $item->selectedAddons->map(fn ($addon) => AddonPicks::describe($addon))->values();
 
             $addonTotal = (float) $addons->sum('addon_price');
             $unitPrice = (float) ($food->price ?? 0) + $addonTotal;
@@ -170,12 +177,10 @@ class CheckoutQuote
                 'thumbnail' => $food->thumbnail ?? null,
                 'quantity' => $item->quantity,
                 'base_price' => (float) ($food->price ?? 0),
-                'addons' => $addons->map(fn ($addon) => [
-                    'id' => $addon->id,
-                    'addon_name' => $addon->addon_name,
-                    'addon_price' => (float) $addon->addon_price,
-                ])->values()->all(),
+                'is_discountable' => (bool) ($food?->is_discountable ?? false),
+                'addons' => $addons->all(),
                 'addons_total' => $addonTotal,
+                'unavailable_addons' => $addons->where('is_available', false)->pluck('addon_name')->values()->all(),
                 'unit_price' => $unitPrice,
                 'subtotal' => round($unitPrice * $item->quantity, 2),
                 'is_orderable' => $food?->is_orderable ?? false,
@@ -368,7 +373,7 @@ class CheckoutQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    private function discount(?User $user, float $base, bool $requested): array
+    private function discount(?User $user, ?array $line, bool $requested): array
     {
         // A guest may not claim a statutory discount. Asking for one is a
         // blocker rather than a silent refusal, so a crafted request cannot
@@ -382,7 +387,11 @@ class CheckoutQuote
                 'percentage' => Discount::currentPercentage(),
                 'used_today' => false,
                 'can_apply' => false,
+                'vat_rate' => Discount::VAT_RATE,
                 'available_amount' => 0.0,
+                'vat_exempt_amount' => 0.0,
+                'percentage_amount' => 0.0,
+                'item' => null,
                 'applied' => false,
                 'amount' => 0.0,
                 'blocker' => $requested ? [
@@ -397,7 +406,9 @@ class CheckoutQuote
 
         $percentage = Discount::currentPercentage();
         $usedToday = $approved && $this->usedToday($user);
-        $available = $approved ? round($base * ($percentage / 100), 2) : 0.0;
+        $base = (float) ($line['base_price'] ?? 0);
+        $saving = $approved ? StatutoryDiscount::for($base, $percentage) : StatutoryDiscount::for(0, $percentage);
+        $available = $saving['total'];
 
         $status = match (true) {
             $approved => 'approved',
@@ -412,15 +423,20 @@ class CheckoutQuote
         $blocker = null;
 
         if ($requested && ! $canApply) {
-            $blocker = $usedToday
-                ? [
+            $blocker = match (true) {
+                $usedToday => [
                     'code' => 'DISCOUNT_ALREADY_USED',
                     'message' => 'You have already used your discount today. It resets tomorrow.',
-                ]
-                : [
+                ],
+                $approved && $line === null => [
+                    'code' => 'DISCOUNT_NO_ELIGIBLE_ITEM',
+                    'message' => 'None of the items in your order take the Senior/PWD discount. Continue without it.',
+                ],
+                default => [
                     'code' => 'DISCOUNT_NOT_ELIGIBLE',
                     'message' => 'Your Senior Citizen or PWD discount has not been approved yet.',
-                ];
+                ],
+            };
         }
 
         return [
@@ -431,8 +447,15 @@ class CheckoutQuote
             'percentage' => $percentage,
             'used_today' => $usedToday,
             'can_apply' => $canApply,
+            'vat_rate' => Discount::VAT_RATE,
+            // What using it would take off: the VAT first, then the rate.
             'available_amount' => $available,
+            'vat_exempt_amount' => $saving['vat_exempt'],
+            'percentage_amount' => $saving['discount'],
+            // The one dish it goes on, or null when none in the order is marked.
+            'item' => StatutoryDiscount::describe($line),
             'applied' => $applied,
+            // Everything taken off, VAT exemption included (orders.discount_amount).
             'amount' => $applied ? $available : 0.0,
             'blocker' => $blocker,
         ];

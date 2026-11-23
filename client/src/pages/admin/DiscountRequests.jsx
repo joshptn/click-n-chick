@@ -6,6 +6,8 @@ import { AnimatePresence } from "framer-motion";
 import { IconIdBadge2, IconRefresh } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import ConfirmActionModal from "../../components/manager/ConfirmActionModal";
+import PasswordConfirmModal from "../../components/manager/PasswordConfirmModal";
 import ClaimCard from "../../components/staff/ClaimCard";
 import ClaimReviewPanel from "../../components/staff/ClaimReviewPanel";
 import FilterBar from "../../components/staff/FilterBar";
@@ -15,7 +17,7 @@ import RejectClaimModal from "../../components/staff/RejectClaimModal";
 import StaffLayout from "../../components/staff/StaffLayout";
 import Button from "../../components/ui/Button";
 import { useDiscountQueue } from "../../hooks/useDiscountQueue";
-import { CLAIM_TABS, matchesClaim } from "../../lib/agent";
+import { CLAIM_TABS, CLAIM_TYPE, claimLabel, claimantName, matchesClaim } from "../../lib/agent";
 import { canOperate } from "../../lib/roles";
 
 const EMPTY = {
@@ -37,6 +39,37 @@ function SkeletonList() {
   );
 }
 
+function decisionCopy({ kind, claim, reason }, percentage) {
+  const name = claimantName(claim);
+  const type = CLAIM_TYPE[claim.discount_type]?.short ?? "discount";
+
+  if (kind === "approve") {
+    return {
+      title: `Approve ${name}'s ${type} discount?`,
+      points: [
+        `They get the VAT exemption and ${percentage ?? 20}% discount on one marked item per order, once a day, from now on.`,
+        "Make sure the ID photo is clear, valid, and matches the customer.",
+      ],
+      confirmLabel: "Approve",
+    };
+  }
+
+  return {
+    title: `Reject ${name}'s application?`,
+    points: [`They are told: "${reason}"`, "They can apply again with a new photo."],
+    confirmLabel: "Reject",
+  };
+}
+
+function undoCopy(claim) {
+  const name = claimantName(claim);
+  const approved = claim.discount_status === "approved";
+
+  return approved
+    ? `The application goes back to Pending for a fresh review, and ${name} is told. Their discount cannot be used until it is approved again; orders already placed keep it. Enter your password to confirm.`
+    : `The application goes back to Pending for a fresh review, and ${name} is told. Enter your password to confirm.`;
+}
+
 /**
  * Dicsount Requests: Senior Citizen and PWD IDs waiting for a Store Agent.
  *
@@ -52,6 +85,11 @@ function DiscountRequests() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [rejecting, setRejecting] = useState(null);
+  // Decided 2026-11-23: approve and reject ask yes or no first; undo asks for
+  // the password every time.
+  const [confirming, setConfirming] = useState(null);
+  const [undoing, setUndoing] = useState(null);
+  const [undoError, setUndoError] = useState(null);
   // The wide layout picks a claim on its own; on a phone that must not pop
   // the review drawer open, so the drawer follows the agent's own taps only.
   const [tapped, setTapped] = useState(false);
@@ -123,20 +161,38 @@ function DiscountRequests() {
     document.title = "Chick N' Click";
   }, []);
 
-  const approve = async (claim) => {
+  // The hook has already said why a decision failed, so the yes/no prompt
+  // just closes either way.
+  const decide = async () => {
+    const { kind, claim, reason } = confirming;
+
     try {
-      await queue.approve(claim);
+      if (kind === "approve") await queue.approve(claim);
+      else await queue.reject(claim, reason);
     } catch {
-      // The hook has already said why.
+      // Toasted by the hook.
     }
+
+    if (kind === "reject") setRejecting(null);
   };
 
-  const confirmReject = async (reason) => {
+  const askUndo = (claim) => {
+    setUndoError(null);
+    setUndoing(claim);
+  };
+
+  const confirmUndo = async (password) => {
+    setUndoError(null);
+
     try {
-      await queue.reject(rejecting, reason);
-      setRejecting(null);
-    } catch {
-      setRejecting(null);
+      await queue.undo(undoing, password);
+      setUndoing(null);
+    } catch (error) {
+      if (["PASSWORD_CONFIRMATION_INVALID", "PASSWORD_CONFIRMATION_THROTTLED"].includes(error?.payload?.error_code)) {
+        setUndoError(error.message);
+      } else {
+        setUndoing(null);
+      }
     }
   };
 
@@ -149,8 +205,9 @@ function DiscountRequests() {
       busy={busy}
       approving={queue.isApproving}
       canAct={canAct}
-      onApprove={approve}
+      onApprove={(claim) => setConfirming({ kind: "approve", claim })}
       onReject={setRejecting}
+      onUndo={askUndo}
       nextClaim={nextClaim}
       onNext={select}
     />
@@ -275,8 +332,29 @@ function DiscountRequests() {
         claim={rejecting}
         opened={Boolean(rejecting)}
         onClose={() => setRejecting(null)}
-        onConfirm={confirmReject}
+        onConfirm={(reason) => setConfirming({ kind: "reject", claim: rejecting, reason })}
         loading={queue.isRejecting}
+      />
+
+      <ConfirmActionModal
+        opened={Boolean(confirming)}
+        onClose={() => setConfirming(null)}
+        onConfirm={decide}
+        zIndex={400}
+        danger={confirming?.kind === "reject"}
+        {...(confirming ? decisionCopy(confirming, queue.percentage) : {})}
+      />
+
+      <PasswordConfirmModal
+        opened={Boolean(undoing)}
+        onClose={() => setUndoing(null)}
+        onConfirm={confirmUndo}
+        loading={queue.isUndoing}
+        error={undoError}
+        zIndex={400}
+        title={undoing ? `Undo the decision on #${claimLabel(undoing)}?` : "Undo the decision?"}
+        description={undoing ? undoCopy(undoing) : null}
+        confirmLabel="Undo decision"
       />
     </StaffLayout>
   );

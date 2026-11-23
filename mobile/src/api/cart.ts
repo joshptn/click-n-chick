@@ -8,6 +8,10 @@ import { api } from "./client";
  */
 
 export type CartScope = "account" | "guest";
+
+export type AddonPick = { id: number; size?: string | null };
+
+export type AddToCart = { foodId: number; quantity: number; addons?: AddonPick[]; addonIds?: number[] };
 export type CartMode = "immediate" | "advance";
 
 export type CartLine = {
@@ -17,8 +21,11 @@ export type CartLine = {
   thumbnail: string | null;
   quantity: number;
   base_price: number;
-  addons: { id: number; addon_name: string; addon_price: number }[];
+  /** `addon_name` carries the size picked: "Iced Tea (Large)". */
+  addons: { id: number; addon_name: string; addon_price: number; size?: string | null }[];
   addons_total: number;
+  /** Add-ons switched off since the line was added; checkout stops on them. */
+  unavailable_addons?: string[];
   unit_price: number;
   subtotal: number;
   is_orderable: boolean;
@@ -66,10 +73,16 @@ export const cartApi = {
   get: (scope: CartScope, mode: CartMode, signal?: AbortSignal) =>
     api.get<CartPayload>(base(scope), { ...auth(scope), signal, params: { mode } }),
 
-  add: (scope: CartScope, mode: CartMode, input: { foodId: number; quantity: number; addonIds: number[] }) =>
+  /** `addons`: each with the size picked for one that comes in sizes (decided 2026-11-24). */
+  add: (scope: CartScope, mode: CartMode, input: AddToCart) =>
     api.post<CartPayload>(
       `${base(scope)}/items`,
-      { food_id: input.foodId, quantity: input.quantity, addon_ids: input.addonIds, mode },
+      {
+        food_id: input.foodId,
+        quantity: input.quantity,
+        addons: [...(input.addons ?? []), ...(input.addonIds ?? []).map((id) => ({ id }))],
+        mode,
+      },
       auth(scope)
     ),
 

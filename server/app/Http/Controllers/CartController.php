@@ -6,8 +6,10 @@ use App\Models\Addon;
 use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Food;
+use App\Services\Catalog\AddonPicks;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class CartController extends Controller
 {
@@ -61,8 +63,12 @@ class CartController extends Controller
         $validated = $request->validate([
             'food_id' => ['required', 'integer', 'exists:food,id'],
             'quantity' => ['sometimes', 'integer', 'min:1', 'max:99'],
-            'addon_ids' => ['sometimes', 'array'],
+            // What an app from before sizes sends; `addons` carries the size picked.
+            'addon_ids' => ['sometimes', 'array', 'max:50'],
             'addon_ids.*' => ['integer', 'distinct', 'exists:addons,id'],
+            'addons' => ['sometimes', 'array', 'max:50'],
+            'addons.*.id' => ['required', 'integer', 'distinct', 'exists:addons,id'],
+            'addons.*.size' => ['sometimes', 'nullable', 'string', Rule::in(array_keys(Addon::SIZES))],
             'mode' => ['sometimes', 'in:'.Cart::MODE_IMMEDIATE.','.Cart::MODE_ADVANCE],
         ]);
 
@@ -82,16 +88,23 @@ class CartController extends Controller
 
         $quantity = (int) ($validated['quantity'] ?? 1);
 
-        $addonIds = $food->addons()
-            ->whereIn('addons.id', $validated['addon_ids'] ?? [])
-            ->when(! $isAdvance, fn ($query) => $query->where('availability', true))
-            ->pluck('addons.id')
-            ->sort()
-            ->values()
-            ->all();
+        $requested = collect($validated['addon_ids'] ?? [])->mapWithKeys(fn ($id) => [(int) $id => null])->all();
 
-        $item = DB::transaction(function () use ($cart, $food, $quantity, $addonIds, $isAdvance) {
-            $existing = $this->matchingLine($cart, $food->id, $addonIds);
+        foreach ($validated['addons'] ?? [] as $pick) {
+            $requested[(int) $pick['id']] = $pick['size'] ?? null;
+        }
+
+        [$picks, $refused] = AddonPicks::resolve($food, $requested, $isAdvance);
+
+        if ($refused !== null) {
+            return response()->json([
+                'message' => $refused,
+                'error_code' => AddonPicks::ERROR_CODE,
+            ], 422);
+        }
+
+        $item = DB::transaction(function () use ($cart, $food, $quantity, $picks, $isAdvance) {
+            $existing = $this->matchingLine($cart, $food->id, $picks);
 
             if ($existing) {
                 $existing->quantity = $this->clampToStock($food, $existing->quantity + $quantity, $isAdvance);
@@ -106,7 +119,9 @@ class CartController extends Controller
                 'quantity' => $this->clampToStock($food, $quantity, $isAdvance),
             ]);
 
-            $line->selectedAddons()->sync($addonIds);
+            $line->selectedAddons()->sync(
+                collect($picks)->map(fn ($size) => ['size' => $size])->all()
+            );
 
             return $line;
         });
@@ -249,8 +264,10 @@ class CartController extends Controller
             $lines = $guest->items()->with(['food', 'selectedAddons'])->get();
 
             foreach ($lines as $line) {
-                $addonIds = $line->selectedAddons->pluck('id')->sort()->values()->all();
-                $existing = $this->matchingLine($target, $line->food_id, $addonIds);
+                $picks = $line->selectedAddons
+                    ->mapWithKeys(fn (Addon $addon) => [(int) $addon->id => $addon->pickedSize()])
+                    ->all();
+                $existing = $this->matchingLine($target, $line->food_id, $picks);
 
                 if ($existing) {
                     $existing->quantity = $this->clampToStock($line->food, $existing->quantity + $line->quantity);
@@ -282,14 +299,16 @@ class CartController extends Controller
         ], $this->payload($target->fresh())));
     }
 
-    private function matchingLine(Cart $cart, int $foodId, array $addonIds): ?CartItem
+    /** @param  array<int, string|null>  $picks  add-on id => size */
+    private function matchingLine(Cart $cart, int $foodId, array $picks): ?CartItem
     {
+        $key = AddonPicks::key($picks);
+
         return $cart->items()
             ->where('food_id', $foodId)
             ->with('selectedAddons')
             ->get()
-            ->first(fn (CartItem $item) => $item->selectedAddons
-                ->pluck('id')->sort()->values()->all() === $addonIds);
+            ->first(fn (CartItem $item) => AddonPicks::keyOf($item->selectedAddons) === $key);
     }
 
     private function clampToStock(?Food $food, int $quantity, bool $isAdvance = false): int
@@ -327,11 +346,12 @@ class CartController extends Controller
     {
         $isAdvance = $cart->isAdvance();
 
-        $items = $cart->items()->with(['food.category', 'selectedAddons'])->orderByDesc('id')->get();
+        $items = $cart->items()->with(['food.category', 'selectedAddons.sizes'])->orderByDesc('id')->get();
 
         $lines = $items->map(function (CartItem $item) use ($isAdvance) {
             $food = $item->food;
-            $addons = $item->selectedAddons;
+            // Each at what its size costs today: carts float (FR-02.5).
+            $addons = $item->selectedAddons->map(fn (Addon $addon) => AddonPicks::describe($addon))->values();
 
             $addonTotal = (float) $addons->sum('addon_price');
             $unitPrice = (float) ($food->price ?? 0) + $addonTotal;
@@ -343,12 +363,10 @@ class CartController extends Controller
                 'thumbnail' => $food->thumbnail ?? null,
                 'quantity' => $item->quantity,
                 'base_price' => (float) ($food->price ?? 0),
-                'addons' => $addons->map(fn (Addon $addon) => [
-                    'id' => $addon->id,
-                    'addon_name' => $addon->addon_name,
-                    'addon_price' => (float) $addon->addon_price,
-                ])->values(),
+                'addons' => $addons,
                 'addons_total' => $addonTotal,
+                // Switched off since it was added; an advance order is for another day.
+                'unavailable_addons' => $isAdvance ? [] : $addons->where('is_available', false)->pluck('addon_name')->values()->all(),
                 'unit_price' => $unitPrice,
                 'subtotal' => $unitPrice * $item->quantity,
                 'is_orderable' => $isAdvance ? $food !== null : ($food?->is_orderable ?? false),
@@ -364,7 +382,7 @@ class CartController extends Controller
             'line_count' => $lines->count(),
             'subtotal' => (float) $lines->sum('subtotal'),
             'total' => (float) $lines->sum('subtotal'),
-            'has_unavailable_items' => $lines->contains(fn ($line) => ! $line['is_orderable']),
+            'has_unavailable_items' => $lines->contains(fn ($line) => ! $line['is_orderable'] || $line['unavailable_addons'] !== []),
             // Null for an account. A guest's browser stores this and replays it.
             'guest_token' => $cart->guest_token,
         ];

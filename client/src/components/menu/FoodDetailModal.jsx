@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@mantine/core";
+import { Modal, Popover } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import {
   IconArrowLeft,
-  IconClock,
+  IconCheck,
+  IconDiscount2,
   IconMinus,
   IconPlus,
   IconShoppingBagPlus,
@@ -13,9 +14,112 @@ import {
 import DishImage from "./DishImage";
 import { fetchFood, formatPeso, stockLabel, stockTone } from "../../lib/menu";
 
+/** What a picked add-on costs: its size's price, or its one price. */
+function pickPrice(addon, size) {
+  if (!addon) return 0;
+  if (!size) return Number(addon.addon_price ?? 0);
+
+  return Number(addon.sizes?.find((row) => row.size === size)?.price ?? addon.addon_price ?? 0);
+}
+
+/** The tile every add-on shares: its name, its price, and an orange edge once picked. */
+const tileClass = (on) =>
+  `block w-full cursor-pointer rounded-[12px] border-2 px-3 py-2.5 text-left transition-colors ${
+    on ? "border-brand-500 bg-[#fff6ee]" : "border-transparent bg-[#faf7f3] hover:bg-[#f4f1ec]"
+  }`;
+
+/**
+ * An add-on that comes in sizes (decided 2026-11-24): a tile like the others.
+ * Tapping it opens a small list of its sizes; picking one adds it in that size,
+ * and the tile then shows the size and its price. Opened again, the list can
+ * change the size or leave the add-on off.
+ */
+function SizedAddon({ addon, picked, onPick }) {
+  const [open, setOpen] = useState(false);
+  const chosen = addon.sizes.find((size) => size.size === picked) ?? null;
+  const lowest = Math.min(...addon.sizes.map((size) => Number(size.price)));
+
+  const choose = (size) => {
+    onPick(addon.id, size);
+    setOpen(false);
+  };
+
+  return (
+    <Popover opened={open} onChange={setOpen} position="bottom-start" width={230} shadow="md" radius={12} withArrow arrowPosition="side" trapFocus returnFocus>
+      <Popover.Target>
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          data-testid={`addon-${addon.id}`}
+          className={tileClass(Boolean(chosen) || open)}
+        >
+          <span className="[overflow-wrap:anywhere] block font-display text-[12.5px] font-semibold leading-tight text-ink">{addon.addon_name}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <span className="font-display text-[12px] font-bold text-brand-600">
+              {chosen ? `+${formatPeso(chosen.price)}` : `From +${formatPeso(lowest)}`}
+            </span>
+            {chosen && (
+              <span className="rounded-full bg-brand-500 px-2 py-[1px] font-display text-[10px] font-bold text-white" data-testid={`addon-${addon.id}-chosen`}>
+                {chosen.label}
+              </span>
+            )}
+          </span>
+        </button>
+      </Popover.Target>
+
+      <Popover.Dropdown p={6}>
+        <p className="m-0 px-2.5 pb-1.5 pt-1 font-display text-[11px] font-bold uppercase tracking-[0.5px] text-[#8d8884]">
+          {addon.addon_name} &middot; pick a size
+        </p>
+        <div role="radiogroup" aria-label={`${addon.addon_name} size`} className="flex flex-col">
+          {addon.sizes.map((size) => {
+            const on = picked === size.size;
+
+            return (
+              <button
+                key={size.size}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => choose(size.size)}
+                data-testid={`addon-${addon.id}-${size.size}`}
+                className={`flex w-full items-center justify-between gap-3 rounded-[8px] px-2.5 py-2 text-left transition-colors ${on ? "bg-[#fff6ee]" : "hover:bg-[#faf7f3]"}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`grid h-4 w-4 place-items-center rounded-full border-2 ${on ? "border-brand-500 bg-brand-500 text-white" : "border-[#d9d3cb] bg-white"}`}
+                  >
+                    {on && <IconCheck size={10} stroke={3.4} />}
+                  </span>
+                  <span className="font-display text-[13px] font-semibold text-ink">{size.label}</span>
+                </span>
+                <span className="font-display text-[12.5px] font-bold text-brand-600">+{formatPeso(size.price)}</span>
+              </button>
+            );
+          })}
+        </div>
+        {chosen && (
+          <button
+            type="button"
+            onClick={() => choose(undefined)}
+            data-testid={`addon-${addon.id}-remove`}
+            className="mt-1 w-full rounded-[8px] border-t border-[#f0e9df] px-2.5 py-2 text-left font-display font-semibold text-[#e5322d] transition-colors hover:bg-[#fdecec]"
+          >
+            <span className="text-[12.5px]">Leave it off</span>
+          </button>
+        )}
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
 function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdvance = false }) {
   const [quantity, setQuantity] = useState(1);
-  const [selectedAddons, setSelectedAddons] = useState([]);
+  // add-on id -> the size picked, or null for one without sizes
+  const [picks, setPicks] = useState({});
 
   // The menu listing already carries everything shown here, add-ons included,
   // and it is the copy realtime keeps current. Only a dish handed over without
@@ -33,7 +137,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
 
   useEffect(() => {
     setQuantity(1);
-    setSelectedAddons([]);
+    setPicks({});
   }, [food?.id, opened]);
 
   const addonGroups = useMemo(() => detail?.addon_groups ?? [], [detail]);
@@ -43,10 +147,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
     [addonGroups]
   );
 
-  const addonsTotal = selectedAddons.reduce(
-    (sum, id) => sum + Number(addonIndex.get(id)?.addon_price ?? 0),
-    0
-  );
+  const addonsTotal = Object.entries(picks).reduce((sum, [id, size]) => sum + pickPrice(addonIndex.get(Number(id)), size), 0);
 
   if (!detail) return null;
   
@@ -56,11 +157,25 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
 
   const maxQuantity = isAdvance ? 99 : (detail.stock_quantity ?? 99);
 
-  const toggleAddon = (id) =>
-    setSelectedAddons((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  /** `size`: the size picked, null for an add-on without sizes, undefined to leave it off. */
+  const pick = (id, size) =>
+    setPicks((current) => {
+      const next = { ...current };
+
+      if (size === undefined) delete next[id];
+      else next[id] = size;
+
+      return next;
+    });
+
+  const toggleAddon = (id) => pick(id, id in picks ? undefined : null);
 
   const handleAdd = () => {
-    onAdd({ foodId: detail.id, quantity, addonIds: selectedAddons });
+    onAdd({
+      foodId: detail.id,
+      quantity,
+      addons: Object.entries(picks).map(([id, size]) => ({ id: Number(id), size })),
+    });
   };
 
   return (
@@ -97,12 +212,6 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </span>
           )}
 
-          {detail.prep_time ? (
-            <span className="absolute bottom-5 left-5 inline-flex items-center gap-1.5 rounded-full bg-cocoa-900/80 px-3 py-1.5 font-display text-[11.5px] font-semibold text-white backdrop-blur-sm">
-              <IconClock size={13} stroke={2.2} aria-hidden="true" />
-              {detail.prep_time} mins
-            </span>
-          ) : null}
         </div>
         <div className="flex max-h-[88dvh] min-h-0 flex-col overflow-y-auto overflow-x-hidden bg-white px-6 pb-6 pt-5 contain-paint sm:px-8">
 
@@ -127,6 +236,14 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </span>
             <span className="font-display text-[13px] text-[#8d8884]">per serving</span>
           </p>
+
+          {/* Marked by the Store Manager (FR-05.9). */}
+          {detail.is_discountable && (
+            <span data-testid="food-discount-tag" className="inline-flex items-center gap-1 rounded-full bg-brand-50 font-display font-bold text-brand-700 mt-2.5 self-start px-2.5 py-1 text-[11px]">
+              <IconDiscount2 size={13} stroke={2.2} aria-hidden="true" />
+              SC/PWD discount
+            </span>
+          )}
 
           <hr className="my-5 border-0 border-t border-[#f0e9df]" />
 
@@ -162,16 +279,16 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
 
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     {group.addons.map((addon) => {
-                      const checked = selectedAddons.includes(addon.id);
+                      if (addon.sizes?.length > 0) {
+                        return <SizedAddon key={addon.id} addon={addon} picked={picks[addon.id]} onPick={pick} />;
+                      }
+
+                      const checked = addon.id in picks;
 
                       return (
                         <label
                           key={addon.id}
-                          className={`cursor-pointer rounded-[12px] border-2 px-3 py-2.5 transition-colors ${
-                            checked
-                              ? "border-brand-500 bg-[#fff6ee]"
-                              : "border-transparent bg-[#faf7f3] hover:bg-[#f4f1ec]"
-                          }`}
+                          className={tileClass(checked)}
                         >
                           <input
                             type="checkbox"
@@ -194,7 +311,9 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
             </div>
           )}
 
-          <div className="sticky bottom-0 -mx-6 mt-7 flex items-center gap-3 border-t border-[#f0e9df] bg-white px-6 pb-1 pt-4 sm:-mx-8 sm:px-8">
+          {/* With little to show, the bar still sits at the bottom of the dialog. */}
+          <div aria-hidden="true" className="h-7 shrink-0" />
+          <div className="sticky bottom-0 -mx-6 mt-auto flex items-center gap-3 border-t border-[#f0e9df] bg-white px-6 pb-1 pt-4 sm:-mx-8 sm:px-8">
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
@@ -203,7 +322,7 @@ function FoodDetailModal({ food, opened, onClose, onAdd, isAdding = false, isAdv
                 aria-label={quantity <= 1 ? "Remove item" : "Decrease quantity"}
                 className="grid h-9 w-9 place-items-center rounded-full bg-[#f4f1ec] text-ink transition-colors hover:bg-[#e9e3da] disabled:cursor-not-allowed disabled:text-[#c0bab2]"
               >
-                {quantity <= 1 ? <IconTrash size={15} stroke={2} /> : <IconMinus size={15} stroke={2.6} />}
+                {quantity <= 1 ? <IconTrash size={17} stroke={2} /> : <IconMinus size={15} stroke={2.6} />}
               </button>
 
               <span

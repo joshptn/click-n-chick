@@ -10,7 +10,7 @@ import {
 
 import { Line, Money, Section } from "./DetailParts";
 import { advanceLabel, handoverLabel, paymentLabel } from "../../lib/agent";
-import { formatTime } from "../../lib/orders";
+import { discountLines, formatTime } from "../../lib/orders";
 
 /**
  * Everything needed to fulfil one order: who, where, what, and what it cost.
@@ -132,7 +132,9 @@ function OrderDetailDrawer({ order, opened, onClose, busy, canAct, onAdvance, on
             <Section title="Payment">
               <div className="flex flex-col gap-1.5">
                 {order.subtotal != null && <Money label="Subtotal" value={order.subtotal} />}
-                {Number(order.discount_amount) > 0 && <Money label="Discount" value={order.discount_amount} negative />}
+                {discountLines(order).map((line) => (
+                  <Money key={line.key} label={line.label} value={line.amount} negative />
+                ))}
                 {delivery && <Money label="Delivery fee" value={order.delivery_fee} />}
                 <div className="mt-1 border-t border-dashed border-[#ece7e0] pt-2">
                   <Money label="Total" value={order.total_amount ?? order.subtotal} strong />

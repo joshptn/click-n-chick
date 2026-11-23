@@ -148,7 +148,7 @@ function OrderTracking({ guest = false }) {
   });
 
   const paying = useMutation({
-    mutationFn: ({ reviewed = false } = {}) => payOrder({ ...payTarget, reviewed }),
+    mutationFn: ({ reviewed = false, expectedTotal = null } = {}) => payOrder({ ...payTarget, reviewed, expectedTotal }),
     onSuccess: (payload) => {
       if (payload?.payment?.url) {
         goToPayment(payload.payment.url, payTarget);
@@ -162,7 +162,11 @@ function OrderTracking({ guest = false }) {
     },
     onError: (err) => {
       setReviewing(false);
-      toast.error(err?.message ?? "Payment could not be started. Please try again.", "Payment unavailable");
+      toast.error(
+        err?.message ?? "Payment could not be started. Please try again.",
+        // The order was priced again (an advance order pays at the day's prices).
+        err?.payload?.error_code === "PRICE_CHANGED" ? "Total changed" : "Payment unavailable"
+      );
       queryClient.invalidateQueries({ queryKey });
     },
   });
@@ -388,7 +392,7 @@ function OrderTracking({ guest = false }) {
         order={order}
         opened={reviewing && Boolean(order)}
         onClose={() => setReviewing(false)}
-        onContinue={() => paying.mutate({ reviewed: true })}
+        onContinue={() => paying.mutate({ reviewed: true, expectedTotal: order?.total ?? null })}
         isOpening={paying.isPending || paying.isSuccess}
       />
 
@@ -422,7 +426,7 @@ function OrderTracking({ guest = false }) {
             {prompt.keep}
           </Button>
           <Button
-            variant="secondary"
+            variant="danger"
             size="sm"
             loading={cancelling.isPending}
             loadingLabel="Working&hellip;"

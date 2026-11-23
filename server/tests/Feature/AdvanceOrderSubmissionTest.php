@@ -71,7 +71,7 @@ class AdvanceOrderSubmissionTest extends TestCase
             'stock_quantity' => 10,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 15,
+            'is_discountable' => true,
         ], $overrides));
     }
 
@@ -262,8 +262,11 @@ class AdvanceOrderSubmissionTest extends TestCase
 
         $order = Order::first();
 
-        $this->assertSame(80.0, (float) $order->discount_amount);
-        $this->assertSame(320.0, (float) $order->total_amount);
+        // Two ₱200 dishes, one discounted: ₱21.43 VAT exemption + ₱35.71 at
+        // 20% = ₱57.14.
+        $this->assertSame(57.14, (float) $order->discount_amount);
+        $this->assertSame(342.86, (float) $order->total_amount);
+        $this->assertSame(21.43, (float) $order->vat_exempt_amount);
     }
 
     public function test_the_allowance_is_spent_on_the_collection_date_not_the_day_it_was_typed(): void

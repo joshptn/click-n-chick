@@ -29,9 +29,12 @@ class PasswordConfirmation
     /**
      * Gate one sensitive action.
      *
+     * With $always, a recent confirmation does not count: the password must
+     * come with this very request (undoing a discount decision).
+     *
      * @return JsonResponse|null a response to return to the caller, or null to proceed
      */
-    public function challenge(Request $request, string $action): ?JsonResponse
+    public function challenge(Request $request, string $action, bool $always = false): ?JsonResponse
     {
         $user = $request->user();
 
@@ -43,7 +46,7 @@ class PasswordConfirmation
             ], 401);
         }
 
-        if ($this->isConfirmed($request)) {
+        if (! $always && $this->isConfirmed($request)) {
             return null;
         }
 

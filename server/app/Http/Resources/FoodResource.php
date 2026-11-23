@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Addon;
 use App\Models\Food;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,8 +22,9 @@ class FoodResource extends JsonResource
             'description' => $this->description,
             'price' => (int) $this->price,
             'thumbnail' => $this->thumbnail,
-            'prep_time' => $this->prep_time,
             'is_best_seller' => (bool) $this->is_best_seller,
+            // Whether it can take the Senior/PWD discount (FR-05.9).
+            'is_discountable' => (bool) $this->is_discountable,
 
             // Availability, as three separate facts the UI renders differently:
             // whether it can be ordered at all, why not, and how urgent it is.
@@ -37,19 +39,42 @@ class FoodResource extends JsonResource
             ]),
 
             // Grouped the way the detail modal renders them ('Drinks',
-            // 'Sides'), so the client does not re-derive the grouping.
+            // 'Sides'), so the client does not re-derive the grouping. Only
+            // what can be had today: a switched-off add-on, or one with every
+            // size switched off, is not offered.
             'addon_groups' => $this->whenLoaded('addons', fn () => $this->addons
-                ->where('availability', true)
+                ->filter(fn (Addon $addon) => $addon->availability && (! $addon->isSized() || $addon->firstAvailableSize() !== null))
                 ->groupBy('addon_group')
                 ->map(fn ($addons, $group) => [
                     'group' => $group,
-                    'addons' => $addons->map(fn ($addon) => [
-                        'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
-                        'addon_price' => (float) $addon->addon_price,
-                    ])->values(),
+                    'addons' => $addons->map(fn (Addon $addon) => self::offered($addon))->values(),
                 ])
                 ->values()),
+
+            // Every add-on the dish is linked to, switched off or not, for the
+            // Store Manager's product form.
+            'addon_ids' => $this->whenLoaded('addons', fn () => $this->addons->pluck('id')->map(fn ($id) => (int) $id)->values()),
+        ];
+    }
+
+    /**
+     * One add-on as the customer is offered it. A sized one lists the sizes
+     * still available, each at its own price, and `addon_price` is the lowest
+     * of them, so a screen that knows nothing of sizes shows a "from" figure.
+     */
+    private static function offered(Addon $addon): array
+    {
+        $sizes = $addon->sizes->where('is_available', true)->values();
+
+        return [
+            'id' => $addon->id,
+            'addon_name' => $addon->addon_name,
+            'addon_price' => $sizes->isNotEmpty() ? (float) $sizes->min('price') : (float) $addon->addon_price,
+            'sizes' => $sizes->map(fn ($size) => [
+                'size' => $size->size,
+                'label' => $size->label(),
+                'price' => (float) $size->price,
+            ])->values(),
         ];
     }
 

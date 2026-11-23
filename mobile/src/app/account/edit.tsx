@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ApiError } from "../../api/client";
 import { accountApi, type PickedFile } from "../../api/account";
+import { mobileDigits, mobileForField } from "../../api/checkout";
 import { AppText } from "../../components/AppText";
 import { AuthButton } from "../../components/auth/AuthButton";
 import { Avatar } from "../../components/account/Avatar";
@@ -48,23 +49,21 @@ export default function EditProfile() {
     setForm({
       first_name: data.user.first_name ?? "",
       last_name: data.user.last_name ?? "",
-      phone_number: data.user.phone_number ?? "",
+      phone_number: mobileForField(data.user.phone_number),
     });
     setConsent(Boolean(data.profile.privacy_consent));
   }
 
   const phoneLock = data?.profile.phone_locked_reason ?? null;
 
-  const dirty = useMemo(() => {
-    if (!user) return false;
+  const savedPhone = mobileForField(user?.phone_number);
 
-    return (
-      form.first_name !== (user.first_name ?? "") ||
-      form.last_name !== (user.last_name ?? "") ||
-      form.phone_number !== (user.phone_number ?? "") ||
-      consent !== Boolean(data?.profile.privacy_consent)
-    );
-  }, [form, consent, user, data?.profile.privacy_consent]);
+  const dirty =
+    Boolean(user) &&
+    (form.first_name !== (user?.first_name ?? "") ||
+      form.last_name !== (user?.last_name ?? "") ||
+      form.phone_number !== savedPhone ||
+      consent !== Boolean(data?.profile.privacy_consent));
 
   const save = useMutation({
     mutationFn: () =>
@@ -74,7 +73,7 @@ export default function EditProfile() {
         privacy_consent: consent,
         // Only when it changed: the API refuses a phone edit while the number
         // is how the account verifies, which must not block saving a name.
-        ...(form.phone_number !== (user?.phone_number ?? "") ? { phone_number: form.phone_number.trim() } : {}),
+        ...(form.phone_number !== savedPhone ? { phone_number: form.phone_number } : {}),
       }),
     onSuccess: (payload) => {
       setErrors({});
@@ -82,7 +81,7 @@ export default function EditProfile() {
       setForm({
         first_name: payload.user.first_name ?? "",
         last_name: payload.user.last_name ?? "",
-        phone_number: payload.user.phone_number ?? "",
+        phone_number: mobileForField(payload.user.phone_number),
       });
       toast.success("Profile saved", payload.message ?? "Your details have been updated.");
       router.back();
@@ -213,12 +212,12 @@ export default function EditProfile() {
               <TextField
                 label="Phone Number"
                 value={form.phone_number}
-                onChangeText={set("phone_number")}
+                onChangeText={(text) => set("phone_number")(mobileDigits(text))}
                 error={errors.phone_number}
                 editable={!phoneLock}
-                keyboardType="phone-pad"
+                keyboardType="number-pad"
                 autoComplete="tel"
-                maxLength={20}
+                maxLength={11}
                 placeholder="09XXXXXXXXX"
                 style={phoneLock ? styles.locked : undefined}
                 testID="phone-number"

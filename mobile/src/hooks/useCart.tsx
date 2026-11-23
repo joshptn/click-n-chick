@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { EMPTY_CART, cartApi, type Cart, type CartMode, type CartPayload, type CartScope } from "../api/cart";
+import { EMPTY_CART, cartApi, type AddToCart, type Cart, type CartMode, type CartPayload, type CartScope } from "../api/cart";
 import { forgetGuestToken, guestToken, rememberGuestToken } from "../lib/guestCart";
 import { toast } from "../lib/toast";
 import { useSession } from "./useSession";
@@ -20,7 +20,7 @@ import { useSession } from "./useSession";
  * `useCart("advance")` the advance one.
  */
 
-type AddInput = { foodId: number; quantity: number; addonIds: number[] };
+type AddInput = AddToCart;
 
 type CartContextValue = Cart & {
   mode: CartMode;

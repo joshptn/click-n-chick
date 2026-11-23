@@ -115,8 +115,10 @@ function Checkout() {
 
   const addresses = useMemo(() => addressPayload?.addresses ?? [], [addressPayload]);
 
+  // One name field for a delivery's recipient and a guest's pickup person;
+  // an account's pickup joins its first and last name.
   const contactName =
-    dispatchState.fulfilmentType === FULFILMENT.DELIVERY
+    dispatchState.fulfilmentType === FULFILMENT.DELIVERY || !signedIn
       ? dispatchState.contactName
       : [dispatchState.firstName, dispatchState.lastName].filter(Boolean).join(" ");
 
@@ -224,6 +226,8 @@ function Checkout() {
       ...quoteInput,
       full_address: dispatchState.destination?.full_address ?? null,
       location: dispatchState.destination?.locality ?? null,
+      // The total on screen: refused (PRICE_CHANGED) if prices moved since.
+      expected_total: quote.total,
     };
 
     captcha.run((recaptchaToken) => submitOrder(payload, recaptchaToken));
@@ -321,6 +325,7 @@ function Checkout() {
                 storeStatus={storeStatus}
                 showFieldErrors={attemptedContinue}
                 requireEmail={!signedIn}
+                guest={!signedIn}
                 onContinue={handleContinue}
                 onBack={() => navigate("/home")}
               />

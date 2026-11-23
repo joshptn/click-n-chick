@@ -66,8 +66,9 @@ class AdvanceRequestResource extends JsonResource
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'quantity' => $item->quantity,
                 'subtotal' => $item->subtotal,
+                // Each with the size picked: "Iced Tea (Large)".
                 'addons' => $item->relationLoaded('addons')
-                    ? $item->addons->pluck('addon_name')->values()
+                    ? $item->addons->map(fn ($addon) => $addon->chosen_name)->values()
                     : [],
             ])->values()),
 
@@ -75,6 +76,8 @@ class AdvanceRequestResource extends JsonResource
 
             'subtotal' => $this->subtotal,
             'discount_amount' => $this->discount_amount,
+            // The VAT part of discount_amount, shown as its own line.
+            'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
             'total_amount' => $this->total_amount,
             'payment_status' => $this->paymentStatus(),
             'is_paid' => $this->isPaid(),

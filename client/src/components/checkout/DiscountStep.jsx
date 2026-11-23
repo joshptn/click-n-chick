@@ -76,7 +76,10 @@ function DiscountStep({
   }
 
   const spent = discount.eligible && discount.used_today;
-  const offerable = discount.eligible && !discount.used_today;
+  // It goes on one item marked for it (FR-05.4); an order with none has
+  // nothing to discount, and the day's use is left alone.
+  const offerable = discount.eligible && !discount.used_today && Boolean(discount.item);
+  const nothingMarked = discount.eligible && !discount.used_today && !discount.item;
 
   return (
     <div className="flex flex-col gap-4">
@@ -98,8 +101,8 @@ function DiscountStep({
               Use my discount for the day
             </span>
             <span className="block font-display text-[12.5px] leading-snug text-[#6f6b68]">
-              {discount.type_label ?? "Senior Citizens and PWDs"} receive {discount.percentage}% off the
-              subtotal ({formatPeso(discount.available_amount)})
+              VAT exemption plus {discount.percentage}% off one {discount.item?.food_name}, add-ons not
+              included ({formatPeso(discount.available_amount)} off)
             </span>
           </span>
         </label>
@@ -118,11 +121,25 @@ function DiscountStep({
         </div>
       )}
 
+      {nothingMarked && (
+        <div className="rounded-[12px] border border-[#f0e9df] bg-[#faf7f3] px-4 py-3.5" data-testid="discount-no-item">
+          <p className="m-0 flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
+            <IconDiscount2 size={16} stroke={2} aria-hidden="true" className="shrink-0 text-[#8d8884]" />
+            None of these items take the discount
+          </p>
+          <p className="m-0 mt-1 font-display text-[12.5px] leading-snug text-[#6f6b68]">
+            The discount goes on an item tagged SC/PWD discount on the menu. You can still place this
+            order at the normal price, and today&apos;s discount stays unused.
+          </p>
+        </div>
+      )}
+
       {!discount.eligible && <Unavailable discount={discount} />}
 
       <p className="m-0 flex items-start gap-2 font-display text-[12px] leading-snug text-[#8d8884]">
         <IconInfoCircle size={14} stroke={2} aria-hidden="true" className="mt-px shrink-0 text-brand-500" />
-        Discount applies to the meal items only, not to add-ons and delivery fee.
+        The discount goes on one item tagged SC/PWD discount, the highest-priced one in your order.
+        Add-ons and the delivery fee are not discounted.
       </p>
 
       <div className="mt-1 flex flex-col gap-2.5 sm:flex-row sm:items-center">

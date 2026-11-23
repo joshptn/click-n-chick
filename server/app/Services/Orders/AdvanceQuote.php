@@ -6,6 +6,7 @@ use App\Models\Cart;
 use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\User;
+use App\Services\Catalog\AddonPicks;
 use Illuminate\Support\Collection;
 
 class AdvanceQuote
@@ -41,13 +42,13 @@ class AdvanceQuote
             $blockers[] = $contact['blocker'];
         }
 
-        $discountBase = round((float) $lines->sum(
-            fn (array $line) => $line['base_price'] * $line['quantity']
-        ), 2);
+        // One unit of the highest-priced dish marked for it (FR-05.4).
+        $discountLine = StatutoryDiscount::pick($lines);
+        $discountBase = (float) ($discountLine['base_price'] ?? 0);
 
         $discount = $this->discount(
             $user,
-            $discountBase,
+            $discountLine,
             (bool) ($input['apply_discount'] ?? false),
             $scheduleBlocker === null ? $collectAt : null,
         );
@@ -86,7 +87,7 @@ class AdvanceQuote
             return collect();
         }
 
-        $query = $cart->items()->with(['food', 'selectedAddons']);
+        $query = $cart->items()->with(['food', 'selectedAddons.sizes']);
 
         if ($ids !== null) {
             $clean = collect($ids)->filter(fn ($id) => is_numeric($id))->map(fn ($id) => (int) $id)->all();
@@ -102,7 +103,8 @@ class AdvanceQuote
             ->filter(fn (CartItem $item) => $item->food !== null)
             ->map(function (CartItem $item) {
                 $food = $item->food;
-                $addons = $item->selectedAddons;
+                // Each in the size picked; today's switches do not apply to another day.
+                $addons = $item->selectedAddons->map(fn ($addon) => AddonPicks::describe($addon))->values();
 
                 $addonTotal = (float) $addons->sum('addon_price');
                 $unitPrice = (float) $food->price + $addonTotal;
@@ -114,11 +116,8 @@ class AdvanceQuote
                     'thumbnail' => $food->thumbnail,
                     'quantity' => $item->quantity,
                     'base_price' => (float) $food->price,
-                    'addons' => $addons->map(fn ($addon) => [
-                        'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
-                        'addon_price' => (float) $addon->addon_price,
-                    ])->values()->all(),
+                    'is_discountable' => (bool) $food->is_discountable,
+                    'addons' => $addons->all(),
                     'addons_total' => $addonTotal,
                     'unit_price' => $unitPrice,
                     'subtotal' => round($unitPrice * $item->quantity, 2),
@@ -161,13 +160,15 @@ class AdvanceQuote
         return preg_match('/^09\d{9}$/', $digits) ? $digits : null;
     }
 
-    private function discount(User $user, float $base, bool $requested, ?\Carbon\CarbonImmutable $collectAt): array
+    private function discount(User $user, ?array $line, bool $requested, ?\Carbon\CarbonImmutable $collectAt): array
     {
         $latest = $user->latestDiscountClaim()->first();
         $approved = $latest?->isApproved() ?? false;
 
         $percentage = Discount::currentPercentage();
-        $available = $approved ? round($base * ($percentage / 100), 2) : 0.0;
+        $base = (float) ($line['base_price'] ?? 0);
+        $saving = $approved ? StatutoryDiscount::for($base, $percentage) : StatutoryDiscount::for(0, $percentage);
+        $available = $saving['total'];
 
         $usedOnDate = $approved && $collectAt !== null && $this->discountUsage->usedOn($user, $collectAt);
 
@@ -184,15 +185,20 @@ class AdvanceQuote
         $blocker = null;
 
         if ($requested && ! $canApply) {
-            $blocker = $usedOnDate
-                ? [
+            $blocker = match (true) {
+                $usedOnDate => [
                     'code' => 'DISCOUNT_ALREADY_USED',
                     'message' => 'You already have a discounted order for that date. Pick another date, or continue without the discount.',
-                ]
-                : [
+                ],
+                $approved && $line === null => [
+                    'code' => 'DISCOUNT_NO_ELIGIBLE_ITEM',
+                    'message' => 'None of the items in your order take the Senior/PWD discount. Continue without it.',
+                ],
+                default => [
                     'code' => 'DISCOUNT_NOT_ELIGIBLE',
                     'message' => 'Your Senior Citizen or PWD discount has not been approved yet.',
-                ];
+                ],
+            };
         }
 
         return [
@@ -203,8 +209,15 @@ class AdvanceQuote
             'percentage' => $percentage,
             'used_today' => $usedOnDate,
             'can_apply' => $canApply,
+            'vat_rate' => Discount::VAT_RATE,
+            // What using it would take off: the VAT first, then the rate.
             'available_amount' => $available,
+            'vat_exempt_amount' => $saving['vat_exempt'],
+            'percentage_amount' => $saving['discount'],
+            // The one dish it goes on, or null when none in the order is marked.
+            'item' => StatutoryDiscount::describe($line),
             'applied' => $applied,
+            // Everything taken off, VAT exemption included (orders.discount_amount).
             'amount' => $applied ? $available : 0.0,
             'blocker' => $blocker,
         ];

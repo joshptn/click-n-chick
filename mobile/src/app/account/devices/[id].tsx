@@ -115,8 +115,8 @@ export default function DeviceDetails() {
         ? "You will be signed out of the app straight away. Your other devices stay signed in."
         : `${deviceName(device)} will be signed out straight away and will need your password to sign in again.`,
       [
-        { text: "No, cancel", style: "cancel" },
-        { text: "Yes, log out", style: "destructive", onPress: () => revoke.mutate(device) },
+        { text: "Cancel", style: "cancel" },
+        { text: "Log out", style: "destructive", onPress: () => revoke.mutate(device) },
       ]
     );
 

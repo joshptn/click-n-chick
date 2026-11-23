@@ -6,6 +6,9 @@ use App\Http\Middleware\ResolveGuestOrder;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Order;
 use App\Services\Orders\AdvanceExpiry;
+use App\Services\Orders\AdvanceRepricing;
+use App\Services\Orders\OrderAnnouncer;
+use App\Services\Orders\PriceCheck;
 use App\Services\Payments\CheckoutExpiry;
 use App\Services\Payments\PaymentCheckout;
 use App\Services\Payments\PaymentGatewayException;
@@ -21,6 +24,11 @@ use Illuminate\Support\Facades\Log;
  *   status  where the payment stands, asked of Xendit when it is still open;
  *           the web app calls it on return from the checkout, so a payment is
  *           seen at once even when the webhook is slow or, locally, absent
+ *
+ * An advance order is priced again as its payment opens (AdvanceRepricing,
+ * decided 2026-11-24). `expected_total`, the total the page showed, stops a
+ * payment for a different amount (PriceCheck): the answer is PRICE_CHANGED
+ * with the order as it now stands.
  */
 class OrderPaymentController extends Controller
 {
@@ -31,14 +39,19 @@ class OrderPaymentController extends Controller
         private PaymentSettlement $settlement,
         private CheckoutExpiry $checkoutExpiry,
         private AdvanceExpiry $advanceExpiry,
+        private AdvanceRepricing $repricing,
+        private OrderAnnouncer $announcer,
     ) {}
 
     public function pay(Request $request, Order $order)
     {
+        $validated = $request->validate([PriceCheck::FIELD => PriceCheck::RULE]);
+
         return $this->startPayment(
             $this->owned($request, $order),
             NativeApp::isNative($request),
             $request->boolean('reviewed'),
+            $validated[PriceCheck::FIELD] ?? null,
         );
     }
 
@@ -62,19 +75,16 @@ class OrderPaymentController extends Controller
      *                          Order step (decided 2026-11-20). Its time is
      *                          kept in details_confirmed_at, rewritten on each
      *                          review; nothing else writes that column.
+     * @param  mixed  $shown  The total the page showed (PriceCheck), if sent.
      */
-    private function startPayment(Order $order, bool $toApp, bool $reviewed = false)
+    private function startPayment(Order $order, bool $toApp, bool $reviewed = false, mixed $shown = null)
     {
         if ($refusal = $this->enforce($order)) {
             return response()->json($refusal, 422);
         }
 
         if ($order->isPaid()) {
-            return response()->json([
-                'message' => 'This order is already paid.',
-                'error_code' => 'ALREADY_PAID',
-                'order' => $this->resource($order),
-            ], 409);
+            return $this->alreadyPaid($order);
         }
 
         if (! PaymentCheckout::awaitsPayment($order)) {
@@ -83,6 +93,22 @@ class OrderPaymentController extends Controller
                 'error_code' => 'NOT_AWAITING_PAYMENT',
                 'status' => $order->status,
             ], 422);
+        }
+
+        if ($order->isAdvance() && $this->repricing->quote($order) !== null) {
+            // A checkout opened at the old amount must not take it any more. If
+            // it was paid meanwhile, the price on that page stands (FR-02.6).
+            if ($this->checkout->closeOpen($order)) {
+                return $this->alreadyPaid($order->refresh());
+            }
+
+            if ($this->repricing->apply($order)) {
+                $this->announcer->announce($order->refresh(), 'update');
+            }
+        }
+
+        if ($refusal = PriceCheck::refusal($shown, (float) ($order->total_amount ?? $order->total_price))) {
+            return response()->json($refusal + ['order' => $this->resource($order)], 409);
         }
 
         if ($reviewed && $order->isAdvance()) {
@@ -110,6 +136,15 @@ class OrderPaymentController extends Controller
             ],
             'order' => $this->resource($order),
         ]);
+    }
+
+    private function alreadyPaid(Order $order)
+    {
+        return response()->json([
+            'message' => 'This order is already paid.',
+            'error_code' => 'ALREADY_PAID',
+            'order' => $this->resource($order),
+        ], 409);
     }
 
     private function report(Order $order)

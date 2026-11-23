@@ -240,7 +240,7 @@ function DiscountUploadModal({ opened, onClose, discountType, percentage = 20, o
               <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
                 {[
                   "Your ID will be reviewed by a Store Agent. This may take a short while.",
-                  `Once approved, the ${percentage}% discount can be used once per day only.`,
+                  `Once approved, the VAT exemption and ${percentage}% discount can be used once per day only, on one item tagged SC/PWD discount.`,
                   "You will be notified once your verification is complete.",
                 ].map((line) => (
                   <li key={line} className="flex gap-2 font-display text-[12.5px] leading-snug text-[#41618a]">

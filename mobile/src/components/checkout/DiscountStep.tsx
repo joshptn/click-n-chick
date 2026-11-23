@@ -56,6 +56,9 @@ export function DiscountStep({ discount, choice, onChoose, onSubmitted, forDay =
 
   const offerable = discount.eligible && !discount.used_today && discount.can_apply;
   const spent = discount.eligible && discount.used_today;
+  // It goes on one item marked for it (FR-05.4); an order with none has
+  // nothing to discount, and the day's use is left alone.
+  const nothingMarked = discount.eligible && !discount.used_today && !discount.item;
   const percent = Number(discount.percentage);
 
   return (
@@ -64,8 +67,8 @@ export function DiscountStep({ discount, choice, onChoose, onSubmitted, forDay =
         <>
           <TypeRow title={discount.type_label ?? "Discount"} chip={discount.type ? DISCOUNT_LABEL[discount.type] : null} />
           <Notice tone="info">
-            Using your discount consumes it for {forDay ?? "the day"}. You save {formatPeso(discount.available_amount)} ({percent}% off
-            the meal items).
+            Using your discount consumes it for {forDay ?? "the day"}. You save {formatPeso(discount.available_amount)}: VAT exemption plus{" "}
+            {percent}% off one {discount.item?.food_name ?? "item"}.
           </Notice>
           <View style={styles.buttons}>
             <CheckoutButton
@@ -99,6 +102,15 @@ export function DiscountStep({ discount, choice, onChoose, onSubmitted, forDay =
         </>
       )}
 
+      {nothingMarked && (
+        <>
+          <Notice>
+            {`None of these items take the discount. It goes on an item tagged SC/PWD discount on the menu; this order is at the normal price, and your discount for ${forDay ?? "today"} stays unused.`}
+          </Notice>
+          <LaterOnly choice={choice} onChoose={onChoose} />
+        </>
+      )}
+
       {!discount.eligible && discount.status === "pending" && (
         <>
           <Notice tone="info">
@@ -116,7 +128,8 @@ export function DiscountStep({ discount, choice, onChoose, onSubmitted, forDay =
       <View style={styles.footnote}>
         <IconInfoCircle size={14} color={colors.orange} strokeWidth={2} style={styles.footnoteIcon} />
         <AppText family="display" size={12} color={colors.authMuted} style={styles.flex}>
-          The discount applies to the meal items only, not to add-ons and the delivery fee.
+          The discount goes on one item tagged SC/PWD discount, the highest-priced one in your order. Add-ons and the delivery fee are
+          not discounted.
         </AppText>
       </View>
     </>
@@ -287,7 +300,7 @@ function ApplyForm({
         <View style={styles.bullet} />
         <AppText family="display" size={12} color={colors.authMuted} style={styles.flex}>
           A Store Agent verifies your ID, usually within a few minutes. The {percent}% discount can be used once it is approved,
-          once per day.
+          once per day, on one item tagged SC/PWD discount.
         </AppText>
       </View>
 

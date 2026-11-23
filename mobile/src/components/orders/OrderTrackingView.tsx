@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ApiError } from "../../api/client";
 import {
   cancelPrompt,
+  discountLines,
   feedbackMailto,
   isRefused,
   refundLine,
@@ -490,7 +491,9 @@ function OrderItems({ order }: { order: Order }) {
 
       <View style={styles.totals}>
         {order.delivery_fee > 0 && <TotalRow label="Delivery fee" value={formatPeso(order.delivery_fee)} />}
-        {order.discount_amount > 0 && <TotalRow label="Discount" value={`-${formatPeso(order.discount_amount)}`} />}
+        {discountLines(order).map((line) => (
+          <TotalRow key={line.key} label={line.label} value={`-${formatPeso(line.amount)}`} />
+        ))}
         <TotalRow label={order.payment?.paid ? "Total amount paid" : "Total"} value={formatPeso(order.total)} strong />
         {refund && <TotalRow label={refund.label} value={formatPeso(refund.amount)} />}
       </View>

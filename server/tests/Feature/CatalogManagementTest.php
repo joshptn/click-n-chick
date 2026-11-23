@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Events\CategoryBroadcast;
+use App\Events\PriceBroadcast;
 use App\Jobs\NotifyEveryAccount;
 use App\Models\Cart;
 use App\Models\CartItem;
@@ -99,6 +100,51 @@ class CatalogManagementTest extends TestCase
         $this->assertDatabaseHas('food', ['food_name' => 'Chicken Fingers', 'description' => '', 'stock_quantity' => null]);
     }
 
+    /** Discount: Yes is stored, None is left null (FR-05.9). No password either way. */
+    public function test_the_discount_field_stores_yes_and_leaves_none_null(): void
+    {
+        $manager = $this->manager();
+
+        $this->actingAs($manager, 'sanctum')
+            ->post('/api/foods', $this->payload([
+                'food_name' => 'Chicken Spaghetti',
+                'is_discountable' => '1',
+                'thumbnail' => UploadedFile::fake()->image('spaghetti.png'),
+            ]), ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('data.is_discountable', true);
+
+        $food = Food::where('food_name', 'Chicken Spaghetti')->firstOrFail();
+        $this->assertTrue($food->is_discountable);
+
+        // An edit that leaves the field out keeps it.
+        $this->actingAs($manager, 'sanctum')
+            ->putJson("/api/foods/{$food->id}", $this->payload(['food_name' => 'Chicken Spaghetti']))
+            ->assertOk()
+            ->assertJsonPath('data.is_discountable', true);
+
+        // None clears it to null, not false.
+        $this->actingAs($manager, 'sanctum')
+            ->putJson("/api/foods/{$food->id}", $this->payload(['food_name' => 'Chicken Spaghetti', 'is_discountable' => '0']))
+            ->assertOk()
+            ->assertJsonPath('data.is_discountable', false);
+
+        $this->assertNull($food->fresh()->getRawOriginal('is_discountable'));
+    }
+
+    public function test_a_new_dish_starts_with_no_discount(): void
+    {
+        $this->actingAs($this->manager(), 'sanctum')
+            ->post('/api/foods', $this->payload([
+                'food_name' => 'Regular Fries',
+                'thumbnail' => UploadedFile::fake()->image('fries.png'),
+            ]), ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('data.is_discountable', false);
+
+        $this->assertNull(Food::where('food_name', 'Regular Fries')->firstOrFail()->getRawOriginal('is_discountable'));
+    }
+
     public function test_a_new_dish_needs_a_photo_a_category_and_a_whole_peso_price(): void
     {
         $this->actingAs($this->manager(), 'sanctum')
@@ -172,6 +218,36 @@ class CatalogManagementTest extends TestCase
             NotifyEveryAccount::class,
             fn (NotifyEveryAccount $job) => $job->body === 'Spicy Fried Chicken is now ₱259, changed from ₱249.'
         );
+    }
+
+    /** Open carts and checkouts hear of it live, so their totals float (FR-02.5). */
+    public function test_a_price_change_is_broadcast_live_to_open_pages(): void
+    {
+        Event::fake([PriceBroadcast::class]);
+
+        $food = $this->food();
+
+        $this->actingAs($this->manager(), 'sanctum')
+            ->putJson("/api/foods/{$food->id}", $this->payload(['price' => 259, 'password' => self::PASSWORD]))
+            ->assertOk();
+
+        Event::assertDispatchedTimes(PriceBroadcast::class, 1);
+        Event::assertDispatched(PriceBroadcast::class, fn (PriceBroadcast $event) => $event->foodIds === [$food->id]
+            && $event->message === 'Spicy Fried Chicken is now ₱259, changed from ₱249.'
+            && $event->broadcastOn()[0]->name === 'menu');
+    }
+
+    public function test_an_edit_that_keeps_the_price_broadcasts_no_price_change(): void
+    {
+        Event::fake([PriceBroadcast::class]);
+
+        $food = $this->food();
+
+        $this->actingAs($this->manager(), 'sanctum')
+            ->putJson("/api/foods/{$food->id}", $this->payload(['description' => 'Three pieces.']))
+            ->assertOk();
+
+        Event::assertNotDispatched(PriceBroadcast::class);
     }
 
     public function test_a_new_photo_replaces_the_old_one_only_after_it_uploads(): void

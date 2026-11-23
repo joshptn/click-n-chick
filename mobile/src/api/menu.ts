@@ -9,7 +9,11 @@ import { colors } from "../theme/colors";
 /** Mirrors Food::STOCK_* on the API. */
 export type StockStatus = "untracked" | "in_stock" | "low_stock" | "out_of_stock";
 
-export type Addon = { id: number; addon_name: string; addon_price: number };
+/** One size an add-on comes in, still available, at its own price (decided 2026-11-24). */
+export type AddonSize = { size: string; label: string; price: number };
+
+/** `addon_price` is the lowest size price for one that comes in sizes. */
+export type Addon = { id: number; addon_name: string; addon_price: number; sizes?: AddonSize[] };
 
 export type AddonGroup = { group: string; addons: Addon[] };
 
@@ -20,8 +24,9 @@ export type Food = {
   description: string | null;
   price: number;
   thumbnail: string | null;
-  prep_time: number | null;
   is_best_seller: boolean;
+  /** Marked by the Store Manager for the Senior/PWD discount (FR-05.9). */
+  is_discountable: boolean;
   is_available: boolean;
   /** Null when the dish is made to order (no count kept). */
   stock_quantity: number | null;

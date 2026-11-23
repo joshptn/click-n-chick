@@ -6,6 +6,7 @@ import {
   IconCircleCheck,
   IconCircleX,
   IconExternalLink,
+  IconArrowBackUp,
   IconHourglassHigh,
   IconMail,
   IconPhone,
@@ -58,7 +59,7 @@ function IdPhoto({ src, name, onEnlarge }) {
   );
 }
 
-function Outcome({ claim }) {
+function Outcome({ claim, canUndo, busy, onUndo }) {
   const approved = claim.discount_status === "approved";
   const reviewer = [claim.verifier?.first_name, claim.verifier?.last_name].filter(Boolean).join(" ");
   const by = [reviewer && `by ${reviewer}`, formatStamp(claim.verified_at)].filter(Boolean).join(" · ");
@@ -81,6 +82,21 @@ function Outcome({ claim }) {
       )}
 
       {by && <p className="m-0 mt-1.5 text-center font-display text-[10.5px] text-[#a39f9b]">{by}</p>}
+
+      {/* A safety net for a decision made too quickly: back to Pending,
+          password every time. Only the customer's latest application. */}
+      {canUndo && (
+        <button
+          type="button"
+          onClick={() => onUndo(claim)}
+          disabled={busy}
+          data-testid="claim-undo"
+          className="mx-auto mt-2.5 flex items-center justify-center gap-1.5 rounded-[9px] border border-[#e7dfd4] bg-white px-3 py-1.5 font-display font-semibold text-[#6f6b68] transition-colors hover:border-brand-200 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-55"
+        >
+          <IconArrowBackUp size={15} stroke={2} />
+          <span className="text-[12px]">Undo decision</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -90,9 +106,10 @@ function Outcome({ claim }) {
  * what an approval grants, and the decision.
  *
  * Approval is on the account, not on an order - once approved, the customer
- * may take the discount at checkout on food items, one discounted order a day.
+ * may take the discount at checkout on one item marked for it, one discounted
+ * order a day.
  */
-function ClaimReviewPanel({ claim, percentage, busy, approving, canAct, onApprove, onReject, nextClaim, onNext }) {
+function ClaimReviewPanel({ claim, percentage, busy, approving, canAct, onApprove, onReject, onUndo, nextClaim, onNext }) {
   const reduceMotion = useReducedMotion();
   const [enlarged, setEnlarged] = useState(false);
 
@@ -173,12 +190,12 @@ function ClaimReviewPanel({ claim, percentage, busy, approving, canAct, onApprov
           <div>
             <div className="flex items-center justify-between rounded-[10px] bg-[#f7f4f0] px-3 py-2.5 font-display text-[12px]">
               <span className="text-[#5f5b58]">
-                {rate}% Discount {pending ? "on approval" : rejected ? "not granted" : "Applied"}
+                VAT exemption + {rate}% {pending ? "on approval" : rejected ? "not granted" : "applied"}
               </span>
               <span className={`font-bold ${rejected ? "text-[#a39f9b] line-through" : "text-[#2f9e44]"}`}>−{rate}%</span>
             </div>
             <p className="m-0 mt-1.5 font-display text-[10.5px] leading-relaxed text-[#a39f9b]">
-              Taken at checkout on food items, not add-ons · one discounted order a day.
+              VAT comes off first, then {rate}% · one marked item per order, not add-ons · one discounted order a day.
             </p>
           </div>
 
@@ -214,7 +231,7 @@ function ClaimReviewPanel({ claim, percentage, busy, approving, canAct, onApprov
               </button>
             </div>
           ) : (
-            <Outcome claim={claim} />
+            <Outcome claim={claim} canUndo={canAct && claim.is_latest === true} busy={busy} onUndo={onUndo} />
           )}
 
           {!pending && nextClaim && (

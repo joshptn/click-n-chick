@@ -9,6 +9,9 @@ const VARIANTS = {
   outline:
     'border border-brand-500 bg-transparent text-brand-600 hover:bg-brand-50 active:translate-y-px',
   ghost: 'bg-transparent text-brand-600 hover:bg-brand-50',
+  // The confirm button of an action that ends or removes something (signing out, cancelling).
+  danger:
+    'bg-[#e5322d] text-white shadow-[0_6px_16px_-4px_rgba(229,50,45,0.45)] hover:bg-[#c92a2a] active:translate-y-px',
 };
 
 const SIZES = {

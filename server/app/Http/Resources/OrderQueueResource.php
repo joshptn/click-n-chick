@@ -47,14 +47,17 @@ class OrderQueueResource extends JsonResource
                 'id' => $item->id,
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'quantity' => $item->quantity,
-                // The kitchen cooks to the add-ons, so they ride with the line.
+                // The kitchen cooks to the add-ons, so they ride with the line,
+                // each with the size picked: "Iced Tea (Large)".
                 'addons' => $item->relationLoaded('addons')
-                    ? $item->addons->pluck('addon_name')->values()
+                    ? $item->addons->map(fn ($addon) => $addon->chosen_name)->values()
                     : [],
             ])->values()),
 
             'subtotal' => $this->subtotal,
             'discount_amount' => $this->discount_amount,
+            // The VAT part of discount_amount, shown as its own line.
+            'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
             'delivery_fee' => $this->delivery_fee,
             'total_amount' => $this->total_amount,
             'payment_status' => $this->paymentStatus(),

@@ -13,8 +13,9 @@ use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
- * BR-10 - the statutory discount comes off the base food items only. Not the
- * delivery fee, and not the add-ons.
+ * BR-10 - the statutory discount comes off one unit of the dish's base price
+ * only (FR-05.4). Not the other units, not the delivery fee, and not the
+ * add-ons.
  */
 class DiscountExcludesAddonsTest extends TestCase
 {
@@ -63,7 +64,7 @@ class DiscountExcludesAddonsTest extends TestCase
         return $user;
     }
 
-    /** A ₱200 dish with a ₱50 add-on: ₱250 a line, but only ₱200 is discountable. */
+    /** A ₱200 dish with a ₱50 add-on: ₱250 a unit, but only ₱200 is discountable. */
     private function foodWithAddon(): array
     {
         $food = Food::create([
@@ -74,7 +75,7 @@ class DiscountExcludesAddonsTest extends TestCase
             'stock_quantity' => 20,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 15,
+            'is_discountable' => true,
         ]);
 
         $addon = Addon::create([
@@ -104,12 +105,13 @@ class DiscountExcludesAddonsTest extends TestCase
             'scheduled_for' => CarbonImmutable::now('Asia/Manila')->addDay()->setTime(12, 0)->toIso8601String(),
             'apply_discount' => true,
         ])->assertOk()
-            // Two lines at 250 = 500 payable before the discount...
+            // Two units at 250 = 500 payable before the discount...
             ->assertJsonPath('subtotal', 500)
-            // ...but only the 400 of base food is discountable.
-            ->assertJsonPath('discount_base', 400)
-            ->assertJsonPath('discount.amount', 80)
-            ->assertJsonPath('total', 420);
+            // ...but only one unit's ₱200 of base food is discountable:
+            // ₱21.43 VAT exemption + ₱35.71 at 20% = ₱57.14.
+            ->assertJsonPath('discount_base', 200)
+            ->assertJsonPath('discount.amount', 57.14)
+            ->assertJsonPath('total', 442.86);
     }
 
     public function test_an_immediate_order_discounts_the_food_but_not_the_addon(): void
@@ -129,11 +131,11 @@ class DiscountExcludesAddonsTest extends TestCase
             'apply_discount' => true,
         ])->assertOk()
             ->assertJsonPath('subtotal', 500)
-            ->assertJsonPath('discount_base', 400)
-            ->assertJsonPath('discount.amount', 80);
+            ->assertJsonPath('discount_base', 200)
+            ->assertJsonPath('discount.amount', 57.14);
     }
 
-    public function test_without_addons_the_discount_base_is_the_whole_subtotal(): void
+    public function test_three_units_still_discount_only_one(): void
     {
         $user = $this->customer();
         [$food] = $this->foodWithAddon();
@@ -149,7 +151,8 @@ class DiscountExcludesAddonsTest extends TestCase
             'apply_discount' => true,
         ])->assertOk()
             ->assertJsonPath('subtotal', 600)
-            ->assertJsonPath('discount_base', 600)
-            ->assertJsonPath('discount.amount', 120);
+            ->assertJsonPath('discount_base', 200)
+            ->assertJsonPath('discount.amount', 57.14)
+            ->assertJsonPath('total', 542.86);
     }
 }

@@ -13,6 +13,7 @@ use App\Services\Orders\DiscountUsage;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
+use App\Services\Orders\PriceCheck;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -62,6 +63,10 @@ class AdvanceOrderController extends Controller implements HasMiddleware
             ], 409);
         }
 
+        if ($refusal = PriceCheck::refusal($input[PriceCheck::FIELD] ?? null, (float) $quote['total'])) {
+            return response()->json($refusal + ['quote' => $quote], 409);
+        }
+
         $collectAt = CarbonImmutable::parse($quote['schedule']['requested_at']);
         $selectedIds = collect($quote['items'])->pluck('id')->all();
 
@@ -79,6 +84,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                     'scheduled_for' => $collectAt,
                     'subtotal' => $quote['subtotal'],
                     'discount_amount' => $quote['discount']['amount'],
+                    'vat_exempt_amount' => $quote['discount']['applied'] ? $quote['discount']['vat_exempt_amount'] : 0,
                     'delivery_fee' => 0,
                     'total_amount' => $quote['total'],
                     'total_price' => $quote['total'],
@@ -98,6 +104,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                         OrderItemAddon::create([
                             'order_item_id' => $item->id,
                             'addon_id' => $addon['id'],
+                            'size' => $addon['size'] ?? null,
                             'unit_price' => $addon['addon_price'],
                         ]);
                     }
@@ -145,6 +152,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
             'cart_item_ids.*' => ['integer'],
             'scheduled_for' => ['nullable', 'string', 'max:64'],
             'apply_discount' => ['sometimes', 'boolean'],
+            PriceCheck::FIELD => PriceCheck::RULE,
         ]);
     }
 

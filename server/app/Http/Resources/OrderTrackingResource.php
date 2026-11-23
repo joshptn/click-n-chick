@@ -79,13 +79,17 @@ class OrderTrackingResource extends JsonResource
                 'addons' => $item->relationLoaded('addons')
                     ? $item->addons->map(fn ($addon) => [
                         'id' => $addon->id,
-                        'addon_name' => $addon->addon_name,
+                        // With the size picked: "Iced Tea (Large)".
+                        'addon_name' => $addon->chosen_name,
+                        'size' => $addon->pickedSize(),
                     ])->values()
                     : [],
             ])->values()),
 
             'subtotal' => (float) $this->subtotal,
             'discount_amount' => (float) $this->discount_amount,
+            // The VAT part of discount_amount, shown as its own line.
+            'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
             'delivery_fee' => (float) $this->delivery_fee,
             'total' => (float) ($this->total_amount ?? $this->total_price),
             'payment_status' => $this->paymentStatus(),

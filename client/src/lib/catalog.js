@@ -39,6 +39,14 @@ export function saveFood({ id, values, image, password }) {
   // Number() first: the server's integer rule refuses a leading zero.
   form.append("price", String(Number(values.price)));
   form.append("description", values.description.trim());
+  // Discount: Yes is stored, None is left null by the server (FR-05.9).
+  form.append("is_discountable", values.is_discountable === "yes" ? "1" : "0");
+
+  // The add-ons offered with it. Empty is sent as "" (none); null leaves them as they are.
+  if (Array.isArray(values.addon_ids)) {
+    if (values.addon_ids.length === 0) form.append("addon_ids", "");
+    else values.addon_ids.forEach((addonId) => form.append("addon_ids[]", String(addonId)));
+  }
 
   if (image) form.append("thumbnail", image);
   if (password) form.append("password", password);
@@ -78,6 +86,20 @@ export const STATUS_FILTERS = [
   { key: "on_menu", label: "On menu" },
   { key: "archived", label: "Archived" },
 ];
+
+/** Discount: Yes / None, set by the Store Manager on the product form (FR-05.9). */
+export const DISCOUNT_FILTERS = [
+  { key: "all", label: "Any discount" },
+  { key: "yes", label: "Discount: Yes" },
+  { key: "none", label: "Discount: None" },
+];
+
+export function matchesDiscount(food, key) {
+  if (key === "yes") return Boolean(food?.is_discountable);
+  if (key === "none") return !food?.is_discountable;
+
+  return true;
+}
 
 export function matchesStatus(food, key) {
   if (key === "on_menu") return !isArchived(food);

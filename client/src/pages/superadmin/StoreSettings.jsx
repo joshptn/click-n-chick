@@ -228,7 +228,7 @@ function DiscountRate({ confirm, stepUp }) {
             </>
           ) : (
             <p className="m-0 font-display text-[12px] leading-relaxed text-[#6f6b68]">
-              One rate covers both discounts. It cannot be switched off because the law requires it, and it cannot go below {form.data.minimum_percentage}%.
+              One rate covers both discounts, taken after the 12% VAT exemption. It cannot be switched off because the law requires it, and it cannot go below {form.data.minimum_percentage}%.
             </p>
           )}
         </form>

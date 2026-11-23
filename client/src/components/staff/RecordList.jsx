@@ -1,5 +1,6 @@
 import { Skeleton } from "@mantine/core";
 
+import TableFrame from "./TableFrame";
 import { formatPeso } from "../../lib/menu";
 import {
   OUTCOME_PILL,
@@ -62,10 +63,13 @@ function KindTag({ record }) {
 const GRID =
   "grid grid-cols-[minmax(92px,0.9fr)_minmax(120px,1.3fr)_minmax(120px,1.6fr)_minmax(64px,0.6fr)_minmax(80px,0.8fr)_minmax(88px,0.7fr)] items-center gap-x-3";
 
-export function RecordTable({ records, loading, selectedId, onSelect, intent, showPayment = false }) {
+/** `sticky={false}` inside a dialog, whose own header is pinned. */
+export function RecordTable({ records, loading, selectedId, onSelect, intent, showPayment = false, sticky = true }) {
   return (
-    <div className="overflow-x-auto rounded-[16px] bg-white ring-1 ring-[#f0e9df]">
-      <div className="min-w-[640px]">
+    <TableFrame
+      minWidth="min-w-[640px]"
+      sticky={sticky}
+      head={
         <div
           className={`${GRID} border-b border-[#f3ede4] px-4 py-3 font-display text-[10px] font-bold uppercase tracking-[0.8px] text-[#8d8884]`}
         >
@@ -76,72 +80,72 @@ export function RecordTable({ records, loading, selectedId, onSelect, intent, sh
           <span className="text-right">Total</span>
           <span className="text-center">Status</span>
         </div>
+      }
+    >
+      {loading
+        ? [0, 1, 2, 3, 4, 5].map((key) => (
+            <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-4 py-3.5 last:border-b-0`}>
+              <Skeleton height={28} width={70} />
+              <Skeleton height={14} width="75%" />
+              <Skeleton height={14} width="85%" />
+              <Skeleton height={14} width={50} />
+              <Skeleton height={14} width={64} className="justify-self-end" />
+              <Skeleton height={20} width={76} radius="xl" className="justify-self-center" />
+            </div>
+          ))
+        : records.map((record) => {
+            const selected = String(record.id) === selectedId;
 
-        {loading
-          ? [0, 1, 2, 3, 4, 5].map((key) => (
-              <div key={key} className={`${GRID} border-b border-[#f6f1ea] px-4 py-3.5 last:border-b-0`}>
-                <Skeleton height={28} width={70} />
-                <Skeleton height={14} width="75%" />
-                <Skeleton height={14} width="85%" />
-                <Skeleton height={14} width={50} />
-                <Skeleton height={14} width={64} className="justify-self-end" />
-                <Skeleton height={20} width={76} radius="xl" className="justify-self-center" />
-              </div>
-            ))
-          : records.map((record) => {
-              const selected = String(record.id) === selectedId;
-
-              return (
-                <button
-                  key={record.id}
-                  type="button"
-                  onClick={() => onSelect(record)}
-                  onPointerEnter={() => intent.intend(record.id)}
-                  onPointerLeave={intent.cancel}
-                  onFocus={() => intent.intend(record.id)}
-                  aria-pressed={selected}
-                  data-testid="record-row"
-                  data-record={record.id}
-                  className={`${GRID} w-full border-b border-l-[3px] border-b-[#f6f1ea] px-4 py-3 text-left transition-colors last:border-b-0 ${
-                    selected ? "border-l-brand-500 bg-[#fff6ec]" : "border-l-transparent bg-white hover:bg-[#fffaf4]"
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block font-display text-[13px] font-bold text-brand-600">{record.reference}</span>
-                    <span className="block font-display text-[10.5px] text-[#a39f9b]">
-                      {formatRecordDate(record.closed_at)} · {formatRecordTime(record.closed_at)}
-                    </span>
+            return (
+              <button
+                key={record.id}
+                type="button"
+                onClick={() => onSelect(record)}
+                onPointerEnter={() => intent.intend(record.id)}
+                onPointerLeave={intent.cancel}
+                onFocus={() => intent.intend(record.id)}
+                aria-pressed={selected}
+                data-testid="record-row"
+                data-record={record.id}
+                className={`${GRID} w-full border-b border-l-[3px] border-b-[#f6f1ea] px-4 py-3 text-left transition-colors last:border-b-0 ${
+                  selected ? "border-l-brand-500 bg-[#fff6ec]" : "border-l-transparent bg-white hover:bg-[#fffaf4]"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block font-display text-[13px] font-bold text-brand-600">{record.reference}</span>
+                  <span className="block font-display text-[10.5px] text-[#a39f9b]">
+                    {formatRecordDate(record.closed_at)} · {formatRecordTime(record.closed_at)}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block truncate font-display text-[12.5px] font-medium text-ink">
-                      {record.customer?.name || "Customer"}
-                    </span>
-                    {record.customer?.is_guest && (
-                      <span className="block font-display text-[10.5px] text-[#a39f9b]">Guest</span>
-                    )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-display text-[12.5px] font-medium text-ink">
+                    {record.customer?.name || "Customer"}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block truncate font-display text-[12px] text-[#5f5b58]" title={itemsPreview(record)}>
-                      {itemsPreview(record)}
-                    </span>
-                    <span className="block font-display text-[10.5px] text-[#a39f9b]">
-                      {record.item_count} {record.item_count === 1 ? "item" : "items"}
-                    </span>
+                  {record.customer?.is_guest && (
+                    <span className="block font-display text-[10.5px] text-[#a39f9b]">Guest</span>
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-display text-[12px] text-[#5f5b58]" title={itemsPreview(record)}>
+                    {itemsPreview(record)}
                   </span>
-                  <span className="flex flex-col items-start gap-0.5">
-                    <span className="font-display text-[12px] text-[#5f5b58]">{typeLabel(record)}</span>
-                    <KindTag record={record} />
+                  <span className="block font-display text-[10.5px] text-[#a39f9b]">
+                    {record.item_count} {record.item_count === 1 ? "item" : "items"}
                   </span>
-                  <span className="text-right font-display text-[13px] font-bold text-ink">{formatPeso(record.total)}</span>
-                  <span className="flex flex-col items-center gap-0.5">
-                    <StatusPill record={record} />
-                    {showPayment && <PaymentNote record={record} />}
-                  </span>
-                </button>
-              );
-            })}
-      </div>
-    </div>
+                </span>
+                <span className="flex flex-col items-start gap-0.5">
+                  <span className="font-display text-[12px] text-[#5f5b58]">{typeLabel(record)}</span>
+                  <KindTag record={record} />
+                </span>
+                <span className="text-right font-display text-[13px] font-bold text-ink">{formatPeso(record.total)}</span>
+                <span className="flex flex-col items-center gap-0.5">
+                  <StatusPill record={record} />
+                  {showPayment && <PaymentNote record={record} />}
+                </span>
+              </button>
+            );
+          })}
+    </TableFrame>
   );
 }
 

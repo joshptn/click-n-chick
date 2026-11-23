@@ -46,7 +46,8 @@ export function DiscountCard({ discount, onApply }: { discount: DiscountStanding
 
       {status === null && (
         <AppText family="display" size={12} color="#c46a12">
-          Senior Citizens and PWDs get {percent}% off once a day, after a Store Agent checks your ID.
+          Senior Citizens and PWDs get the VAT exemption and {percent}% off one item tagged SC/PWD discount, once a day, after a
+          Store Agent checks your ID.
         </AppText>
       )}
 

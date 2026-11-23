@@ -93,10 +93,11 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
             type="button"
             onClick={() => removeSelected()}
             disabled={selectedCount === 0 || isMutating}
-            className="inline-flex items-center gap-1.5 bg-transparent font-display text-[12.5px] font-bold text-[#e5322d] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 bg-transparent font-display font-bold text-[#e5322d] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
           >
             <IconTrash size={14} stroke={2.2} aria-hidden="true" />
-            Delete ({selectedCount})
+            {/* On the span: Mantine resets type on <button> itself. */}
+            <span className="text-[12.5px]">Delete ({selectedCount})</span>
           </button>
         </div>
       )}
@@ -189,8 +190,15 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                       {formatPeso(line.subtotal)}
                     </p>
 
-                    {!line.is_orderable && (
+                    {!line.is_orderable ? (
                       <p className="m-0 font-display text-[11px] font-semibold text-[#e5322d]">Sold out</p>
+                    ) : (
+                      // Switched off since it went in the cart (decided 2026-11-24).
+                      line.unavailable_addons?.length > 0 && (
+                        <p className="m-0 font-display text-[11px] font-semibold text-[#e5322d]" data-testid="cart-addon-unavailable">
+                          {line.unavailable_addons.join(", ")} not available now
+                        </p>
+                      )
                     )}
                   </div>
 
@@ -206,7 +214,8 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                       aria-label={line.quantity <= 1 ? `Remove ${line.food_name}` : `Decrease ${line.food_name}`}
                       className="grid h-[26px] w-[26px] place-items-center rounded-full bg-[#fdf0e4] text-brand-700 transition-colors hover:bg-[#fbe2cd] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {line.quantity <= 1 ? <IconTrash size={12} stroke={2.2} /> : <IconMinus size={12} stroke={3} />}
+                      {/* The trash glyph reads small beside + and -, so it is drawn a size up. */}
+                      {line.quantity <= 1 ? <IconTrash size={15} stroke={2.2} /> : <IconMinus size={13} stroke={3} />}
                     </button>
 
                     <span className="min-w-[22px] text-center font-display text-[13px] font-bold text-ink">
@@ -220,7 +229,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                       aria-label={`Increase ${line.food_name}`}
                       className="grid h-[26px] w-[26px] place-items-center rounded-full bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-brand-200"
                     >
-                      <IconPlus size={12} stroke={3} />
+                      <IconPlus size={13} stroke={3} />
                     </button>
                   </div>
                 </MotionLi>

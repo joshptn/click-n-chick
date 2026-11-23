@@ -70,7 +70,6 @@ class AdvancePaymentDeadlineTest extends TestCase
             'stock_quantity' => 10,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 15,
         ]);
 
         $order = $this->orderWith(array_merge([

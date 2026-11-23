@@ -34,12 +34,19 @@ function holding(token) {
 /**
  * Open the payment page again (or for the first time, for an advance order).
  * `reviewed`: the customer came through Review Advance Order, which the server
- * records (decided 2026-11-20).
+ * records (decided 2026-11-20). `expectedTotal`: the total on screen; an
+ * advance order is priced again when paid, and a total that moved is refused
+ * (PRICE_CHANGED) rather than charged.
  */
-export function payOrder({ orderId, token, reviewed = false }) {
-  return token
-    ? api.post("/api/guest/order/pay", undefined, holding(token))
-    : api.post(`/api/orders/${orderId}/pay`, reviewed ? { reviewed: true } : undefined);
+export function payOrder({ orderId, token, reviewed = false, expectedTotal = null }) {
+  if (token) return api.post("/api/guest/order/pay", undefined, holding(token));
+
+  const body = {
+    ...(reviewed ? { reviewed: true } : {}),
+    ...(expectedTotal !== null && expectedTotal !== undefined ? { expected_total: expectedTotal } : {}),
+  };
+
+  return api.post(`/api/orders/${orderId}/pay`, Object.keys(body).length ? body : undefined);
 }
 
 /** Where the payment stands. Asks Xendit when it is still open, so a payment shows at once. */

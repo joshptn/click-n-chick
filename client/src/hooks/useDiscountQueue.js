@@ -7,12 +7,16 @@ import {
   discountQueueKey,
   fetchDiscountClaims,
   rejectDiscountClaim,
+  undoDiscountClaim,
 } from "../lib/agent";
+
+/** A wrong or throttled password is shown in the prompt, not as a toast. */
+const PASSWORD_RETRY = ["PASSWORD_CONFIRMATION_INVALID", "PASSWORD_CONFIRMATION_THROTTLED"];
 
 const PER_PAGE = 30;
 
 /**
- * One tab of the discount review queue, and the two decisions on it.
+ * One tab of the discount review queue, the two decisions on it, and undo.
  *
  * The server settles each claim once (a second decision is a 409), so nothing
  * is optimistic here: the panel waits for the answer and keeps the settled
@@ -81,11 +85,40 @@ export function useDiscountQueue(status) {
     onSettled: settle,
   });
 
+  // Undo puts the claim back in Pending; the reopened claim is kept like a
+  // decision, so the panel shows it ready to decide again.
+  const undo = useMutation({
+    mutationFn: ({ claim, password }) => undoDiscountClaim(claim.id, password),
+    onSuccess: (response, { claim }) => {
+      remember(response?.claim, claim);
+      toast.success(response?.message ?? "Decision undone.", "Back in Pending");
+    },
+    onError: (error) => {
+      if (PASSWORD_RETRY.includes(error?.payload?.error_code)) return;
+
+      if (["NOT_DECIDED", "REPLACED"].includes(error?.payload?.code)) {
+        toast.warning(error.message, "Cannot undo");
+        settle();
+
+        return;
+      }
+
+      toast.error(error.message, "Could not undo the decision");
+    },
+    onSettled: settle,
+  });
+
   const pages = query.data?.pages;
   const claims = useMemo(() => (pages ?? []).flatMap((page) => page?.data ?? []), [pages]);
   const head = pages?.[0];
 
-  const pendingId = approve.isPending ? approve.variables?.id : reject.isPending ? reject.variables?.claim?.id : null;
+  const pendingId = approve.isPending
+    ? approve.variables?.id
+    : reject.isPending
+      ? reject.variables?.claim?.id
+      : undo.isPending
+        ? undo.variables?.claim?.id
+        : null;
 
   return {
     claims,
@@ -101,8 +134,10 @@ export function useDiscountQueue(status) {
     decided,
     approve: (claim) => approve.mutateAsync(claim),
     reject: (claim, reason) => reject.mutateAsync({ claim, reason }),
+    undo: (claim, password) => undo.mutateAsync({ claim, password }),
     isApproving: approve.isPending,
     isRejecting: reject.isPending,
+    isUndoing: undo.isPending,
     pendingId,
   };
 }

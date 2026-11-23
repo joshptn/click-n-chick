@@ -95,7 +95,6 @@ class PaymentFlowTest extends TestCase
             'stock_quantity' => $stock,
             'is_available' => true,
             'is_best_seller' => false,
-            'prep_time' => 20,
         ]);
     }
 

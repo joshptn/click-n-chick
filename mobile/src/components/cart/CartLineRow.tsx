@@ -73,11 +73,16 @@ export const CartLineRow = memo(function CartLineRow({
           {formatPeso(line.subtotal)}
         </AppText>
 
-        {!orderable && (
+        {!orderable ? (
           <AppText family="display" weight="semibold" size={10.5} color={colors.danger}>
             Sold out
           </AppText>
-        )}
+        ) : line.unavailable_addons && line.unavailable_addons.length > 0 ? (
+          // Switched off since it went in the cart (decided 2026-11-24).
+          <AppText family="display" weight="semibold" size={10.5} color={colors.danger} numberOfLines={2}>
+            {line.unavailable_addons.join(", ")} not available now
+          </AppText>
+        ) : null}
       </View>
 
       <View style={styles.stepper}>
@@ -91,7 +96,8 @@ export const CartLineRow = memo(function CartLineRow({
           testID={`decrease-${line.id}`}
         >
           {line.quantity <= 1 ? (
-            <IconTrash size={13} color={colors.orange} strokeWidth={2.2} />
+            // The trash glyph reads small beside + and -, so it is drawn a size up.
+            <IconTrash size={15} color={colors.orange} strokeWidth={2.2} />
           ) : (
             <IconMinus size={13} color={colors.orange} strokeWidth={3} />
           )}

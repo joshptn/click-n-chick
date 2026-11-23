@@ -33,8 +33,18 @@ export type QuoteDiscount = {
   percentage: number | string;
   used_today: boolean;
   can_apply: boolean;
+  vat_rate: number;
+  /** What using it takes off: the VAT first, then the rate (decided 2026-11-23). */
   available_amount: number;
+  vat_exempt_amount: number;
+  percentage_amount: number;
+  /**
+   * The one dish it goes on: the highest-priced one marked for it, one unit
+   * (FR-05.4). Null when nothing in the order is marked.
+   */
+  item: { food_id: number; food_name: string; price: number } | null;
   applied: boolean;
+  /** Everything taken off, VAT exemption included. */
   amount: number;
 };
 
@@ -124,9 +134,17 @@ export const checkoutApi = {
   quote: (scope: CheckoutScope, input: QuoteInput, signal?: AbortSignal) =>
     api.post<Quote>(`${base(scope)}/checkout/quote`, input, { ...auth(scope), signal }),
 
-  /** Creates the order waiting for payment and opens Xendit's page for it. */
-  place: (scope: CheckoutScope, input: QuoteInput) =>
-    api.post<Placed>(scope === "guest" ? "/api/guest/orders" : "/api/order/place", input, auth(scope)),
+  /**
+   * Creates the order waiting for payment and opens Xendit's page for it.
+   * `expectedTotal`: the total on screen; refused (PRICE_CHANGED) if prices
+   * moved since.
+   */
+  place: (scope: CheckoutScope, input: QuoteInput, expectedTotal?: number | null) =>
+    api.post<Placed>(
+      scope === "guest" ? "/api/guest/orders" : "/api/order/place",
+      expectedTotal == null ? input : { ...input, expected_total: expectedTotal },
+      auth(scope)
+    ),
 
   search: async (scope: CheckoutScope, query: string, signal?: AbortSignal) =>
     (await api.get<{ results: Place[] }>(`${base(scope)}/geocode/search`, { ...auth(scope), params: { q: query }, signal })).results,
@@ -139,12 +157,20 @@ export const paymentApi = {
   /**
    * Open the payment page again (the same one while it is still open).
    * `reviewed`: the customer came through Review Advance Order, which the
-   * API records (decided 2026-11-20).
+   * API records (decided 2026-11-20). `expectedTotal`: the total on screen;
+   * an advance order is priced again when paid, and a total that moved is
+   * refused (PRICE_CHANGED) rather than charged.
    */
-  pay: (target: PaymentTarget, reviewed = false) =>
-    target.token
-      ? api.post<PaymentStart>("/api/guest/order/pay", undefined, holding(target.token))
-      : api.post<PaymentStart>(`/api/orders/${target.orderId}/pay`, reviewed ? { reviewed: true } : undefined),
+  pay: (target: PaymentTarget, reviewed = false, expectedTotal?: number | null) => {
+    if (target.token) return api.post<PaymentStart>("/api/guest/order/pay", undefined, holding(target.token));
+
+    const body = {
+      ...(reviewed ? { reviewed: true } : {}),
+      ...(expectedTotal == null ? {} : { expected_total: expectedTotal }),
+    };
+
+    return api.post<PaymentStart>(`/api/orders/${target.orderId}/pay`, Object.keys(body).length ? body : undefined);
+  },
 
   /** Where the payment stands; the API asks Xendit while it is still open. */
   status: (target: PaymentTarget, signal?: AbortSignal) =>
@@ -160,6 +186,16 @@ export function blockerFor(quote: Quote | null | undefined, ...codes: string[]):
 export const STORE_BLOCKERS = ["STORE_CLOSED", "STORE_CLOSED_MANUALLY", "DELIVERY_UNAVAILABLE"];
 export const ITEM_BLOCKERS = ["EMPTY_SELECTION", "ITEM_UNAVAILABLE", "ITEM_STOCK_SHORT"];
 export const DISCOUNT_BLOCKERS = ["DISCOUNT_NOT_ELIGIBLE", "DISCOUNT_ALREADY_USED"];
+
+/** What a mobile number field keeps as it is typed: digits only, at most 11 (09XXXXXXXXX). */
+export function mobileDigits(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\D/g, "").slice(0, 11);
+}
+
+/** A stored number as the field shows it: 09XXXXXXXXX when it is one. */
+export function mobileForField(value: string | null | undefined): string {
+  return toLocalMobile(value) || mobileDigits(value);
+}
 
 /** 09XXXXXXXXX from +639..., 639... or 09...; "" when it is not a PH mobile number. */
 export function toLocalMobile(value: string | null | undefined): string {

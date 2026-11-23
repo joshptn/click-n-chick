@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AddonController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\AdvanceOrderController;
 use App\Http\Controllers\AdvanceRequestController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\GuestOrderController;
+use App\Http\Controllers\MenuPriceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderModificationController;
@@ -35,6 +37,7 @@ use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\VerificationChannelController;
 use App\Http\Controllers\XenditWebhookController;
+use App\Models\Addon;
 use Illuminate\Support\Facades\Route;
 
 // Public
@@ -225,6 +228,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
 
     // Read by both staff roles; changing stock is the Store Agent's (below).
     Route::get('/agent/stock', [StockController::class, 'index']);
+    // Add-ons (decided 2026-11-24): the catalogue is the Store Manager's, the
+    // switches the Store Agent's (below).
+    Route::get('/addons', [AddonController::class, 'index']);
     Route::get('/agent/advance-requests/{order}', [AdvanceRequestController::class, 'show'])
         ->whereNumber('order');
 });
@@ -233,6 +239,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
     Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
     Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
+    Route::post('/admin/discount-claims/{discount}/undo', [DiscountController::class, 'undo'])
+        ->middleware(['throttle:user-update', 'confirm-password:undo a discount decision,always']);
 
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
 
@@ -255,6 +263,11 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])-
     Route::patch('/foods/{food}/availability', [StockController::class, 'availability']);
     Route::patch('/agent/stock/availability', [StockController::class, 'bulkAvailability']);
     Route::patch('/agent/stock/count', [StockController::class, 'bulkStock']);
+
+    Route::patch('/addons/{addon}/availability', [AddonController::class, 'availability']);
+    Route::patch('/agent/addons/availability', [AddonController::class, 'bulkAvailability']);
+    Route::patch('/addons/{addon}/sizes/{size}', [AddonController::class, 'sizeAvailability'])
+        ->whereIn('size', array_keys(Addon::SIZES));
 });
 
 // Store Manager
@@ -264,6 +277,16 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:super_adm
     Route::patch('/foods/{food}', [FoodController::class, 'update']);
     Route::delete('/foods/{food}', [FoodController::class, 'destroy']);
     Route::patch('/foods/{food}/archive', [FoodController::class, 'archive']);
+
+    Route::post('/addons', [AddonController::class, 'store']);
+    Route::put('/addons/{addon}', [AddonController::class, 'update']);
+    Route::patch('/addons/{addon}', [AddonController::class, 'update']);
+    Route::patch('/addons/{addon}/archive', [AddonController::class, 'archive']);
+    Route::delete('/addons/{addon}', [AddonController::class, 'destroy']);
+    // Bulk price change by a peso amount (FR-07.7): preview, then apply.
+    Route::post('/foods/prices/preview', [MenuPriceController::class, 'preview']);
+    Route::post('/foods/prices', [MenuPriceController::class, 'apply'])
+        ->middleware('throttle:user-update');
 
     Route::post('/category', [CategoryController::class, 'store']);
     Route::put('/category/{category}', [CategoryController::class, 'update']);

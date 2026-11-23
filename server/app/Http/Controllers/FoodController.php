@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Events\MenuBroadcast;
 use App\Http\Resources\FoodResource;
-use App\Jobs\NotifyEveryAccount;
 use App\Models\Food;
 use App\Services\Auth\PasswordConfirmation;
+use App\Services\Catalog\AddonCarts;
+use App\Services\Catalog\PriceAnnouncer;
 use App\Services\Stock\StockReservation;
 use App\Utils\Image;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -15,6 +16,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -56,7 +58,7 @@ class FoodController extends Controller implements HasMiddleware
         $category = $validated['category'] ?? null;
 
         $foods = Food::query()
-            ->with(['category', 'addons'])
+            ->with(['category', 'addons.sizes'])
             ->withHeldQuantity()
             ->when($category !== null && $category !== '' && $category !== 'all', function ($query) use ($category) {
                 is_numeric($category)
@@ -99,7 +101,12 @@ class FoodController extends Controller implements HasMiddleware
             'price' => (int) $validated['price'],
             'thumbnail' => $thumbnail,
             'is_available' => $validated['is_available'] ?? true,
+            'is_discountable' => $this->discountable($validated['is_discountable'] ?? null),
         ]);
+
+        if (array_key_exists('addon_ids', $validated)) {
+            $food->addons()->sync($validated['addon_ids'] ?? []);
+        }
 
         return $this->answer($food, 'created', $food->food_name.' was added to the menu.', 201);
     }
@@ -107,7 +114,7 @@ class FoodController extends Controller implements HasMiddleware
     public function show(Food $food)
     {
         return response()->json([
-            'data' => new FoodResource($food->load(['category', 'addons'])),
+            'data' => new FoodResource($food->load(['category', 'addons.sizes'])),
             'meta' => FoodResource::meta(),
         ]);
     }
@@ -116,8 +123,9 @@ class FoodController extends Controller implements HasMiddleware
      * PUT|PATCH /api/foods/{food} - edit a dish (UC-MENU-011, -013, -014).
      *
      * A new price asks for the Manager's password first and, once saved, tells
-     * every account (UC-NOTIF-009). Carts already float to it (BR-18); an order
-     * keeps the price it was placed at. A new photo replaces the old one only
+     * every account (UC-NOTIF-009) and every open cart and checkout, which
+     * refetch (BR-18). An immediate order keeps the price it was placed at; an
+     * unpaid advance order takes the new one when it is paid (AdvanceRepricing). A new photo replaces the old one only
      * after it has uploaded, so a failed upload leaves the dish as it was.
      */
     public function update(Request $request, Food $food)
@@ -160,11 +168,24 @@ class FoodController extends Controller implements HasMiddleware
             $food->is_available = (bool) $validated['is_available'];
         }
 
+        // Left alone when the form does not send it, so an older client
+        // cannot clear it by accident.
+        if (array_key_exists('is_discountable', $validated)) {
+            $food->is_discountable = $this->discountable($validated['is_discountable']);
+        }
+
         if ($newThumbnail !== null) {
             $food->thumbnail = $newThumbnail;
         }
 
         $food->save();
+
+        // Left alone when the form does not send it. Picks of an add-on the
+        // dish no longer offers come out of carts.
+        if (array_key_exists('addon_ids', $validated)) {
+            $food->addons()->sync($validated['addon_ids'] ?? []);
+            app(AddonCarts::class)->tidyDish($food);
+        }
 
         if ($newThumbnail !== null) {
             $this->forgetImage($oldThumbnail);
@@ -199,7 +220,7 @@ class FoodController extends Controller implements HasMiddleware
             'message' => $food->is_available
                 ? $food->food_name.' is back on the menu.'
                 : $food->food_name.' was archived. Customers no longer see it on the menu.',
-            'data' => new FoodResource($food->load(['category', 'addons'])),
+            'data' => new FoodResource($food->load(['category', 'addons.sizes'])),
         ]);
     }
 
@@ -260,7 +281,20 @@ class FoodController extends Controller implements HasMiddleware
             'description' => ['nullable', 'string', 'max:255'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],
             'is_available' => ['sometimes', 'boolean'],
+            'is_discountable' => ['sometimes', 'nullable', 'boolean'],
+            // The add-ons offered with it. Sent empty (null) to offer none.
+            'addon_ids' => ['sometimes', 'nullable', 'array', 'max:200'],
+            'addon_ids.*' => ['integer', 'distinct', Rule::exists('addons', 'id')->whereNull('deleted_at')],
         ];
+    }
+
+    /**
+     * Discount: Yes is stored as true, None is left null, so nothing is written
+     * for a dish that does not take it (decided 2026-11-23, FR-05.9).
+     */
+    private function discountable(mixed $value): ?bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : null;
     }
 
     /** Two dishes with one name would be indistinguishable on the menu and on receipts. */
@@ -280,7 +314,7 @@ class FoodController extends Controller implements HasMiddleware
 
     private function answer(Food $food, string $event, string $message, int $status = 200)
     {
-        $food->load(['category', 'addons']);
+        $food->load(['category', 'addons.sizes']);
 
         $this->broadcast($food, $event);
 
@@ -300,20 +334,13 @@ class FoodController extends Controller implements HasMiddleware
         }
     }
 
+    /** Live to open carts and checkouts, and as a notice to every account (BR-18). */
     private function announcePriceChange(Food $food, int $previous): void
     {
-        $body = $food->food_name.' is now '.$this->peso((int) $food->price).', changed from '.$this->peso($previous).'.';
-
-        try {
-            NotifyEveryAccount::dispatch('Price update', $body);
-        } catch (Throwable $e) {
-            Log::warning('Could not announce a price change.', ['food' => $food->id, 'error' => $e->getMessage()]);
-        }
-    }
-
-    private function peso(int $amount): string
-    {
-        return '₱'.number_format($amount);
+        app(PriceAnnouncer::class)->announce(
+            $food->food_name.' is now '.PriceAnnouncer::peso((int) $food->price).', changed from '.PriceAnnouncer::peso($previous).'.',
+            [(int) $food->id],
+        );
     }
 
     private function forgetImage(?string $url): void

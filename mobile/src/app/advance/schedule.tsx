@@ -110,7 +110,7 @@ export default function AdvanceSchedule() {
   const discountReady = discountChoice !== null && settled && Boolean(quote?.can_submit);
 
   const submit = useMutation({
-    mutationFn: () => advanceApi.submit(input),
+    mutationFn: () => advanceApi.submit(input, quote?.total),
     onSuccess: (payload) => {
       void queryClient.invalidateQueries({ queryKey: cartKey("account", "advance") });
       void queryClient.invalidateQueries({ queryKey: ORDERS_KEY });
@@ -357,13 +357,23 @@ export default function AdvanceSchedule() {
 
             <View style={styles.totals}>
               <SummaryRow label="Subtotal" value={formatPeso(quote?.subtotal)} />
+              {quote?.discount.applied && Number(quote.discount.vat_exempt_amount) > 0 && (
+                <View style={styles.line}>
+                  <AppText family="display" weight="medium" size={13} color={colors.brand600}>
+                    VAT exemption
+                  </AppText>
+                  <AppText family="display" weight="semibold" size={13} color={colors.brand600}>
+                    −{formatPeso(quote.discount.vat_exempt_amount)}
+                  </AppText>
+                </View>
+              )}
               {quote?.discount.applied && (
                 <View style={styles.line}>
                   <AppText family="display" weight="medium" size={13} color={colors.brand600}>
                     {quote.discount.type_label} Discount ({Number(quote.discount.percentage)}%)
                   </AppText>
                   <AppText family="display" weight="semibold" size={13} color={colors.brand600}>
-                    −{formatPeso(quote.discount.amount)}
+                    −{formatPeso(quote.discount.percentage_amount ?? quote.discount.amount)}
                   </AppText>
                 </View>
               )}

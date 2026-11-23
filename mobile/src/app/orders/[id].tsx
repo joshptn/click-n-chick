@@ -5,6 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { paymentApi } from "../../api/checkout";
+import { ApiError } from "../../api/client";
 import { ORDERS_KEY, orderKey, ordersApi, type ContactChanges, type OrderAnswer } from "../../api/orders";
 import { OrderTrackingView } from "../../components/orders/OrderTrackingView";
 import { useOrderChannel } from "../../hooks/useRealtime";
@@ -74,7 +75,8 @@ export default function CustomerOrder() {
 
   const pay = useMutation({
     // Only reached through Review Advance Order.
-    mutationFn: () => paymentApi.pay({ orderId: id }, true),
+    // With the total on screen: an advance order is priced again when paid.
+    mutationFn: () => paymentApi.pay({ orderId: id }, true, order?.total ?? null),
     onSuccess: async (payload) => {
       if (payload.paid || !payload.payment?.url) {
         settle({ order: payload.order });
@@ -84,7 +86,13 @@ export default function CustomerOrder() {
       awaitingReturn.current = true;
       await WebBrowser.openBrowserAsync(payload.payment.url, { showTitle: true, toolbarColor: "#ffffff" });
     },
-    onError: (error) => toast.error("Payment unavailable", errorText(error, "Payment could not be opened. Please try again.")),
+    onError: (error) => {
+      const priced = error instanceof ApiError && error.payload.error_code === "PRICE_CHANGED";
+
+      toast.error(priced ? "Total changed" : "Payment unavailable", errorText(error, "Payment could not be opened. Please try again."));
+      // A new total: the screen shows it before the customer pays.
+      void queryClient.invalidateQueries({ queryKey });
+    },
   });
 
   useEffect(() => {

@@ -12,6 +12,7 @@ class CartItemAddon extends Model
     protected $fillable = [
         'cart_item_id',
         'addon_id',
+        'size',
     ];
 
     public function cartItem()

@@ -481,7 +481,7 @@ function TwoFactorCard() {
             </Button>
             <Button
               type="submit"
-              variant="secondary"
+              variant="danger"
               size="sm"
               disabled={password.length === 0}
               loading={disableBusy}
