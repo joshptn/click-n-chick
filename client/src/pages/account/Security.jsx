@@ -8,6 +8,7 @@ import {
   IconDeviceMobile,
   IconDeviceTablet,
   IconLogout,
+  IconMapPin,
   IconRefresh,
   IconShieldCheck,
   IconShieldLock,
@@ -127,8 +128,17 @@ function DeviceRow({ device, canActOnOthers, onSignOut, onToggleTrust, pendingAc
           )}
         </p>
 
-        <p className="m-0 font-display text-[12.5px] text-[#8d8884]">
-          {device.last_ip_address ?? "Unknown IP"} &middot; Last active {lastSeen(device.last_seen_at)}
+        {/* The approximate place, as the app shows it (FR-01.13; on the web
+            since 2026-11-24), then the address it was read from. */}
+        <p className="m-0 mt-0.5 flex flex-wrap items-center gap-x-1.5 font-display text-[12.5px] text-[#8d8884]" data-testid="device-place">
+          <span className="inline-flex items-center gap-1 font-medium text-[#5f5b58]">
+            <IconMapPin size={13} stroke={2} aria-hidden="true" className="shrink-0 text-brand-500" />
+            {device.location ?? "Unknown location"}
+          </span>
+          <span aria-hidden="true">&middot;</span>
+          <span>{device.last_ip_address ?? "Unknown IP"}</span>
+          <span aria-hidden="true">&middot;</span>
+          <span>Last active {lastSeen(device.last_seen_at)}</span>
         </p>
       </div>
 
@@ -408,6 +418,17 @@ function Security() {
             </ul>
           )}
         </section>
+
+        {/* MaxMind's licence asks for this wherever GeoLite2 places are shown. */}
+        {devices.length > 0 && (
+          <p className="m-0 mt-3 px-1 font-display text-[11px] leading-relaxed text-[#a39f9b]" data-testid="geolite-credit">
+            Locations are approximate. This product includes GeoLite2 data created by MaxMind, available from{" "}
+            <a href="https://www.maxmind.com" target="_blank" rel="noreferrer" className="text-[#8d8884] underline hover:text-brand-600">
+              https://www.maxmind.com
+            </a>
+            .
+          </p>
+        )}
       </main>
 
       <Modal
@@ -425,7 +446,8 @@ function Security() {
             </>
           ) : (
             <>
-              <strong className="font-semibold text-ink">{confirming?.name}</strong> will be signed out
+              <strong className="font-semibold text-ink">{confirming?.name ?? "That device"}</strong>
+              {confirming?.location ? ` (${confirming.location})` : ""} will be signed out
               straight away and will need your password to sign in again. Your other devices are unaffected.
             </>
           )}
