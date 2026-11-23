@@ -25,6 +25,9 @@ class FoodSeeder extends Seeder
 {
     private const IMAGE_FOLDER = 'food';
 
+    /** Seeded with Discount: Yes (FR-05.9); a real menu starts as None. */
+    private const DISCOUNTABLE_CATEGORIES = ['Combos', 'Breakfast'];
+
     /**
      * stock_quantity null  -> untracked, always orderable
      * stock_quantity 1..5  -> "Only N stocks left!"
@@ -268,6 +271,9 @@ class FoodSeeder extends Seeder
                     'stock_quantity' => $item['stock_quantity'],
                     'is_available' => true,
                     'is_best_seller' => $item['is_best_seller'] ?? false,
+                    // Demo data: the single-serving rice meals take the
+                    // Senior/PWD discount; everything else is None (null).
+                    'is_discountable' => in_array($item['category'], self::DISCOUNTABLE_CATEGORIES, true) ? true : null,
                     'prep_time' => $item['prep_time'],
                     'description' => $item['description'],
                 ],

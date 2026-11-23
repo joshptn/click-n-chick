@@ -27,6 +27,8 @@ class Food extends Model
         'stock_quantity',
         'is_available',
         'is_best_seller',
+        // Senior/PWD discount: true for Yes, null for None (FR-05.9).
+        'is_discountable',
         'prep_time',
         'description',
     ];
@@ -51,6 +53,7 @@ class Food extends Model
             'prep_time' => 'integer',
             'is_available' => 'boolean',
             'is_best_seller' => 'boolean',
+            'is_discountable' => 'boolean',
         ];
     }
 

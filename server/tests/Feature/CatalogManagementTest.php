@@ -99,6 +99,51 @@ class CatalogManagementTest extends TestCase
         $this->assertDatabaseHas('food', ['food_name' => 'Chicken Fingers', 'description' => '', 'stock_quantity' => null]);
     }
 
+    /** Discount: Yes is stored, None is left null (FR-05.9). No password either way. */
+    public function test_the_discount_field_stores_yes_and_leaves_none_null(): void
+    {
+        $manager = $this->manager();
+
+        $this->actingAs($manager, 'sanctum')
+            ->post('/api/foods', $this->payload([
+                'food_name' => 'Chicken Spaghetti',
+                'is_discountable' => '1',
+                'thumbnail' => UploadedFile::fake()->image('spaghetti.png'),
+            ]), ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('data.is_discountable', true);
+
+        $food = Food::where('food_name', 'Chicken Spaghetti')->firstOrFail();
+        $this->assertTrue($food->is_discountable);
+
+        // An edit that leaves the field out keeps it.
+        $this->actingAs($manager, 'sanctum')
+            ->putJson("/api/foods/{$food->id}", $this->payload(['food_name' => 'Chicken Spaghetti']))
+            ->assertOk()
+            ->assertJsonPath('data.is_discountable', true);
+
+        // None clears it to null, not false.
+        $this->actingAs($manager, 'sanctum')
+            ->putJson("/api/foods/{$food->id}", $this->payload(['food_name' => 'Chicken Spaghetti', 'is_discountable' => '0']))
+            ->assertOk()
+            ->assertJsonPath('data.is_discountable', false);
+
+        $this->assertNull($food->fresh()->getRawOriginal('is_discountable'));
+    }
+
+    public function test_a_new_dish_starts_with_no_discount(): void
+    {
+        $this->actingAs($this->manager(), 'sanctum')
+            ->post('/api/foods', $this->payload([
+                'food_name' => 'Regular Fries',
+                'thumbnail' => UploadedFile::fake()->image('fries.png'),
+            ]), ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('data.is_discountable', false);
+
+        $this->assertNull(Food::where('food_name', 'Regular Fries')->firstOrFail()->getRawOriginal('is_discountable'));
+    }
+
     public function test_a_new_dish_needs_a_photo_a_category_and_a_whole_peso_price(): void
     {
         $this->actingAs($this->manager(), 'sanctum')

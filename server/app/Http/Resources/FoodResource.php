@@ -23,6 +23,8 @@ class FoodResource extends JsonResource
             'thumbnail' => $this->thumbnail,
             'prep_time' => $this->prep_time,
             'is_best_seller' => (bool) $this->is_best_seller,
+            // Whether it can take the Senior/PWD discount (FR-05.9).
+            'is_discountable' => (bool) $this->is_discountable,
 
             // Availability, as three separate facts the UI renders differently:
             // whether it can be ordered at all, why not, and how urgent it is.

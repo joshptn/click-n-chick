@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Events\DiscountClaimBroadcast;
 use App\Events\NotificationBroadcast;
+use App\Jobs\SendPushNotification;
 use App\Models\Discount;
 use App\Models\Notification;
 use App\Models\User;
@@ -83,7 +84,6 @@ class DiscountController extends Controller
         $claim = Discount::create([
             'user_id' => $user->getKey(),
             'discount_type' => $validated['discount_type'],
-            'vat_exempt' => true,
             'id_image' => $url,
             'discount_status' => Discount::STATUS_PENDING,
         ]);
@@ -124,6 +124,9 @@ class DiscountController extends Controller
                 'verifier:id,first_name,last_name',
             ])
             ->where('discount_status', $status)
+            // Whether an undo can reopen it: only the customer's latest claim.
+            ->select('discounts.*')
+            ->selectRaw('NOT EXISTS (SELECT 1 FROM discounts AS newer WHERE newer.user_id = discounts.user_id AND newer.id > discounts.id) AS is_latest')
             // Pending, oldest first: a review queue that serves the newest
             // first starves whoever has waited longest. Decided, latest first:
             // that list is a record, read for what just happened.
@@ -173,6 +176,87 @@ class DiscountController extends Controller
     }
 
     /**
+     * POST /api/admin/discount-claims/{discount}/undo - password every time.
+     *
+     * A safety net for a decision made without a proper look at the ID: the
+     * claim goes back to Pending for a fresh review, whenever it was decided.
+     * Only the customer's latest claim can be reopened, since an older one
+     * has been replaced by the application they sent after it. Orders already
+     * placed with the discount keep it (decided 2026-11-23).
+     */
+    public function undo(Request $request, Discount $discount)
+    {
+        $this->authorize('undo', $discount);
+
+        $reopened = DB::transaction(function () use ($discount) {
+            $fresh = Discount::query()->whereKey($discount->getKey())->lockForUpdate()->first();
+
+            if ($fresh === null || $fresh->isPending()) {
+                return 'NOT_DECIDED';
+            }
+
+            $replaced = Discount::query()
+                ->where('user_id', $fresh->user_id)
+                ->where('id', '>', $fresh->getKey())
+                ->exists();
+
+            if ($replaced) {
+                return 'REPLACED';
+            }
+
+            $was = $fresh->discount_status;
+
+            $fresh->forceFill([
+                'discount_status' => Discount::STATUS_PENDING,
+                'rejection_reason' => null,
+                'verified_by' => null,
+                'verified_at' => null,
+            ])->save();
+
+            return [$fresh, $was];
+        });
+
+        if ($reopened === 'NOT_DECIDED') {
+            return response()->json([
+                'success' => false,
+                'code' => 'NOT_DECIDED',
+                'message' => 'That application is already waiting for review.',
+            ], 409);
+        }
+
+        if ($reopened === 'REPLACED') {
+            return response()->json([
+                'success' => false,
+                'code' => 'REPLACED',
+                'message' => 'The customer has sent a newer application since, so this one can no longer be reopened.',
+            ], 409);
+        }
+
+        [$claim, $was] = $reopened;
+
+        $this->push(
+            (int) $claim->user_id,
+            'Discount under review again',
+            $was === Discount::STATUS_APPROVED
+                ? "Your {$claim->typeLabel()} discount is being reviewed again, so it cannot be used until it is approved. We will let you know once it is decided."
+                : "Your {$claim->typeLabel()} application is being reviewed again. We will let you know once it is decided.",
+            null,
+            true
+        );
+
+        DiscountClaimBroadcast::dispatch($claim, DiscountClaimBroadcast::REOPENED);
+
+        $claim = $claim->fresh(['user:id,first_name,last_name,email,phone_number']);
+        $claim->setAttribute('is_latest', true);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Decision undone. The application is back in Pending.',
+            'claim' => $claim,
+        ]);
+    }
+
+    /**
      * Settle a claim.
      *
      * Guarded against a double decision: two agents opening the same queue
@@ -210,12 +294,17 @@ class DiscountController extends Controller
 
         DiscountClaimBroadcast::dispatch($settled, DiscountClaimBroadcast::DECIDED);
 
+        $claim = $settled->fresh(['user:id,first_name,last_name,email', 'verifier:id,first_name,last_name']);
+        // A pending claim is always the customer's latest (one live claim at a
+        // time), so the one just decided can be undone.
+        $claim->setAttribute('is_latest', true);
+
         return response()->json([
             'success' => true,
             'message' => $settled->isApproved()
                 ? 'Discount approved.'
                 : 'Discount application rejected.',
-            'claim' => $settled->fresh(['user:id,first_name,last_name,email', 'verifier:id,first_name,last_name']),
+            'claim' => $claim,
         ]);
     }
 
@@ -258,18 +347,20 @@ class DiscountController extends Controller
             $approved ? 'Discount approved' : 'Discount application rejected',
             $approved
                 ? "Your {$claim->typeLabel()} discount has been approved. You can use it on your orders."
-                : "Your {$claim->typeLabel()} application was not approved. {$claim->rejection_reason}"
+                : "Your {$claim->typeLabel()} application was not approved. {$claim->rejection_reason}",
+            null,
+            true
         );
     }
 
     /**
-     * Write and broadcast one notification.
+     * Write and broadcast one notification, and push it to the phone when asked.
      *
      * Guarded end to end: the decision is already committed by the time this
      * runs, so a broadcast transport that is down must not turn a completed
      * approval into a 500 telling the agent it failed.
      */
-    private function push(int $userId, string $title, string $body, ?string $type = null): void
+    private function push(int $userId, string $title, string $body, ?string $type = null, bool $toPhone = false): void
     {
         try {
             $notification = Notification::create([
@@ -281,6 +372,11 @@ class DiscountController extends Controller
             ]);
 
             NotificationBroadcast::dispatch($notification, $userId);
+
+            // The customer's own decisions also reach their phone.
+            if ($toPhone) {
+                SendPushNotification::forNotification($notification);
+            }
         } catch (Throwable $e) {
             Log::warning('Could not send a discount notification.', [
                 'user_id' => $userId,

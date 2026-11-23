@@ -8,7 +8,7 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Events\Dispatchable;
 
 /**
- * A discount application arrived or was decided.
+ * A discount application arrived, was decided, or had its decision undone.
  *
  * Staff only. The Pending Verification queue and the sidebar count refetch on
  * it, so a claim another agent just settled leaves every open queue at once.
@@ -22,6 +22,8 @@ class DiscountClaimBroadcast implements LiveBroadcast
     public const SUBMITTED = 'submitted';
 
     public const DECIDED = 'decided';
+
+    public const REOPENED = 'reopened';
 
     public function __construct(
         public Discount $claim,

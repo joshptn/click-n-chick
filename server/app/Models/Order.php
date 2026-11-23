@@ -63,6 +63,7 @@ class Order extends Model
         'total_price',
         'subtotal',
         'discount_amount',
+        'vat_exempt_amount',
         'delivery_fee',
         'delivery_distance_km',
         'total_amount',
@@ -101,6 +102,7 @@ class Order extends Model
             'total_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
+            'vat_exempt_amount' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
         ];

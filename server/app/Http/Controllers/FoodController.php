@@ -99,6 +99,7 @@ class FoodController extends Controller implements HasMiddleware
             'price' => (int) $validated['price'],
             'thumbnail' => $thumbnail,
             'is_available' => $validated['is_available'] ?? true,
+            'is_discountable' => $this->discountable($validated['is_discountable'] ?? null),
         ]);
 
         return $this->answer($food, 'created', $food->food_name.' was added to the menu.', 201);
@@ -158,6 +159,12 @@ class FoodController extends Controller implements HasMiddleware
 
         if (array_key_exists('is_available', $validated)) {
             $food->is_available = (bool) $validated['is_available'];
+        }
+
+        // Left alone when the form does not send it, so an older client
+        // cannot clear it by accident.
+        if (array_key_exists('is_discountable', $validated)) {
+            $food->is_discountable = $this->discountable($validated['is_discountable']);
         }
 
         if ($newThumbnail !== null) {
@@ -260,7 +267,17 @@ class FoodController extends Controller implements HasMiddleware
             'description' => ['nullable', 'string', 'max:255'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],
             'is_available' => ['sometimes', 'boolean'],
+            'is_discountable' => ['sometimes', 'nullable', 'boolean'],
         ];
+    }
+
+    /**
+     * Discount: Yes is stored as true, None is left null, so nothing is written
+     * for a dish that does not take it (decided 2026-11-23, FR-05.9).
+     */
+    private function discountable(mixed $value): ?bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? true : null;
     }
 
     /** Two dishes with one name would be indistinguishable on the menu and on receipts. */

@@ -42,6 +42,11 @@ class DiscountPolicy
         return $user->hasRole(User::ROLE_ADMIN);
     }
 
+    public function undo(User $user, Discount $discount): bool
+    {
+        return $user->hasRole(User::ROLE_ADMIN);
+    }
+
     public function update(User $user, Discount $discount): bool
     {
         return false;

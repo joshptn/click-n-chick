@@ -233,6 +233,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin,sup
 Route::middleware(['auth:sanctum', 'device-check', 'staff-idle', 'role:admin'])->group(function () {
     Route::post('/admin/discount-claims/{discount}/approve', [DiscountController::class, 'approve']);
     Route::post('/admin/discount-claims/{discount}/reject', [DiscountController::class, 'reject']);
+    Route::post('/admin/discount-claims/{discount}/undo', [DiscountController::class, 'undo'])
+        ->middleware(['throttle:user-update', 'confirm-password:undo a discount decision,always']);
 
     Route::put('/order/{id}/status', [OrderController::class, 'updateOrderStatus']);
 

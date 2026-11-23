@@ -57,6 +57,7 @@ class OrderPlacement
                 'status' => OrderStatus::AWAITING_PAYMENT,
                 'subtotal' => $quote['subtotal'],
                 'discount_amount' => $quote['discount']['amount'],
+                'vat_exempt_amount' => $quote['discount']['applied'] ? $quote['discount']['vat_exempt_amount'] : 0,
                 'delivery_fee' => $quote['delivery_fee'],
                 'delivery_distance_km' => $isDelivery ? ($quote['delivery']['distance_km'] ?? null) : null,
                 'total_amount' => $quote['total'],

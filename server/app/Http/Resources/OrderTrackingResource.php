@@ -86,6 +86,8 @@ class OrderTrackingResource extends JsonResource
 
             'subtotal' => (float) $this->subtotal,
             'discount_amount' => (float) $this->discount_amount,
+            // The VAT part of discount_amount, shown as its own line.
+            'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
             'delivery_fee' => (float) $this->delivery_fee,
             'total' => (float) ($this->total_amount ?? $this->total_price),
             'payment_status' => $this->paymentStatus(),

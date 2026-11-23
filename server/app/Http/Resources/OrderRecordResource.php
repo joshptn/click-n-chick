@@ -64,6 +64,8 @@ class OrderRecordResource extends JsonResource
 
             'total' => (float) ($this->total_amount ?? $this->total_price ?? 0),
             'discount_amount' => (float) $this->discount_amount,
+            // The VAT part of discount_amount, shown as its own line.
+            'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
             'payment_status' => $paid === null ? 'unpaid' : 'paid',
             'payment_verified' => (bool) ($this->payment_verified ?? $paid !== null),
             // Decided 2026-11-23: the refund lives on the payment. An extra

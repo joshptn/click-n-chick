@@ -11,9 +11,10 @@ class RequirePasswordConfirmation
 {
     public function __construct(private PasswordConfirmation $confirmation) {}
 
-    public function handle(Request $request, Closure $next, string $action = 'perform this action'): Response
+    /** `confirm-password:<action>,always` asks for the password on every request. */
+    public function handle(Request $request, Closure $next, string $action = 'perform this action', string $mode = ''): Response
     {
-        $failure = $this->confirmation->challenge($request, $action);
+        $failure = $this->confirmation->challenge($request, $action, $mode === 'always');
 
         if ($failure !== null) {
             return $failure;

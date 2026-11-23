@@ -79,6 +79,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                     'scheduled_for' => $collectAt,
                     'subtotal' => $quote['subtotal'],
                     'discount_amount' => $quote['discount']['amount'],
+                    'vat_exempt_amount' => $quote['discount']['applied'] ? $quote['discount']['vat_exempt_amount'] : 0,
                     'delivery_fee' => 0,
                     'total_amount' => $quote['total'],
                     'total_price' => $quote['total'],
