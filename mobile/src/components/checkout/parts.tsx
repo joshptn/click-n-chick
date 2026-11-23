@@ -183,13 +183,24 @@ export function OrderSummary({
             value={quote.delivery?.fee != null ? formatPeso(quote.delivery_fee) : "—"}
           />
         )}
+        {/* Decided 2026-11-23: the VAT comes off first, then the rate. */}
+        {discount.applied && Number(discount.vat_exempt_amount) > 0 && (
+          <View style={styles.row}>
+            <AppText family="display" weight="medium" size={13} color={colors.brand600}>
+              VAT exemption
+            </AppText>
+            <AppText family="display" weight="semibold" size={13} color={colors.brand600}>
+              −{formatPeso(discount.vat_exempt_amount)}
+            </AppText>
+          </View>
+        )}
         {discount.applied && (
           <View style={styles.row}>
             <AppText family="display" weight="medium" size={13} color={colors.brand600}>
               {discount.type_label} Discount ({Number(discount.percentage)}%)
             </AppText>
             <AppText family="display" weight="semibold" size={13} color={colors.brand600}>
-              −{formatPeso(discount.amount)}
+              −{formatPeso(discount.percentage_amount ?? discount.amount)}
             </AppText>
           </View>
         )}

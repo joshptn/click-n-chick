@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FOODS_KEY, fetchFood, stockColor, stockLabel, type Food } from "../../api/menu";
 import { AppText } from "../../components/AppText";
-import { IconArrowLeft, IconClock, IconMinus, IconPlus, IconShoppingBagPlus, IconTrash } from "../../components/icons";
+import { IconArrowLeft, IconClock, IconDiscount, IconMinus, IconPlus, IconShoppingBagPlus, IconTrash } from "../../components/icons";
 import { DishImage } from "../../components/menu/DishImage";
 import { useCart } from "../../hooks/useCart";
 import { formatPeso } from "../../lib/money";
@@ -161,6 +161,16 @@ export default function FoodDetail() {
             </AppText>
           </View>
 
+          {/* Marked by the Store Manager (FR-05.9). */}
+          {food.is_discountable && (
+            <View style={styles.discountTag} testID="food-discount-tag">
+              <IconDiscount size={13} color={colors.brand800} strokeWidth={2.2} />
+              <AppText family="display" weight="bold" size={11} color={colors.brand800} style={styles.tagText}>
+                SC/PWD discount
+              </AppText>
+            </View>
+          )}
+
           {label ? (
             <View style={styles.stockRow}>
               <View style={[styles.stockDot, { backgroundColor: stockColor(food) }]} />
@@ -307,6 +317,17 @@ const styles = StyleSheet.create({
   tagText: { lineHeight: 15 },
   body: { padding: 20, gap: 4 },
   priceRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 4 },
+  discountTag: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.brand50,
+  },
   stockRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 6 },
   stockDot: { width: 7, height: 7, borderRadius: 4 },
   rule: { height: 1, backgroundColor: "#f0e9df", marginVertical: 16 },

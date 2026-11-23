@@ -200,7 +200,7 @@ export default function DiscountApplication() {
               </View>
               {[
                 "Your ID will be reviewed by a Store Agent. This may take a short while.",
-                `Once approved, the ${percent}% discount can be used once per day only.`,
+                `Once approved, the VAT exemption and ${percent}% discount can be used once per day only, on one item tagged SC/PWD discount.`,
                 "You will be notified once your verification is complete.",
               ].map((line) => (
                 <View key={line} style={styles.noticeLine}>

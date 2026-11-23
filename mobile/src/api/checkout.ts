@@ -33,8 +33,18 @@ export type QuoteDiscount = {
   percentage: number | string;
   used_today: boolean;
   can_apply: boolean;
+  vat_rate: number;
+  /** What using it takes off: the VAT first, then the rate (decided 2026-11-23). */
   available_amount: number;
+  vat_exempt_amount: number;
+  percentage_amount: number;
+  /**
+   * The one dish it goes on: the highest-priced one marked for it, one unit
+   * (FR-05.4). Null when nothing in the order is marked.
+   */
+  item: { food_id: number; food_name: string; price: number } | null;
   applied: boolean;
+  /** Everything taken off, VAT exemption included. */
   amount: number;
 };
 

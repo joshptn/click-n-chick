@@ -22,6 +22,8 @@ export type Food = {
   thumbnail: string | null;
   prep_time: number | null;
   is_best_seller: boolean;
+  /** Marked by the Store Manager for the Senior/PWD discount (FR-05.9). */
+  is_discountable: boolean;
   is_available: boolean;
   /** Null when the dish is made to order (no count kept). */
   stock_quantity: number | null;
