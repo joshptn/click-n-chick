@@ -13,6 +13,7 @@ use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\FoodController;
 use App\Http\Controllers\GeocodingController;
 use App\Http\Controllers\GuestOrderController;
+use App\Http\Controllers\LoyaltyController;
 use App\Http\Controllers\MenuPriceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
@@ -175,6 +176,8 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
 
     Route::post('/order/place', [OrderController::class, 'placeOrder'])
         ->middleware('throttle:place-order');
+    // The customer's points: balance and history (decided 2026-11-24).
+    Route::get('/loyalty', [LoyaltyController::class, 'show']);
     Route::get('/orders', [OrderTrackingController::class, 'index']);
     Route::get('/orders/{order}', [OrderTrackingController::class, 'show'])->whereNumber('order');
     Route::post('/orders/{order}/confirm-details', [OrderTrackingController::class, 'confirmDetails'])

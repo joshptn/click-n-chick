@@ -355,6 +355,7 @@ class OrderNotice
             $reason = match ($order->cancellation_reason) {
                 PaymentSettlement::SOLD_OUT, PaymentSettlement::SOLD_OUT_AFTER_WINDOW => 'Unfortunately, the items are no longer available.',
                 PaymentSettlement::PAST_PAY_BY => 'Unfortunately, it arrived after the time to pay had passed.',
+                PaymentSettlement::POINTS_GONE => 'Unfortunately, the points it used had been spent on another order since.',
                 default => 'Unfortunately, it arrived after the order had closed.',
             };
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Orders\OrderStatus;
 use App\Services\Stock\StockReservation;
 use Carbon\CarbonImmutable;
@@ -64,6 +65,7 @@ class Order extends Model
         'subtotal',
         'discount_amount',
         'vat_exempt_amount',
+        'points_amount',
         'delivery_fee',
         'delivery_distance_km',
         'total_amount',
@@ -103,6 +105,7 @@ class Order extends Model
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'vat_exempt_amount' => 'decimal:2',
+            'points_amount' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
         ];
@@ -127,6 +130,13 @@ class Order extends Model
         static::updated(function (self $order) {
             if ($order->wasChanged('status') && $order->status === OrderStatus::CANCELLED) {
                 app(StockReservation::class)->orderCancelled($order, $order->getOriginal('status'));
+            }
+
+            // Likewise loyalty points (decided 2026-11-24): earned when the
+            // order is completed or delivered, given back when it is cancelled
+            // or declined, whichever path got it there.
+            if ($order->wasChanged('status')) {
+                app(LoyaltyPoints::class)->statusChanged($order);
             }
         });
     }
@@ -651,6 +661,26 @@ class Order extends Model
     public function loyaltyTransactions()
     {
         return $this->hasMany(LoyaltyTransaction::class);
+    }
+
+    /**
+     * The order's points (decided 2026-11-24), read from its ledger rows:
+     * the pesos of the bill paid with points, the points that took and has
+     * not given back, and the points it earned once completed.
+     *
+     * @return array{amount: float, points_used: float, points_earned: float}
+     */
+    public function loyaltySummary(): array
+    {
+        $rows = $this->loyaltyTransactions;
+
+        $spent = $rows->whereIn('reason', [LoyaltyTransaction::REDEEMED, LoyaltyTransaction::RETURNED])->sum('points_change');
+
+        return [
+            'amount' => round((float) $this->points_amount, 2),
+            'points_used' => round(-(float) $spent, 2),
+            'points_earned' => round((float) $rows->where('reason', LoyaltyTransaction::EARNED)->sum('points_change'), 2),
+        ];
     }
 
     public function stockHolds()

@@ -8,6 +8,7 @@ use App\Mail\GuestOrderNotice;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\StockHold;
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderNotice;
 use App\Services\Orders\OrderStatus;
@@ -61,7 +62,10 @@ class PaymentSettlement
 
     public const CLOSED = 'Your payment arrived after this order had closed.';
 
-    public const REASONS = [self::SOLD_OUT, self::SOLD_OUT_AFTER_WINDOW, self::PAST_PAY_BY, self::CLOSED];
+    /** A late payment revived the order, but its points had been spent meanwhile (decided 2026-11-24). */
+    public const POINTS_GONE = 'Your payment arrived late, and your points had been used on another order since.';
+
+    public const REASONS = [self::SOLD_OUT, self::SOLD_OUT_AFTER_WINDOW, self::PAST_PAY_BY, self::CLOSED, self::POINTS_GONE];
 
     public function __construct(
         private PaymentGateway $gateway,
@@ -69,7 +73,45 @@ class PaymentSettlement
         private OrderAnnouncer $announcer,
         private OrderNotice $notice,
         private PaymentRefunds $refunds,
+        private LoyaltyPoints $points,
     ) {}
+
+    /**
+     * An order whose whole bill is paid with points (decided 2026-11-24): no
+     * money to take, so no checkout. It is recorded as paid with points and
+     * moves on exactly as a paid one would. Returns the order as it now stands.
+     */
+    public function settleWithPoints(Order $order): Order
+    {
+        $result = DB::transaction(function () use ($order) {
+            $locked = Order::query()->whereKey($order->getKey())->lockForUpdate()->first();
+
+            if ($locked === null
+                || $locked->payments()->verified()->exists()
+                || round((float) ($locked->total_amount ?? $locked->total_price), 2) > 0) {
+                return null;
+            }
+
+            $payment = Payment::create([
+                'order_id' => $locked->getKey(),
+                'user_id' => $locked->user_id,
+                'payment_method' => Payment::METHOD_POINTS,
+                'payment_status' => Payment::STATUS_PAID,
+                'paid_at' => now(),
+                'idempotency_key' => 'points-'.$locked->getKey(),
+            ]);
+
+            return [$locked, $this->moveOrder($locked, $payment), $payment];
+        });
+
+        if ($result !== null) {
+            [$settled, $outcome, $payment] = $result;
+
+            $this->announce($settled->refresh(), $outcome, $payment->refresh());
+        }
+
+        return $order->refresh();
+    }
 
     /** Whether a cancelled order was cancelled because its payment could not place it. */
     public static function couldNotPlace(Order $order): bool
@@ -208,6 +250,12 @@ class PaymentSettlement
                 return $this->owe($order, $payment, self::PAST_PAY_BY);
             }
 
+            // Its points: already held when the payment opened, unless it was
+            // cancelled and gave them back since.
+            if (! $this->points->hold($order)) {
+                return $this->owe($order, $payment, self::POINTS_GONE);
+            }
+
             return $this->reopen($order, OrderStatus::CONFIRMED, self::CONFIRMED);
         }
 
@@ -221,6 +269,12 @@ class PaymentSettlement
             return $this->owe($order, $payment, $status === OrderStatus::AWAITING_PAYMENT
                 ? self::SOLD_OUT
                 : self::SOLD_OUT_AFTER_WINDOW);
+        }
+
+        // Its points: held at checkout, unless the order lapsed and gave them
+        // back since (a late payment); then taken again if the balance still can.
+        if (! $this->points->hold($order)) {
+            return $this->owe($order, $payment, self::POINTS_GONE);
         }
 
         return $this->reopen($order, OrderStatus::PLACED, self::PLACED);

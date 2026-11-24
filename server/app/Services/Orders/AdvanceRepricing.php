@@ -23,6 +23,11 @@ use Illuminate\Support\Facades\DB;
  * the current rate. Who may use it is not asked again; that was settled when
  * the request was sent (FR-05.8). An order placed without one stays without.
  *
+ * Dishes paid with points are priced on the day too (decided 2026-11-24):
+ * points_amount is their current menu price, and the discount never goes on
+ * one of them. Whether the balance covers it is asked when the payment opens
+ * (OrderPaymentController); if it does not, dropRedemption() charges them.
+ *
  * An order with no lines, or whose figures already match, is left alone.
  */
 final class AdvanceRepricing
@@ -30,7 +35,7 @@ final class AdvanceRepricing
     /**
      * The order at today's prices, or null when nothing would change.
      *
-     * @return array{lines: list<array<string, mixed>>, subtotal: float, discount: float, vat_exempt: float, total: float}|null
+     * @return array{lines: list<array<string, mixed>>, subtotal: float, discount: float, vat_exempt: float, points: float, total: float}|null
      */
     public function quote(Order $order): ?array
     {
@@ -49,11 +54,14 @@ final class AdvanceRepricing
 
         [$discount, $vatExempt] = $this->discount($order, $lines);
 
-        $total = round(max(0, $subtotal - $discount) + (float) $order->delivery_fee, 2);
+        $points = round(array_sum(array_map(fn (array $line) => $line['dish_price'] * $line['redeemed_quantity'], $lines)), 2);
+
+        $total = round(max(0, $subtotal - $discount - $points) + (float) $order->delivery_fee, 2);
 
         $same = ! $linesMoved
             && $this->equal($discount, (float) $order->discount_amount)
-            && $this->equal($vatExempt, (float) $order->vat_exempt_amount);
+            && $this->equal($vatExempt, (float) $order->vat_exempt_amount)
+            && $this->equal($points, (float) $order->points_amount);
 
         if ($same) {
             return null;
@@ -64,6 +72,7 @@ final class AdvanceRepricing
             'subtotal' => $subtotal,
             'discount' => $discount,
             'vat_exempt' => $vatExempt,
+            'points' => $points,
             'total' => $total,
         ];
     }
@@ -110,11 +119,26 @@ final class AdvanceRepricing
                 'subtotal' => $priced['subtotal'],
                 'discount_amount' => $priced['discount'],
                 'vat_exempt_amount' => $priced['vat_exempt'],
+                'points_amount' => $priced['points'],
                 'total_amount' => $priced['total'],
                 'total_price' => $priced['total'],
             ])->save();
 
             return true;
+        });
+    }
+
+    /**
+     * The customer's points no longer cover the dishes they picked to pay
+     * with them (decided 2026-11-24): those dishes are charged instead, and
+     * the order priced again.
+     */
+    public function dropRedemption(Order $order): void
+    {
+        DB::transaction(function () use ($order) {
+            OrderItem::query()->where('order_id', $order->getKey())->update(['redeemed_quantity' => 0]);
+
+            $this->apply($order);
         });
     }
 
@@ -136,6 +160,8 @@ final class AdvanceRepricing
             : $stored;
 
         $quantity = (int) $item->quantity;
+        // The dish alone, what a unit paid with points covers.
+        $storedDish = max(0.0, $stored - array_sum(array_map(fn ($selection) => (float) $selection->unit_price, $item->addonSelections->all())));
 
         return [
             'id' => (int) $item->id,
@@ -149,6 +175,8 @@ final class AdvanceRepricing
             'addons' => $addons,
             'unit_price' => $unit,
             'subtotal' => round($unit * $quantity, 2),
+            'redeemed_quantity' => (int) $item->redeemed_quantity,
+            'dish_price' => round($base ?? $storedDish, 2),
             'changed' => ! $this->equal($unit, $stored),
         ];
     }
@@ -163,7 +191,7 @@ final class AdvanceRepricing
             return [0.0, 0.0];
         }
 
-        $line = StatutoryDiscount::pick($lines);
+        $line = StatutoryDiscount::pick(CheckoutQuote::paidLines(collect($lines)));
         $saving = StatutoryDiscount::for((float) ($line['base_price'] ?? 0), Discount::currentPercentage());
 
         return [$saving['total'], $saving['vat_exempt']];

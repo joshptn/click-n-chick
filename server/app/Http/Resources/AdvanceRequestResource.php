@@ -65,6 +65,8 @@ class AdvanceRequestResource extends JsonResource
                 'id' => $item->id,
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'quantity' => $item->quantity,
+                // Units whose dish is paid with points (decided 2026-11-24).
+                'redeemed_quantity' => (int) $item->redeemed_quantity,
                 'subtotal' => $item->subtotal,
                 // Each with the size picked: "Iced Tea (Large)".
                 'addons' => $item->relationLoaded('addons')
@@ -78,6 +80,7 @@ class AdvanceRequestResource extends JsonResource
             'discount_amount' => $this->discount_amount,
             // The VAT part of discount_amount, shown as its own line.
             'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
+            'points_amount' => (float) $this->points_amount,
             'total_amount' => $this->total_amount,
             'payment_status' => $this->paymentStatus(),
             'is_paid' => $this->isPaid(),

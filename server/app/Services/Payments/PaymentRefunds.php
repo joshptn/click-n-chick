@@ -47,6 +47,14 @@ class PaymentRefunds
     /** A full refund owed on this payment. Safe inside a transaction: the Xendit call waits for the commit. */
     public function owe(Payment $payment, float $amount, string $reason): void
     {
+        // Nothing to send back: an order paid wholly with points took no money;
+        // its points are given back with the order (decided 2026-11-24).
+        if ($payment->payment_method === Payment::METHOD_POINTS || round($amount, 2) <= 0) {
+            $this->decline($payment);
+
+            return;
+        }
+
         $viaXendit = $payment->payment_method !== Payment::METHOD_QRPH;
 
         $payment->forceFill([

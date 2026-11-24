@@ -7,6 +7,8 @@ use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\User;
 use App\Services\Catalog\AddonPicks;
+use App\Services\Loyalty\LoyaltyPoints;
+use App\Services\Loyalty\LoyaltyRedemption;
 use Illuminate\Support\Collection;
 
 class AdvanceQuote
@@ -14,6 +16,8 @@ class AdvanceQuote
     public function __construct(
         private AdvanceSchedule $schedule,
         private DiscountUsage $discountUsage,
+        private LoyaltyPoints $points,
+        private LoyaltyRedemption $redemption,
     ) {}
 
     public function build(User $user, array $input): array
@@ -30,6 +34,16 @@ class AdvanceQuote
 
         $subtotal = round((float) $lines->sum('subtotal'), 2);
 
+        // Dishes to pay with points (decided 2026-11-24). Checked against the
+        // balance now; the points are taken when the order is paid, at that
+        // day's prices (AdvanceRepricing, OrderPaymentController).
+        $redemption = $this->redemption->apply($user, $lines, $input['redeem'] ?? []);
+        $lines = $redemption['lines'];
+
+        if ($redemption['blocker']) {
+            $blockers[] = $redemption['blocker'];
+        }
+
         [$collectAt, $scheduleBlocker] = $this->schedule->evaluate($input['scheduled_for'] ?? null);
 
         if ($scheduleBlocker) {
@@ -42,8 +56,9 @@ class AdvanceQuote
             $blockers[] = $contact['blocker'];
         }
 
-        // One unit of the highest-priced dish marked for it (FR-05.4).
-        $discountLine = StatutoryDiscount::pick($lines);
+        // One unit of the highest-priced dish marked for it (FR-05.4), never a
+        // unit paid with points.
+        $discountLine = StatutoryDiscount::pick(CheckoutQuote::paidLines($lines));
         $discountBase = (float) ($discountLine['base_price'] ?? 0);
 
         $discount = $this->discount(
@@ -70,7 +85,17 @@ class AdvanceQuote
             'discount_base' => $discountBase,
             'contact' => ['name' => $contact['name'], 'phone' => $contact['phone']],
             'discount' => $discount,
-            'total' => round(max(0, $subtotal - (float) $discount['amount']), 2),
+            'points_amount' => $redemption['amount'],
+            'loyalty' => [
+                'balance' => round((float) $user->loyalty_points, 2),
+                'earn_rate' => $this->points->earnRate(),
+                'peso_per_point' => $this->points->pesoPerPoint(),
+                'redeemable' => $this->points->redeemable(),
+                'points_used' => $redemption['points'],
+                'amount' => $redemption['amount'],
+                'points_to_earn' => $this->points->earnedOn(round($subtotal - $redemption['amount'], 2)),
+            ],
+            'total' => round(max(0, $subtotal - (float) $discount['amount'] - $redemption['amount']), 2),
             'blockers' => $blockers,
             'can_submit' => $blockers === [],
         ];

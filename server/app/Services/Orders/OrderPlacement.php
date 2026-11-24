@@ -3,11 +3,13 @@
 namespace App\Services\Orders;
 
 use App\Exceptions\DiscountAlreadyUsed;
+use App\Exceptions\PointsNotEnough;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
 use App\Models\User;
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Stock\StockReservation;
 use App\Services\Store\StoreAvailability;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +19,7 @@ class OrderPlacement
     public function __construct(
         private DiscountUsage $discountUsage,
         private StockReservation $stock,
+        private LoyaltyPoints $points,
     ) {}
 
     /**
@@ -24,6 +27,7 @@ class OrderPlacement
      *                      is a blocker, so can_place being true means a cart exists.
      *
      * @throws DiscountAlreadyUsed
+     * @throws PointsNotEnough
      */
     public function place(?User $user, Cart $cart, array $quote): Order
     {
@@ -58,6 +62,7 @@ class OrderPlacement
                 'subtotal' => $quote['subtotal'],
                 'discount_amount' => $quote['discount']['amount'],
                 'vat_exempt_amount' => $quote['discount']['applied'] ? $quote['discount']['vat_exempt_amount'] : 0,
+                'points_amount' => $quote['points_amount'] ?? 0,
                 'delivery_fee' => $quote['delivery_fee'],
                 'delivery_distance_km' => $isDelivery ? ($quote['delivery']['distance_km'] ?? null) : null,
                 'total_amount' => $quote['total'],
@@ -85,6 +90,7 @@ class OrderPlacement
                     'order_id' => $order->id,
                     'food_id' => $line['food_id'],
                     'quantity' => $line['quantity'],
+                    'redeemed_quantity' => $line['redeemed_quantity'] ?? 0,
                     'price' => $line['unit_price'],
                     'unit_price' => $line['unit_price'],
                     'subtotal' => $line['subtotal'],
@@ -105,6 +111,13 @@ class OrderPlacement
             // sale is the payment, which confirms the hold, and an unpaid hold
             // lapses with the payment window (FR-04.5).
             $this->stock->hold($order, $quote['items']);
+
+            // The points for the dishes paid with them, taken now so another
+            // checkout cannot spend them too, and given back if this one is
+            // cancelled (decided 2026-11-24). Checked again under the lock.
+            if (! $this->points->hold($order)) {
+                throw new PointsNotEnough;
+            }
 
             return $order;
         });

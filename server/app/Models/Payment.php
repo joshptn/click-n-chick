@@ -23,6 +23,13 @@ class Payment extends Model
     public const METHOD_QRPH = 'QRPH';
 
     /**
+     * An order whose whole bill was paid with loyalty points (decided
+     * 2026-11-24): recorded as paid so it is a placed order like any other,
+     * but no money moved, so it never counts as money received or refunded.
+     */
+    public const METHOD_POINTS = 'POINTS';
+
+    /**
      * Refund states (decided 2026-11-23). A refund is the full amount or
      * nothing; refund_amount 0 with no state is the store's "No refund".
      */

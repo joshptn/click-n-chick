@@ -33,7 +33,7 @@ class OrderTrackingController extends Controller
         // An unpaid checkout is not an order yet, for the customer either.
         $query = $request->user()->orders()
             ->withoutUnpaidCheckouts()
-            ->with(self::WITH)
+            ->with([...self::WITH, 'loyaltyTransactions'])
             ->latest('created_at');
 
         if ($filter === 'active') {

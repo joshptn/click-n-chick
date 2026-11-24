@@ -74,6 +74,8 @@ class OrderTrackingResource extends JsonResource
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'thumbnail' => $item->food->thumbnail ?? null,
                 'quantity' => $item->quantity,
+                // Units whose dish was paid with points (decided 2026-11-24).
+                'redeemed_quantity' => (int) $item->redeemed_quantity,
                 'unit_price' => (float) ($item->unit_price ?? $item->price),
                 'subtotal' => (float) ($item->subtotal ?? ($item->price * $item->quantity)),
                 'addons' => $item->relationLoaded('addons')
@@ -90,8 +92,12 @@ class OrderTrackingResource extends JsonResource
             'discount_amount' => (float) $this->discount_amount,
             // The VAT part of discount_amount, shown as its own line.
             'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
+            // The part of the bill paid with points, in pesos.
+            'points_amount' => (float) $this->points_amount,
             'delivery_fee' => (float) $this->delivery_fee,
             'total' => (float) ($this->total_amount ?? $this->total_price),
+            // An account's points on this order; null for a guest's.
+            'loyalty' => $this->user_id === null ? null : $this->loyaltySummary(),
             'payment_status' => $this->paymentStatus(),
 
             // Decided 2026-11-23: the payment record is the only record of it.
