@@ -5,9 +5,10 @@ import { useSession } from "../../hooks/useSession";
 import { colors } from "../../theme/colors";
 
 /**
- * The app's main screens, for customers and guests alike. Notifications and
- * Profile need an account, so they exist only while signed in; a guest's bar
- * shows Sign in in their place (components/TabBar.tsx).
+ * The app's main screens, for customers and guests alike. Orders (its own tab
+ * since 2026-11-26), Notifications and Profile need an account, so they exist
+ * only while signed in; a guest's bar shows Sign in in their place
+ * (components/TabBar.tsx).
  */
 export default function TabsLayout() {
   const { signedIn } = useSession();
@@ -21,6 +22,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="cart" options={{ title: "Cart" }} />
 
       <Tabs.Protected guard={signedIn}>
+        <Tabs.Screen name="orders" options={{ title: "Orders" }} />
         <Tabs.Screen name="notifications" options={{ title: "Notif" }} />
         <Tabs.Screen name="profile" options={{ title: "Profile" }} />
       </Tabs.Protected>

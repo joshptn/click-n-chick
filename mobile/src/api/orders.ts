@@ -44,6 +44,8 @@ export type Order = {
     cancel_from?: string | null;
   } | null;
   can_cancel: boolean;
+  /** Cancelled by the store rather than by the customer. */
+  cancelled_by_store?: boolean;
   details_confirmed_at: string | null;
   can_confirm_details: boolean;
   can_confirm_receipt: boolean;
@@ -69,6 +71,8 @@ export type Order = {
   /** The VAT part of discount_amount (decided 2026-11-23). */
   vat_exempt_amount: number;
   delivery_fee: number;
+  /** Paid with loyalty points (decided 2026-11-24). */
+  points_amount?: number;
   total: number;
 };
 
@@ -95,7 +99,8 @@ export type PaymentNotice = { kind: "cancelled" | "extra"; title: string; body: 
 export type OrdersPage = {
   data: Order[];
   meta: { current_page: number; last_page: number; total: number };
-  counts: { active: number };
+  /** today and advance come with the My Orders tabs (decided 2026-11-26). */
+  counts: { active: number; today?: number; advance?: number };
 };
 
 /** An answer to cancel, confirm details, confirm receipt or a contact change. */
@@ -128,12 +133,72 @@ export function withLinkDeadline(link: TrackingLink | null | undefined): Trackin
 }
 
 export const ORDERS_KEY = ["orders"] as const;
+
+/**
+ * The Orders tab's lists, as on the web (decided 2026-11-26). Today and
+ * Advance keep an order until its day has passed, whatever became of it; Past
+ * holds completed and delivered orders after that; Cancelled holds every
+ * cancelled, declined or rejected order at once. The API decides which is which.
+ */
+export type OrderTab = "today" | "advance" | "past" | "cancelled";
+
+export const ORDER_TABS: { key: OrderTab; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "advance", label: "Advance" },
+  { key: "past", label: "Past" },
+  { key: "cancelled", label: "Cancelled" },
+];
+
+const PAYMENT_METHODS: Record<string, string> = {
+  gcash: "GCash",
+  qrph: "QR Ph",
+  qr_ph: "QR Ph",
+  maya: "Maya",
+  paymaya: "Maya",
+  card: "Card",
+  grab_pay: "GrabPay",
+};
+
+/** A card's status: an advance order waiting to be paid reads "To pay". */
+export function cardStatusLabel(order: Order) {
+  if (order.is_advance && (order.status === "accepted" || order.status === "awaiting_payment")) return "To pay";
+
+  return order.status_label;
+}
+
+/** The small line above a card's total: where the order stands on money. */
+export function cardMoneyNote(order: Order) {
+  if (order.status === "rejected") return "Declined by the store";
+  if (order.is_cancelled) return order.cancelled_by_store ? "Cancelled by the store" : "Cancelled";
+
+  if (order.is_advance) {
+    if (order.status === "submitted") return "Waiting for the store's response";
+    if (order.awaiting_payment || order.status === "accepted") return "Waiting for payment";
+  }
+
+  if (Number(order.points_amount) > 0 && Number(order.total) === 0) return "Paid with points";
+
+  const method = order.payment?.method;
+
+  return method ? `Paid through ${PAYMENT_METHODS[method.toLowerCase()] ?? method}` : "";
+}
+
+/** How many dishes, counting quantities: "3 items". */
+export function itemCount(items: Order["items"] = []) {
+  const count = items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+
+  return `${count} item${count === 1 ? "" : "s"}`;
+}
 export const orderKey = (id: number | string) => ["orders", String(id)] as const;
 export const guestOrderKey = (token: string) => ["guest-order", token] as const;
 
 export const ordersApi = {
   list: (page: number, signal?: AbortSignal) =>
     api.get<OrdersPage>("/api/orders", { params: { filter: "all", page, per_page: 15 }, signal }),
+
+  /** One of the Orders tab's lists (the web's My Orders, decided 2026-11-26). */
+  tab: (tab: OrderTab, page: number, signal?: AbortSignal) =>
+    api.get<OrdersPage>("/api/orders", { params: { filter: tab, page, per_page: 15 }, signal }),
 
   active: (signal?: AbortSignal) =>
     api.get<OrdersPage>("/api/orders", { params: { filter: "active", per_page: 1 }, signal }),

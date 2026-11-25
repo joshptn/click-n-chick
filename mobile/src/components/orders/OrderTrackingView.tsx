@@ -161,7 +161,8 @@ export function OrderTrackingView({
     return () => clearTimeout(timer);
   }, [cancelFrom]);
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace(guest ? "/home" : "/notifications"));
+  // Orders have their own tab since 2026-11-26.
+  const back = () => (router.canGoBack() ? router.back() : router.replace(guest ? "/home" : "/orders"));
 
   const confirmCancel = () => {
     if (!order) return;
