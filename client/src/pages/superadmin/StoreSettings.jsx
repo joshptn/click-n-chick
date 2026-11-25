@@ -5,6 +5,7 @@ import { IconAlertTriangle, IconPencil, IconRefresh, IconRoute } from "@tabler/i
 
 import ConfirmActionModal from "../../components/manager/ConfirmActionModal";
 import PasswordConfirmModal from "../../components/manager/PasswordConfirmModal";
+import PosterManager from "../../components/manager/PosterManager";
 import LivePill from "../../components/staff/LivePill";
 import StaffLayout from "../../components/staff/StaffLayout";
 import Button from "../../components/ui/Button";
@@ -328,7 +329,8 @@ function DeliveryRates({ confirm, stepUp, className }) {
 }
 
 /**
- * Store Settings (UC-OPS-011, UC-DEL-008, UC-DISC-009), for the Store Manager.
+ * Store Settings (UC-OPS-011, UC-DEL-008, UC-DISC-009), for the Store Manager,
+ * with the homepage posters on top.
  *
  * Each section saves on its own, through the server's settings endpoints, which
  * are limited to the Store Manager and apply the rules again. Rates that move
@@ -354,10 +356,11 @@ function StoreSettings() {
             <h1 className="m-0 font-display text-[18px] font-bold tracking-[-0.3px] text-ink">Store Settings</h1>
             <LivePill />
           </div>
-          <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">Manage store hours, delivery fees, and discount rules.</p>
+          <p className="m-0 mt-0.5 font-display text-[12px] text-[#8d8884]">Manage homepage posters, store hours, delivery fees, and discount rules.</p>
         </header>
 
         <div className="grid flex-1 content-start gap-3 px-4 py-4 sm:px-6 lg:grid-cols-2 lg:px-7">
+          <PosterManager confirm={setConfirming} />
           <StoreHours confirm={setConfirming} />
           <DiscountRate confirm={setConfirming} stepUp={stepUp} />
           <DeliveryRates confirm={setConfirming} stepUp={stepUp} className="lg:col-span-2" />

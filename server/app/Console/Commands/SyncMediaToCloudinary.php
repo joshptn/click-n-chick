@@ -84,6 +84,6 @@ class SyncMediaToCloudinary extends Command
 
     private function label(Model $row): string
     {
-        return '#'.$row->getKey().' '.($row->food_name ?? $row->poster_name ?? '');
+        return '#'.$row->getKey().' '.($row instanceof Poster ? 'poster' : ($row->food_name ?? ''));
     }
 }

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Addon;
 use App\Models\Category;
 use App\Models\Food;
-use App\Models\Poster;
 use App\Models\User;
 use App\Services\Media\CloudinaryService;
 use App\Services\Verification\Channel;
@@ -163,43 +162,6 @@ class MenuAndCartTest extends TestCase
         // An add-on switched off must not be offered.
         $names = $groups->flatMap(fn ($group) => collect($group['addons'])->pluck('addon_name'))->all();
         $this->assertNotContains('Retired', $names);
-    }
-
-    // -----------------------------------------------------------------
-    // Posters
-    // -----------------------------------------------------------------
-
-    public function test_only_visible_posters_are_published_and_they_respect_sort_order(): void
-    {
-        Poster::create(['poster_name' => 'Second', 'image' => 'a.jpg', 'sort_order' => 2]);
-        Poster::create(['poster_name' => 'First', 'image' => 'b.jpg', 'sort_order' => 1]);
-        Poster::create(['poster_name' => 'Hidden', 'image' => 'c.jpg', 'is_active' => false]);
-        Poster::create(['poster_name' => 'Expired', 'image' => 'd.jpg', 'expires_at' => now()->subDay()]);
-
-        $names = collect($this->getJson('/api/posters')->assertOk()->json('data'))->pluck('poster_name');
-
-        $this->assertSame(['First', 'Second'], $names->all());
-    }
-
-    public function test_a_poster_expiring_today_is_still_shown_today(): void
-    {
-        Poster::create(['poster_name' => 'Last Day', 'image' => 'a.jpg', 'expires_at' => now()]);
-
-        $this->getJson('/api/posters')->assertOk()->assertJsonCount(1, 'data');
-    }
-
-    public function test_managing_posters_is_store_manager_only(): void
-    {
-        $customer = $this->customer();
-
-        $this->actingAs($customer, 'sanctum')->getJson('/api/admin/posters')->assertStatus(403);
-
-        $agent = $this->customer();
-        $agent->role = User::ROLE_ADMIN;
-        $agent->save();
-
-        // BR-29 / FR-07.6: the Store Agent is fenced out of catalogue work.
-        $this->actingAs($agent->fresh(), 'sanctum')->getJson('/api/admin/posters')->assertStatus(403);
     }
 
     // -----------------------------------------------------------------

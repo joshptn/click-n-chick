@@ -27,6 +27,7 @@
     "pusher-js": "^8.6.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-easy-crop": "^6.2.5",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.8.2",
     "tailwindcss": "^4.1.13"

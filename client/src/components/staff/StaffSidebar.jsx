@@ -188,7 +188,7 @@ function StaffSidebar({ onNavigate }) {
         <StoreToggles />
 
         <div className="mt-1 flex flex-col gap-0.5 border-t border-[#f3ede4] pt-1">
-          <NotificationMenu trigger="row" position="right-end" targetFor={staffNotificationTarget} />
+          <NotificationMenu trigger="row" position="right-end" targetFor={(item) => staffNotificationTarget(item, user?.role)} />
           <AccountMenu trigger="row" position="right-end" showOrders={false} subtitle={roleLabel} />
         </div>
       </div>

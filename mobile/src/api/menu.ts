@@ -38,7 +38,7 @@ export type Food = {
 
 export type Category = { id: number; name: string };
 
-export type Poster = { id: number; poster_name: string; image: string };
+export type Poster = { id: number; image: string };
 
 /** "All" is not a category row; it means no category filter. */
 export const ALL_CATEGORY = "all";

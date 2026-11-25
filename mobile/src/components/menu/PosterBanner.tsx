@@ -9,12 +9,13 @@ import { IconPhoto } from "../icons";
 import { DishImage } from "./DishImage";
 
 const ROTATE_MS = 6000;
-const HEIGHT = 150;
+/** The banner's shape, the same as on the web: posters are cropped to 3:1 when added. */
+const RATIO = 3;
 
 /**
  * The store's posters (GET /api/posters), as the web's PosterBanner: one at a
- * time, swiped or turning every 6 seconds, with the poster's name over it.
- * The design's PWD & Senior card replaces this slot in a later phase.
+ * time, swiped or turning every 6 seconds. A poster is only an image: not
+ * tappable, no caption.
  */
 export function PosterBanner({ width }: { width: number }) {
   const { data, isLoading } = useQuery({
@@ -27,6 +28,7 @@ export function PosterBanner({ width }: { width: number }) {
   const [position, setIndex] = useState(0);
   const list = useRef<FlatList<Poster>>(null);
   const count = posters.length;
+  const height = Math.round(width / RATIO);
   // A poster taken down must not leave the strip pointing past the end.
   const index = position < count ? position : 0;
 
@@ -48,11 +50,11 @@ export function PosterBanner({ width }: { width: number }) {
     setIndex(Math.round(event.nativeEvent.contentOffset.x / width));
   };
 
-  if (isLoading) return <View style={[styles.frame, styles.skeleton, { width }]} />;
+  if (isLoading) return <View style={[styles.frame, styles.skeleton, { width, height }]} />;
 
   if (count === 0) {
     return (
-      <View style={[styles.frame, styles.empty, { width }]}>
+      <View style={[styles.frame, styles.empty, { width, height }]}>
         <IconPhoto size={24} color="#c9c2b8" />
         <AppText family="display" weight="semibold" size={13} color={colors.ink500}>
           No promotions right now
@@ -65,7 +67,7 @@ export function PosterBanner({ width }: { width: number }) {
   }
 
   return (
-    <View style={[styles.frame, { width }]} accessibilityLabel="Promotions">
+    <View style={[styles.frame, { width, height }]} accessibilityLabel="Promotions">
       <FlatList
         ref={list}
         data={posters}
@@ -76,13 +78,8 @@ export function PosterBanner({ width }: { width: number }) {
         onMomentumScrollEnd={onSwiped}
         getItemLayout={(_, item) => ({ length: width, offset: width * item, index: item })}
         renderItem={({ item, index: position }) => (
-          <View style={{ width, height: HEIGHT }}>
+          <View style={{ width, height }} accessible accessibilityRole="image" accessibilityLabel="Store promotion">
             <DishImage url={item.image} width={width} style={StyleSheet.absoluteFill} priority={position === 0 ? "high" : "normal"} />
-            {/* Poster artwork is anything, so the caption brings its own contrast. */}
-            <View style={styles.scrim} />
-            <AppText family="display" weight="extrabold" size={16} color={colors.white} style={styles.caption} numberOfLines={2}>
-              {item.poster_name}
-            </AppText>
           </View>
         )}
       />
@@ -99,7 +96,7 @@ export function PosterBanner({ width }: { width: number }) {
 }
 
 const styles = StyleSheet.create({
-  frame: { height: HEIGHT, borderRadius: 18, overflow: "hidden", alignSelf: "center" },
+  frame: { borderRadius: 18, overflow: "hidden", alignSelf: "center" },
   skeleton: { backgroundColor: "#f0e9df" },
   empty: {
     alignItems: "center",
@@ -110,9 +107,6 @@ const styles = StyleSheet.create({
     borderColor: "#e6ded4",
     backgroundColor: "#faf7f3",
   },
-  scrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(43,21,10,0.28)" },
-  // Clear of the dots on the right.
-  caption: { position: "absolute", left: 16, right: 84, bottom: 14 },
   dots: { position: "absolute", right: 14, bottom: 16, flexDirection: "row", gap: 5 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.55)" },
   dotActive: { width: 18, backgroundColor: colors.white },
