@@ -375,6 +375,9 @@ class CartController extends Controller
                 'unit_price' => $unitPrice,
                 'subtotal' => $unitPrice * $item->quantity,
                 'is_orderable' => $isAdvance ? $food !== null : ($food?->is_orderable ?? false),
+                // Marked for the Senior/PWD discount (FR-05.9): the Advance Order
+                // banner works out what it would save from these.
+                'is_discountable' => (bool) ($food?->is_discountable ?? false),
                 'stock_status' => $isAdvance ? null : $food?->stock_status,
                 'stock_quantity' => $isAdvance ? null : $food?->stock_quantity,
             ];

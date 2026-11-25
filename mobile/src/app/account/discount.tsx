@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { useMutation } from "@tanstack/react-query";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,10 +27,14 @@ function messageOf(error: unknown, fallback: string) {
  * DiscountUploadModal as a screen): choose the type, photograph the ID or
  * pick it from the gallery, and send it for a Store Agent to review. The API
  * accepts .jpg or .png up to 5 MB and stays the authority.
+ *
+ * Opened from the Advance Order banner with `type`, it starts on the type
+ * picked there (2026-11-26).
  */
 export default function DiscountApplication() {
   const { data, isLoading, adopt, refetch } = useProfile();
-  const [type, setType] = useState<DiscountType>("senior");
+  const { type: startType } = useLocalSearchParams<{ type?: string }>();
+  const [type, setType] = useState<DiscountType>(startType === "pwd" ? "pwd" : "senior");
   const [file, setFile] = useState<PickedFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);

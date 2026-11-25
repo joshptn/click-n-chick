@@ -90,7 +90,7 @@ function DiscountUploadModal({ opened, onClose, discountType, percentage = 20, o
         submitted ? null : (
           <div>
             <p className="m-0 font-display text-[16px] font-bold text-ink">{label} Verification</p>
-            <p className="m-0 mt-0.5 font-display text-[12.5px] text-[#8d8884]">
+            <p className="m-0 mt-1.5 font-display text-[12.5px] text-[#8d8884]">
               Upload your valid ID to unlock the discount
             </p>
           </div>

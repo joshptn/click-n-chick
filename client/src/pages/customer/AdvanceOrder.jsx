@@ -3,26 +3,38 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { IconMoodEmpty, IconSearchOff } from "@tabler/icons-react";
 
-import AdvanceNotice from "../../components/advance/AdvanceNotice";
+import DiscountBanner from "../../components/advance/DiscountBanner";
 import AppHeader from "../../components/app/AppHeader";
 import AuthContext from "../../context/AuthContext";
 import CartModal from "../../components/cart/CartModal";
 import CartPanel from "../../components/cart/CartPanel";
-import CategoryTabs from "../../components/menu/CategoryTabs";
 import FoodCard from "../../components/menu/FoodCard";
 import FoodDetailModal from "../../components/menu/FoodDetailModal";
+import MenuCategoryBar from "../../components/menu/MenuCategoryBar";
+import MenuSection from "../../components/menu/MenuSection";
 
-import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
+import { fetchFoods } from "../../lib/menu";
+import { dishCount, menuSections } from "../../lib/menuSections";
 import { CART_MODE } from "../../lib/cartModes";
 import { ROLES } from "../../lib/roles";
 import { useCartActions } from "../../context/useCart";
+import { useMenuScrollSpy } from "../../hooks/useMenuScrollSpy";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** Under the sticky header (68px) and category bar (48px), as on Home. */
+const READING_LINE = 140;
+
+/**
+ * The advance menu (redesigned 2026-11-26 to match Home): the Senior/PWD
+ * banner to apply from at the top (the advance notice was removed), then every dish in sections (BES
+ * Seller, then each category by ID) under a sticky category bar that follows
+ * the section being read. A search shows one list of results instead. Dishes
+ * go into the advance cart; today's stock does not apply.
+ */
 function AdvanceOrder() {
   const { user } = useContext(AuthContext);
 
-  const [category, setCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFood, setSelectedFood] = useState(null);
@@ -38,8 +50,10 @@ function AdvanceOrder() {
   }, [search]);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["foods", category, debouncedSearch],
-    queryFn: () => fetchFoods({ category, search: debouncedSearch }),
+    // Its own key: Home's list is the same request, but kept apart so neither
+    // page's search shows on the other.
+    queryKey: ["foods", "advance-menu", debouncedSearch],
+    queryFn: () => fetchFoods({ search: debouncedSearch }),
     staleTime: 60 * 1000,
   });
 
@@ -50,6 +64,9 @@ function AdvanceOrder() {
   const openFood = selectedFood ? (foods.find((food) => food.id === selectedFood.id) ?? selectedFood) : null;
 
   const isBrowsing = debouncedSearch === "";
+  const sections = useMemo(() => (isBrowsing ? menuSections(foods) : []), [foods, isBrowsing]);
+  const sectionKeys = useMemo(() => sections.map((section) => section.key), [sections]);
+  const { active, pick } = useMenuScrollSpy(sectionKeys, READING_LINE);
 
   const handleQuickAdd = async (food) => {
     if ((food.addon_groups?.length ?? 0) > 0) {
@@ -88,13 +105,11 @@ function AdvanceOrder() {
       <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0">
-            <AdvanceNotice />
+            <DiscountBanner />
 
-            <h2 className="mb-3 mt-6 font-display text-[11.5px] font-bold uppercase tracking-[0.14em] text-[#a39f9b]">
-              Category
-            </h2>
-
-            <CategoryTabs value={category} onChange={setCategory} />
+            {isBrowsing && sections.length > 0 && !isError && (
+              <MenuCategoryBar sections={sections} active={active} onPick={pick} />
+            )}
 
             {isError && (
               <div className="mt-8 rounded-[14px] border border-[#ffd7d5] bg-[#fff1f1] px-5 py-6 text-center">
@@ -112,11 +127,14 @@ function AdvanceOrder() {
             )}
 
             {isLoading && (
-              <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-[290px] animate-pulse rounded-[16px] bg-[#f0e9df]" />
-                ))}
-              </div>
+              <>
+                <div className="mt-4 h-12 animate-pulse rounded-[4px] bg-[#f0e9df]" />
+                <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-[290px] animate-pulse rounded-[16px] bg-[#f0e9df]" />
+                  ))}
+                </div>
+              </>
             )}
 
             {!isLoading && !isError && foods.length === 0 && (
@@ -128,28 +146,47 @@ function AdvanceOrder() {
                       Nothing matches &ldquo;{debouncedSearch}&rdquo;
                     </p>
                     <p className="m-0 font-display text-[13px] text-[#a39f9b]">
-                      Try a different word, or browse the categories above.
+                      Try a different word, or clear the search to see the whole menu.
                     </p>
                   </>
                 ) : (
                   <>
                     <IconMoodEmpty size={42} stroke={1.4} aria-hidden="true" className="text-[#d9d3cb]" />
                     <p className="mt-3 font-display text-[15px] font-semibold text-[#6f6b68]">
-                      Nothing on the menu here yet
+                      Nothing on the menu yet
                     </p>
                     <p className="m-0 font-display text-[13px] text-[#a39f9b]">
-                      Pick another category to keep looking.
+                      Dishes added by the store appear here.
                     </p>
                   </>
                 )}
               </div>
             )}
 
-            {!isLoading && !isError && foods.length > 0 && (
-              <section className="mt-7">
-                <h2 className="m-0 mb-3.5 font-display text-[17px] font-extrabold text-ink">
-                  {isBrowsing ? "What would you like us to prepare?" : `Results for “${debouncedSearch}”`}
-                </h2>
+            {!isLoading && !isError && isBrowsing && sections.length > 0 && (
+              <div data-testid="menu-sections">
+                {sections.map((section, index) => (
+                  <MenuSection
+                    key={section.key}
+                    section={section}
+                    first={index === 0}
+                    isAdding={isAdding}
+                    isAdvance
+                    onSelect={setSelectedFood}
+                    onQuickAdd={handleQuickAdd}
+                  />
+                ))}
+              </div>
+            )}
+
+            {!isLoading && !isError && !isBrowsing && foods.length > 0 && (
+              <section className="mt-7" data-testid="menu-results">
+                <div className="mb-3.5 flex items-baseline justify-between gap-3">
+                  <h2 className="m-0 font-display text-[18px] font-extrabold text-cocoa-900">
+                    Results for &ldquo;{debouncedSearch}&rdquo;
+                  </h2>
+                  <span className="shrink-0 font-display text-[11.5px] text-[#a39f9b]">{dishCount(foods.length)}</span>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   {foods.map((food, index) => (

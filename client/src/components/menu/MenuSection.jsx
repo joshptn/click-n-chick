@@ -30,7 +30,7 @@ function Heading({ section }) {
  * the heading clear of the sticky header (68px) and category bar (48px) when
  * a tab scrolls to it.
  */
-function MenuSection({ section, first = false, isAdding, onSelect, onQuickAdd }) {
+function MenuSection({ section, first = false, isAdding, isAdvance = false, onSelect, onQuickAdd }) {
   return (
     <section id={sectionAnchor(section.key)} aria-label={section.label} className="scroll-mt-[128px] pt-4" data-testid="menu-section">
       <Heading section={section} />
@@ -43,6 +43,7 @@ function MenuSection({ section, first = false, isAdding, onSelect, onQuickAdd })
             index={index}
             priority={first && index < FIRST_ROW}
             isAdding={isAdding}
+            isAdvance={isAdvance}
             onSelect={onSelect}
             onQuickAdd={onQuickAdd}
           />

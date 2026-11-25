@@ -86,6 +86,9 @@ export function setDefaultAddress(id) {
 
 // --- Discount eligibility --------------------------------------------------
 
+/** The caller's own standing; the Advance Order banner reads it (Profile reads it inside the profile). */
+export const DISCOUNT_STANDING_KEY = ["discount", "standing"];
+
 export function fetchDiscountStanding({ signal } = {}) {
   return api.get("/api/discount", { signal });
 }

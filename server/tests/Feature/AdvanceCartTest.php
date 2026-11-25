@@ -271,6 +271,23 @@ class AdvanceCartTest extends TestCase
         ])->assertCreated()->assertJsonPath('item_count', 9999);
     }
 
+    public function test_a_line_says_whether_its_dish_takes_the_discount(): void
+    {
+        $user = $this->customer();
+        $marked = $this->food(['food_name' => 'Lechon', 'is_discountable' => true]);
+        $plain = $this->food(['food_name' => 'Iced Tea', 'is_discountable' => false]);
+
+        foreach ([$marked, $plain] as $food) {
+            $this->actingAs($user)->postJson('/api/cart/items', ['food_id' => $food->id, 'mode' => 'advance'])->assertCreated();
+        }
+
+        $lines = collect($this->actingAs($user)->getJson('/api/cart?mode=advance')->assertOk()->json('cart'))
+            ->pluck('is_discountable', 'food_name');
+
+        $this->assertTrue($lines['Lechon']);
+        $this->assertFalse($lines['Iced Tea']);
+    }
+
     public function test_todays_cart_keeps_its_two_digit_cap(): void
     {
         $user = $this->customer();

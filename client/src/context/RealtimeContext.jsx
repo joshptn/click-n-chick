@@ -224,6 +224,13 @@ export function RealtimeProvider({ children }) {
         // The bell reads the same endpoint; let it refetch rather than
         // trusting this payload to be the whole story.
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
+
+        // A Senior/PWD application approved or not: the Advance Order banner
+        // and Profile show the new standing.
+        if (notification.notification_type === "discount_decision") {
+          queryClient.invalidateQueries({ queryKey: ["discount", "standing"] });
+          queryClient.invalidateQueries({ queryKey: ["profile"] });
+        }
       })
         // Another device signed THIS one out (FR-01.13). The event goes to the
         // whole account, so act only if it names this device. The token is
