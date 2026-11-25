@@ -1,7 +1,9 @@
 import {
   IconBike,
+  IconCalendarEvent,
   IconCheck,
   IconChefHat,
+  IconCreditCard,
   IconHome,
   IconReceipt,
   IconShoppingBag,
@@ -11,6 +13,9 @@ import {
 
 const ICONS = {
   placed: IconReceipt,
+  // An advance order's To pay and Scheduled (lib/orders.js displaySteps).
+  awaiting_payment: IconCreditCard,
+  scheduled: IconCalendarEvent,
   confirmed: IconCheck,
   preparing: IconChefHat,
   ready_for_pickup: IconShoppingBag,
