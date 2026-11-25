@@ -29,6 +29,8 @@ export type CartLine = {
   unit_price: number;
   subtotal: number;
   is_orderable: boolean;
+  /** Marked for the Senior/PWD discount: the Advance Order banner works out its saving from these. */
+  is_discountable?: boolean;
   stock_status: string | null;
   /** Null when made to order: no cap but the API's 99. */
   stock_quantity: number | null;

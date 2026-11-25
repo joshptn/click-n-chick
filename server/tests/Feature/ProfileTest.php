@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\DiscountController;
 use App\Models\Discount;
 use App\Models\User;
 use App\Services\Media\CloudinaryService;
@@ -495,9 +496,11 @@ class ProfileTest extends TestCase
             ->postJson("/api/admin/discount-claims/{$claim->id}/approve")
             ->assertOk();
 
+        // Typed, so an open page showing the standing refreshes (2026-11-26).
         $this->assertDatabaseHas('notifications', [
             'user_id' => $customer->id,
             'title' => 'Discount approved',
+            'notification_type' => DiscountController::NOTICE_DECISION,
         ]);
     }
 

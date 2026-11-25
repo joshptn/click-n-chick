@@ -6,14 +6,17 @@ import { IconMoodEmpty, IconSearchOff } from "@tabler/icons-react";
 import AppHeader from "../../components/app/AppHeader";
 import CartModal from "../../components/cart/CartModal";
 import CartPanel from "../../components/cart/CartPanel";
-import CategoryTabs from "../../components/menu/CategoryTabs";
 import FoodCard from "../../components/menu/FoodCard";
 import FoodDetailModal from "../../components/menu/FoodDetailModal";
+import MenuCategoryBar from "../../components/menu/MenuCategoryBar";
+import MenuSection from "../../components/menu/MenuSection";
 import GuestOrderBanner from "../../components/orders/GuestOrderBanner";
 import PosterBanner from "../../components/menu/PosterBanner";
 import toast from "../../components/app/Toast";
-import { ALL_CATEGORY, fetchFoods } from "../../lib/menu";
+import { fetchFoods } from "../../lib/menu";
+import { dishCount, menuSections } from "../../lib/menuSections";
 import { useCartActions } from "../../context/useCart";
+import { useMenuScrollSpy } from "../../hooks/useMenuScrollSpy";
 import { useStoreStatus } from "../../lib/store";
 
 /** Long enough that typing does not fire a request per keystroke. */
@@ -22,8 +25,20 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** Cards whose photos load first: the top row, the part of the menu seen first. */
 const FIRST_ROW = 3;
 
+/**
+ * Where a section counts as being read: under the sticky header (68px) and
+ * category bar (48px), with a little room.
+ */
+const READING_LINE = 140;
+
+/**
+ * The customer's home menu (redesigned 2026-11-26, after onthewayph.com/menu):
+ * posters, then every dish in sections, BES Seller first and then each
+ * category in the order it was added, under a category bar that sticks below
+ * the header and follows the section being read. A search shows one list of
+ * results instead.
+ */
 function Home() {
-  const [category, setCategory] = useState(ALL_CATEGORY);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFood, setSelectedFood] = useState(null);
@@ -40,10 +55,9 @@ function Home() {
   }, [search]);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    // Both filters are in the key, so switching back to a previous
-    // category/search pair serves from cache instead of refetching.
-    queryKey: ["foods", category, debouncedSearch],
-    queryFn: () => fetchFoods({ category, search: debouncedSearch }),
+    // The search is in the key, so clearing it serves the whole menu from cache.
+    queryKey: ["foods", "menu", debouncedSearch],
+    queryFn: () => fetchFoods({ search: debouncedSearch }),
     staleTime: 60 * 1000,
   });
 
@@ -53,14 +67,11 @@ function Home() {
   // the modal without it asking the server again.
   const openFood = selectedFood ? (foods.find((food) => food.id === selectedFood.id) ?? selectedFood) : null;
 
-  // A search is a search across the whole menu, so the "Popular Dishes" split
-  // only makes sense while browsing.
+  // Sections while browsing; a search is one list across the whole menu.
   const isBrowsing = debouncedSearch === "";
-  const popular = useMemo(() => (isBrowsing ? foods.filter((food) => food.is_best_seller) : []), [foods, isBrowsing]);
-  const rest = useMemo(
-    () => (isBrowsing ? foods.filter((food) => !food.is_best_seller) : foods),
-    [foods, isBrowsing]
-  );
+  const sections = useMemo(() => (isBrowsing ? menuSections(foods) : []), [foods, isBrowsing]);
+  const sectionKeys = useMemo(() => sections.map((section) => section.key), [sections]);
+  const { active, pick } = useMenuScrollSpy(sectionKeys, READING_LINE);
 
   const handleQuickAdd = async (food) => {
     // Anything with add-ons opens the modal instead: adding it blind would
@@ -110,11 +121,9 @@ function Home() {
 
             <PosterBanner />
 
-            <h2 className="mb-3 mt-6 font-display text-[11.5px] font-bold uppercase tracking-[0.14em] text-[#a39f9b]">
-              Category
-            </h2>
-
-            <CategoryTabs value={category} onChange={setCategory} />
+            {isBrowsing && sections.length > 0 && !isError && (
+              <MenuCategoryBar sections={sections} active={active} onPick={pick} />
+            )}
 
             {isError && (
               <div className="mt-8 rounded-[14px] border border-[#ffd7d5] bg-[#fff1f1] px-5 py-6 text-center">
@@ -132,11 +141,14 @@ function Home() {
             )}
 
             {isLoading && (
-              <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-[290px] animate-pulse rounded-[16px] bg-[#f0e9df]" />
-                ))}
-              </div>
+              <>
+                <div className="mt-5 h-12 animate-pulse rounded-[4px] bg-[#f0e9df]" />
+                <div className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-[290px] animate-pulse rounded-[16px] bg-[#f0e9df]" />
+                  ))}
+                </div>
+              </>
             )}
 
             {!isLoading && !isError && foods.length === 0 && (
@@ -148,56 +160,54 @@ function Home() {
                       Nothing matches &ldquo;{debouncedSearch}&rdquo;
                     </p>
                     <p className="m-0 font-display text-[13px] text-[#a39f9b]">
-                      Try a different word, or browse the categories above.
+                      Try a different word, or clear the search to see the whole menu.
                     </p>
                   </>
                 ) : (
                   <>
                     <IconMoodEmpty size={42} stroke={1.4} aria-hidden="true" className="text-[#d9d3cb]" />
                     <p className="mt-3 font-display text-[15px] font-semibold text-[#6f6b68]">
-                      Nothing on the menu here yet
+                      Nothing on the menu yet
                     </p>
                     <p className="m-0 font-display text-[13px] text-[#a39f9b]">
-                      Pick another category to keep looking.
+                      Dishes added by the store appear here.
                     </p>
                   </>
                 )}
               </div>
             )}
 
-            {!isLoading && !isError && popular.length > 0 && (
-              <section className="mt-7">
-                <h2 className="m-0 mb-3.5 font-display text-[17px] font-extrabold text-ink">Popular Dishes</h2>
+            {!isLoading && !isError && isBrowsing && sections.length > 0 && (
+              <div data-testid="menu-sections">
+                {sections.map((section, index) => (
+                  <MenuSection
+                    key={section.key}
+                    section={section}
+                    first={index === 0}
+                    isAdding={isAdding}
+                    onSelect={setSelectedFood}
+                    onQuickAdd={handleQuickAdd}
+                  />
+                ))}
+              </div>
+            )}
+
+            {!isLoading && !isError && !isBrowsing && foods.length > 0 && (
+              <section className="mt-7" data-testid="menu-results">
+                <div className="mb-3.5 flex items-baseline justify-between gap-3">
+                  <h2 className="m-0 font-display text-[18px] font-extrabold text-cocoa-900">
+                    Results for &ldquo;{debouncedSearch}&rdquo;
+                  </h2>
+                  <span className="shrink-0 font-display text-[11.5px] text-[#a39f9b]">{dishCount(foods.length)}</span>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {popular.map((food, index) => (
+                  {foods.map((food, index) => (
                     <FoodCard
                       key={food.id}
                       food={food}
                       index={index}
                       priority={index < FIRST_ROW}
-                      isAdding={isAdding}
-                      onSelect={setSelectedFood}
-                      onQuickAdd={handleQuickAdd}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {!isLoading && !isError && rest.length > 0 && (
-              <section className="mt-8">
-                <h2 className="m-0 mb-3.5 font-display text-[17px] font-extrabold text-ink">
-                  {isBrowsing ? "More on the Menu" : `Results for “${debouncedSearch}”`}
-                </h2>
-
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {rest.map((food, index) => (
-                    <FoodCard
-                      key={food.id}
-                      food={food}
-                      index={index}
-                      priority={popular.length === 0 && index < FIRST_ROW}
                       isAdding={isAdding}
                       onSelect={setSelectedFood}
                       onQuickAdd={handleQuickAdd}

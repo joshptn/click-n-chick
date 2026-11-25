@@ -101,6 +101,8 @@ export default function Notifications() {
       if (notification.order_id) router.push(`/orders/${notification.order_id}`);
       // A new-device sign-in alert opens the device list, where it can be signed out.
       else if (notificationKind(notification) === "security") router.push("/account/devices");
+      // A Senior/PWD decision opens the discount card on Profile.
+      else if (notification.notification_type === "discount_decision") router.push("/profile");
     },
     [markRead]
   );

@@ -120,6 +120,51 @@ export function isRefused(order) {
   return Boolean(order?.is_cancelled) || order?.status === ADVANCE_STATUS.REJECTED;
 }
 
+/**
+ * An advance order's progress as the customer sees it, the same five steps
+ * as the app (decided 2026-11-19 there, 2026-11-26 on the web): To pay →
+ * Scheduled → Preparing → Ready for pickup → Completed. The API's chain also
+ * has Request sent, Accepted and Confirmed: a request not yet answered has no
+ * step done, Accepted is when paying opens, and Confirmed (paid) counts as
+ * Scheduled.
+ */
+const ADVANCE_STEPS = [
+  { key: "awaiting_payment", label: "To pay" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "preparing", label: "Preparing" },
+  { key: "ready_for_pickup", label: "Ready for pickup" },
+  { key: "completed", label: "Completed" },
+];
+
+const ADVANCE_AT = {
+  submitted: -1,
+  accepted: 0,
+  awaiting_payment: 0,
+  confirmed: 1,
+  scheduled: 1,
+  preparing: 2,
+  ready_for_pickup: 3,
+  completed: 4,
+};
+
+/** The steps to draw: the API's for today's orders, the five above for advance ones. */
+export function displaySteps(order) {
+  if (!order?.is_advance) {
+    return { steps: order?.steps ?? [], stepIndex: order?.step_index ?? 0, stepCount: order?.step_count };
+  }
+
+  const at = isRefused(order) ? -1 : (ADVANCE_AT[order.status] ?? -1);
+
+  return {
+    steps: ADVANCE_STEPS.map((step, index) => ({
+      ...step,
+      state: index < at ? "done" : index === at ? (order.is_terminal ? "done" : "current") : "upcoming",
+    })),
+    stepIndex: at + 1,
+    stepCount: ADVANCE_STEPS.length,
+  };
+}
+
 export function isUnanswered(order) {
   return order?.status === ADVANCE_STATUS.SUBMITTED;
 }

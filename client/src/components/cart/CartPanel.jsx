@@ -1,15 +1,13 @@
 import { useEffect, useMemo } from "react";
 import {
-  IconAlertTriangle,
   IconCalendarPlus,
-  IconMinus,
   IconPhotoOff,
-  IconPlus,
   IconShoppingCart,
   IconTrash,
 } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import CartQuantity from "./CartQuantity";
 import { CART_MODE } from "../../lib/cartModes";
 import { thumbnailImage } from "../../lib/images";
 import { formatPeso } from "../../lib/menu";
@@ -38,7 +36,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
     selectedCount,
     selectedItemCount,
     selectedSubtotal,
-    hasUnavailableSelected,
+    soldOutCount,
     allSelected,
   } = useCartState(mode);
 
@@ -84,7 +82,8 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                 if (el) el.indeterminate = !allSelected && selectedCount > 0;
               }}
               onChange={() => (allSelected ? deselectAll() : selectAll())}
-              className="h-[17px] w-[17px] shrink-0 cursor-pointer accent-brand-500"
+              disabled={soldOutCount === cart.length}
+              className="h-[17px] w-[17px] shrink-0 cursor-pointer accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
             />
             {allSelected ? "Deselect All" : "Select All"}
           </label>
@@ -100,13 +99,6 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
             <span className="text-[12.5px]">Delete ({selectedCount})</span>
           </button>
         </div>
-      )}
-
-      {hasUnavailableSelected && (
-        <p className="m-0 flex shrink-0 items-start gap-2 border-b border-[#ffe6a8] bg-[#fff9e8] px-5 py-3 font-display text-[12.5px] leading-snug text-[#8a6206]">
-          <IconAlertTriangle size={15} stroke={2.2} aria-hidden="true" className="mt-px shrink-0" />
-          Something you selected sold out. Untick or remove it before checking out.
-        </p>
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -136,6 +128,11 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
           <AnimatePresence initial={false}>
             {cart.map((line) => {
               const busy = pendingLineId === line.id;
+              // Sold out (or switched off, or deleted): greyed, unticked and
+              // left out of checkout, like a sold-out line on Shopee (decided
+              // 2026-11-26). It can still be deleted.
+              const out = !line.is_orderable;
+              const soldOut = line.stock_status === "out_of_stock";
 
               return (
                 <MotionLi
@@ -145,32 +142,42 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.2 }}
-                  className={`flex items-start gap-3 rounded-[12px] px-2 py-2.5 transition-colors hover:bg-[#faf7f3] ${busy ? "opacity-60" : ""}`}
+                  data-testid={out ? "cart-line-sold-out" : "cart-line"}
+                  className={`flex items-start gap-3 rounded-[12px] px-2 py-2.5 transition-colors ${
+                    out ? "bg-[#f6f4f1]" : "hover:bg-[#faf7f3]"
+                  } ${busy ? "opacity-60" : ""}`}
                 >
                   <input
                     type="checkbox"
                     checked={isSelected(line.id)}
+                    disabled={out}
                     onChange={() => toggleSelected(line.id)}
-                    aria-label={`Include ${line.food_name} in checkout`}
-                    className="mt-3.5 h-[17px] w-[17px] shrink-0 cursor-pointer accent-brand-500"
+                    aria-label={out ? `${line.food_name} is sold out` : `Include ${line.food_name} in checkout`}
+                    className="mt-3.5 h-[17px] w-[17px] shrink-0 cursor-pointer accent-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
                   />
 
-                  <span className="h-11 w-11 shrink-0 overflow-hidden rounded-[9px] bg-[#f4f1ec]">
+                  <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[9px] bg-[#f4f1ec]">
                     {line.thumbnail ? (
                       <img
                         {...thumbnailImage(line.thumbnail, 44)}
                         alt=""
-                        className={`h-full w-full object-cover ${line.is_orderable ? "" : "grayscale"}`}
+                        className={`h-full w-full object-cover ${out ? "opacity-60 grayscale" : ""}`}
                       />
                     ) : (
                       <span className="grid h-full w-full place-items-center text-[#c9c2b8]">
                         <IconPhotoOff size={15} stroke={1.8} aria-hidden="true" />
                       </span>
                     )}
+
+                    {out && (
+                      <span className="absolute inset-x-0 bottom-0 bg-[#6f6b68]/85 py-[2px] text-center font-display text-[7.5px] font-bold uppercase leading-none tracking-[0.04em] text-white">
+                        {soldOut ? "Sold out" : "Unavailable"}
+                      </span>
+                    )}
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    <p className="m-0 truncate font-display text-[13px] font-semibold text-ink">
+                    <p className={`m-0 truncate font-display text-[13px] font-semibold ${out ? "text-[#a39f9b]" : "text-ink"}`}>
                       {line.food_name}
                     </p>
 
@@ -186,12 +193,14 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                       )
                     )}
 
-                    <p className="m-0 font-display text-[13px] font-bold text-brand-600">
+                    <p className={`m-0 font-display text-[13px] font-bold ${out ? "text-[#c0bab2]" : "text-brand-600"}`}>
                       {formatPeso(line.subtotal)}
                     </p>
 
-                    {!line.is_orderable ? (
-                      <p className="m-0 font-display text-[11px] font-semibold text-[#e5322d]">Sold out</p>
+                    {out ? (
+                      <p className="m-0 font-display text-[11px] font-semibold leading-snug text-[#e5322d]" data-testid="cart-sold-out-note">
+                        {soldOut ? "Sold out. It can't be checked out." : "Not available right now."}
+                      </p>
                     ) : (
                       // Switched off since it went in the cart (decided 2026-11-24).
                       line.unavailable_addons?.length > 0 && (
@@ -202,36 +211,27 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
                     )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  {out ? (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() =>
-                        line.quantity <= 1
-                          ? removeItem({ cartItemId: line.id })
-                          : setQuantity({ cartItemId: line.id, quantity: line.quantity - 1 })
-                      }
-                      aria-label={line.quantity <= 1 ? `Remove ${line.food_name}` : `Decrease ${line.food_name}`}
-                      className="grid h-[26px] w-[26px] place-items-center rounded-full bg-[#fdf0e4] text-brand-700 transition-colors hover:bg-[#fbe2cd] disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => removeItem({ cartItemId: line.id })}
+                      aria-label={`Delete ${line.food_name}`}
+                      data-testid="cart-sold-out-delete"
+                      className="mt-1.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 font-display text-[#e5322d] ring-1 ring-inset ring-[#f3d6d4] transition-colors hover:bg-[#fdf0ef] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {/* The trash glyph reads small beside + and -, so it is drawn a size up. */}
-                      {line.quantity <= 1 ? <IconTrash size={15} stroke={2.2} /> : <IconMinus size={13} stroke={3} />}
+                      <IconTrash size={13} stroke={2.2} aria-hidden="true" />
+                      <span className="text-[11.5px] font-semibold">Delete</span>
                     </button>
-
-                    <span className="min-w-[22px] text-center font-display text-[13px] font-bold text-ink">
-                      {line.quantity}
-                    </span>
-
-                    <button
-                      type="button"
-                      disabled={busy || !line.is_orderable || (line.stock_quantity !== null && line.quantity >= line.stock_quantity)}
-                      onClick={() => setQuantity({ cartItemId: line.id, quantity: line.quantity + 1 })}
-                      aria-label={`Increase ${line.food_name}`}
-                      className="grid h-[26px] w-[26px] place-items-center rounded-full bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-brand-200"
-                    >
-                      <IconPlus size={13} stroke={3} />
-                    </button>
-                  </div>
+                  ) : (
+                    <CartQuantity
+                      line={line}
+                      busy={busy}
+                      typable={isAdvance}
+                      onSet={(quantity) => setQuantity({ cartItemId: line.id, quantity })}
+                      onRemove={() => removeItem({ cartItemId: line.id })}
+                    />
+                  )}
                 </MotionLi>
               );
             })}
@@ -262,7 +262,7 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
           onPointerEnter={nextPage.preload}
           onFocus={nextPage.preload}
           onClick={() => onCheckout?.(selectedIds)}
-          disabled={selectedCount === 0 || hasUnavailableSelected || isMutating}
+          disabled={selectedCount === 0 || isMutating}
           className="mt-4 inline-flex h-[50px] w-full items-center justify-center gap-2 rounded-[12px] bg-brand-500 font-display text-[15px] font-bold text-white transition-all duration-150 hover:bg-brand-600 active:translate-y-px disabled:cursor-not-allowed disabled:bg-brand-200"
         >
           {isAdvance ? (
@@ -274,8 +274,10 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
         </button>
 
         <p className="m-0 mt-2.5 text-center font-display text-[10.5px] leading-snug text-[#a39f9b]">
-          {cart.length > 0 && selectedCount === 0
-            ? `Tick at least one item to ${isAdvance ? "continue" : "check out"}`
+          {cart.length > 0 && soldOutCount === cart.length
+            ? "Everything in your cart has sold out"
+            : cart.length > 0 && selectedCount === 0
+              ? `Tick at least one item to ${isAdvance ? "continue" : "check out"}`
             : isAdvance
               ? "For collection at the store · a Store Agent confirms before you pay"
               : "🔒 Secure checkout · cancel for a full refund if the store hasn't confirmed within 15 minutes"}

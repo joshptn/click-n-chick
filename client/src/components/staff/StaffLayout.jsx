@@ -1,3 +1,4 @@
+import { useContext } from "react";
 import { Drawer } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconMenu2 } from "@tabler/icons-react";
@@ -5,6 +6,7 @@ import { IconMenu2 } from "@tabler/icons-react";
 import NotificationMenu from "../app/NotificationMenu";
 import StaffSidebar from "./StaffSidebar";
 import LogoIcon from "../../assets/logo-icon.png";
+import AuthContext from "../../context/AuthContext";
 import { staffNotificationTarget } from "../../lib/agent";
 
 /**
@@ -13,6 +15,7 @@ import { staffNotificationTarget } from "../../lib/agent";
  */
 function StaffLayout({ children }) {
   const [opened, { open, close }] = useDisclosure(false);
+  const { user } = useContext(AuthContext);
 
   return (
     <div className="flex min-h-dvh bg-[#faf6f0] font-display text-ink">
@@ -48,7 +51,7 @@ function StaffLayout({ children }) {
             Click <span className="text-ink">n</span> Chick
           </span>
           <span className="ml-auto">
-            <NotificationMenu targetFor={staffNotificationTarget} testId="notification-bell-compact" />
+            <NotificationMenu targetFor={(item) => staffNotificationTarget(item, user?.role)} testId="notification-bell-compact" />
           </span>
         </div>
 

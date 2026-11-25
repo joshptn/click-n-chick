@@ -26,5 +26,8 @@ Schedule::command('payments:expire-checkouts')->everyMinute()->withoutOverlappin
 
 Schedule::command('guest:prune-carts')->daily();
 
+// Hourly from opening; each poster expiring tomorrow is announced once that day.
+Schedule::command('posters:warn-expiring')->hourly();
+
 // Cheap when the file is fresh; a new container fetches it within ten minutes.
 Schedule::command('geoip:update')->everyTenMinutes()->withoutOverlapping(30);

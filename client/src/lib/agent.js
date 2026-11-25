@@ -309,10 +309,14 @@ const ADVANCE_NOTICE_TYPES = ["advance_request", "advance_due", "advance_order"]
 
 /**
  * Staff notifications open the order on the board rather than the customer
- * tracker, and a new discount application opens the review queue.
+ * tracker, and a new discount application opens the review queue. A poster
+ * about to expire opens Store Settings for the Store Manager, who manages
+ * posters; the Store Agent's notice opens nothing.
  */
-export function staffNotificationTarget(notification) {
+export function staffNotificationTarget(notification, role) {
   if (notification?.notification_type === "discount_review") return "/admin/discount-requests";
+
+  if (notification?.notification_type === "poster_expiry") return role === "super_admin" ? "/superadmin/settings" : null;
 
   // A new request, a due-today alert, a customer calling one off: advance orders
   // hold no queue number, so they live on their own page, not the day's board.

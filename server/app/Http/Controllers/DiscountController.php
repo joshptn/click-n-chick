@@ -33,6 +33,13 @@ class DiscountController extends Controller
     /** notifications.notification_type of a "new application to review" notice. */
     public const NOTICE_REVIEW = 'discount_review';
 
+    /**
+     * notifications.notification_type of the customer's "approved / not
+     * approved" notice, so an open page showing their standing (the Advance
+     * Order banner, Profile) refreshes when it arrives.
+     */
+    public const NOTICE_DECISION = 'discount_decision';
+
     /** GET /api/discount - the caller's own standing. */
     public function show(Request $request)
     {
@@ -348,7 +355,7 @@ class DiscountController extends Controller
             $approved
                 ? "Your {$claim->typeLabel()} discount has been approved. You can use it on your orders."
                 : "Your {$claim->typeLabel()} application was not approved. {$claim->rejection_reason}",
-            null,
+            self::NOTICE_DECISION,
             true
         );
     }

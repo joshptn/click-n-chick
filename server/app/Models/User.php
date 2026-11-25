@@ -333,9 +333,4 @@ class User extends Authenticatable
     {
         return $this->hasMany(PushToken::class);
     }
-
-    public function posters()
-    {
-        return $this->hasMany(Poster::class, 'created_by');
-    }
 }

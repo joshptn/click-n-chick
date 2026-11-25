@@ -61,22 +61,30 @@ function FoodCard({ food, onSelect, onQuickAdd, isAdding = false, index = 0, isA
           {food.food_name}
         </h3>
 
-        {label && (
-          <p className={`m-0 flex items-center gap-1.5 font-display text-[11.5px] font-medium ${stockTone(food)}`}>
-            {(!orderable || food.stock_status === "low_stock") && (
-              <span aria-hidden="true" className="inline-block h-[5px] w-[5px] shrink-0 rounded-full bg-current" />
-            )}
-            {label}
+        {/* Price, then stock (the home design of 2026-11-26), held to the
+            bottom so the Add buttons of a row line up. */}
+        <div className="mb-2 mt-auto flex flex-col gap-1.5 pt-2">
+          <p
+            className={`m-0 font-display text-[16px] font-extrabold leading-none ${
+              orderable ? "text-brand-600" : "text-[#c0bab2]"
+            }`}
+          >
+            {formatPeso(food.price)}
           </p>
-        )}
 
-        <p
-          className={`mb-2 mt-auto pt-1 font-display text-[16px] font-extrabold leading-none ${
-            orderable ? "text-brand-600" : "text-[#c0bab2]"
-          }`}
-        >
-          {formatPeso(food.price)}
-        </p>
+          {label ? (
+            <p className={`m-0 flex items-center gap-1.5 font-display text-[11.5px] font-medium leading-[17px] ${stockTone(food)}`}>
+              {(!orderable || food.stock_status === "low_stock") && (
+                <span aria-hidden="true" className="inline-block h-[5px] w-[5px] shrink-0 rounded-full bg-current" />
+              )}
+              {label}
+            </p>
+          ) : (
+            // A dish made to order has no stock line; its place is kept so the
+            // prices of a row line up.
+            !isAdvance && <span aria-hidden="true" className="block h-[17px]" />
+          )}
+        </div>
 
         <button
           type="button"

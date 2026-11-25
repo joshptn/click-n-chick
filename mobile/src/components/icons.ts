@@ -67,6 +67,7 @@ export { default as IconShoppingBagPlus } from "@tabler/icons-react-native/IconS
 export { default as IconShoppingCart } from "@tabler/icons-react-native/IconShoppingCart";
 export { default as IconSpeakerphone } from "@tabler/icons-react-native/IconSpeakerphone";
 export { default as IconStarFilled } from "@tabler/icons-react-native/IconStarFilled";
+export { default as IconTag } from "@tabler/icons-react-native/IconTag";
 export { default as IconToolsKitchen2 } from "@tabler/icons-react-native/IconToolsKitchen2";
 export { default as IconTrash } from "@tabler/icons-react-native/IconTrash";
 export { default as IconTruckDelivery } from "@tabler/icons-react-native/IconTruckDelivery";

@@ -26,10 +26,12 @@ import {
   confirmDetails,
   confirmGuestReceipt,
   confirmReceipt,
+  displaySteps,
   fetchGuestOrder,
   fetchOrder,
   feedbackMailto,
   guestOrderKey,
+  isRefused,
   orderKey,
   statusBadgeClass,
   withLinkDeadline,
@@ -311,12 +313,8 @@ function OrderTracking({ guest = false }) {
         {order && (
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
             <div className="flex min-w-0 flex-col gap-3.5">
-              <OrderProgress
-                steps={order.steps}
-                stepIndex={order.step_index}
-                stepCount={order.step_count}
-                isCancelled={order.is_cancelled}
-              />
+              {/* An advance order shows the app's five steps, not the API's eight. */}
+              <OrderProgress {...displaySteps(order)} isCancelled={order.is_advance ? isRefused(order) : order.is_cancelled} />
 
               {awaitingPayment && (
                 <PaymentPanel

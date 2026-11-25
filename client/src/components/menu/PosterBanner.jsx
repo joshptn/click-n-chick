@@ -11,13 +11,11 @@ const MotionDiv = motion.div;
 const ROTATE_MS = 6000;
 
 /**
- * The promotional banner strip above the category chips.
+ * The homepage posters above the category chips (/api/posters).
  *
- * A placeholder in the honest sense: the slot, its dimensions and its rotation
- * are real and driven by /api/posters, but a poster carries only an image. The
- * PWD/Senior artwork in the prototype shows discount controls drawn INTO the
- * image - none of that behaviour lives here, because discounts belong to the
- * discounts module. When that exists it renders over this, or replaces it.
+ * One fixed shape, 3:1, scaling with the screen: posters are cropped to it
+ * when the Store Manager adds them, so each shows exactly as cropped on every
+ * screen. A poster is only an image: not clickable, no caption.
  */
 function PosterBanner() {
   const { data, isLoading } = useQuery({
@@ -45,12 +43,12 @@ function PosterBanner() {
   }, [posters.length]);
 
   if (isLoading) {
-    return <div className="h-[150px] w-full animate-pulse rounded-[20px] bg-[#f0e9df] sm:h-[186px]" />;
+    return <div className="aspect-[3/1] w-full animate-pulse rounded-[20px] bg-[#f0e9df]" />;
   }
 
   if (posters.length === 0) {
     return (
-      <div className="grid h-[150px] w-full place-items-center rounded-[20px] border-2 border-dashed border-[#e6ded4] bg-[#faf7f3] sm:h-[186px]">
+      <div className="grid aspect-[3/1] w-full place-items-center rounded-[20px] border-2 border-dashed border-[#e6ded4] bg-[#faf7f3]">
         <div className="text-center">
           <IconPhoto size={26} stroke={1.6} aria-hidden="true" className="mx-auto text-[#c9c2b8]" />
           <p className="mt-2 font-display text-[13px] font-semibold text-[#8d8884]">No promotions right now</p>
@@ -65,7 +63,7 @@ function PosterBanner() {
   const step = (delta) => setIndex((prev) => (prev + delta + posters.length) % posters.length);
 
   return (
-    <section aria-label="Promotions" className="relative overflow-hidden rounded-[20px] bg-[#f0e9df]">
+    <section aria-label="Promotions" className="relative aspect-[3/1] w-full overflow-hidden rounded-[20px] bg-[#f0e9df]">
       <AnimatePresence mode="wait" initial={false}>
         <MotionDiv
           key={poster.id}
@@ -73,31 +71,23 @@ function PosterBanner() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className="h-[150px] w-full sm:h-[186px]"
+          className="absolute inset-0"
         >
           {/* The banner leads the page: the first poster loads at once and
-              ahead of the dish photos, at the banner's width (the full column,
-              about 1020px beside the docked cart). */}
+              ahead of the dish photos, at the banner's width (the full column:
+              about 1016px beside the docked cart, up to 1216px without it). */}
           <img
             {...responsiveImage(poster.image, {
               widths: [640, 960, 1280, 1920],
-              sizes: "(min-width: 1280px) 1020px, 100vw",
+              sizes: "(min-width: 1280px) 1016px, 100vw",
               fallback: 1280,
             })}
-            alt={poster.poster_name}
+            alt="Store promotion"
             fetchPriority={index === 0 ? "high" : undefined}
             className="h-full w-full object-cover"
           />
         </MotionDiv>
       </AnimatePresence>
-
-      {/* Scrim: poster artwork is uncontrolled, so the caption needs its own
-          contrast rather than trusting the image behind it. */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cocoa-900/75 via-cocoa-900/30 to-transparent" />
-
-      <p className="absolute bottom-4 left-5 m-0 max-w-[60%] font-display text-[16px] font-extrabold leading-tight text-white drop-shadow-sm sm:text-[20px]">
-        {poster.poster_name}
-      </p>
 
       {posters.length > 1 && (
         <>
@@ -125,7 +115,7 @@ function PosterBanner() {
                 key={item.id}
                 type="button"
                 onClick={() => setIndex(dot)}
-                aria-label={`Show ${item.poster_name}`}
+                aria-label={`Show promotion ${dot + 1}`}
                 aria-current={dot === index}
                 className={`h-1.5 rounded-full transition-all duration-300 ${dot === index ? "w-5 bg-white" : "w-1.5 bg-white/50 hover:bg-white/80"}`}
               />

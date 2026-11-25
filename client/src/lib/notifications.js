@@ -18,6 +18,7 @@ export function markAllNotificationsRead() {
 export function notificationTarget(notification) {
   if (notification?.order_id) return `/orders/${notification.order_id}`;
   if (notification?.notification_type === "security") return "/account/security";
+  if (notification?.notification_type === "discount_decision") return "/account/profile";
 
   return null;
 }

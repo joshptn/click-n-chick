@@ -60,9 +60,11 @@ class CartController extends Controller
 
     public function store(Request $request)
     {
+        $advanceRequested = $request->input('mode') === Cart::MODE_ADVANCE;
+
         $validated = $request->validate([
             'food_id' => ['required', 'integer', 'exists:food,id'],
-            'quantity' => ['sometimes', 'integer', 'min:1', 'max:99'],
+            'quantity' => ['sometimes', 'integer', 'min:1', 'max:'.Cart::maxQuantity($advanceRequested)],
             // What an app from before sizes sends; `addons` carries the size picked.
             'addon_ids' => ['sometimes', 'array', 'max:50'],
             'addon_ids.*' => ['integer', 'distinct', 'exists:addons,id'],
@@ -136,13 +138,13 @@ class CartController extends Controller
     {
         $this->assertOwned($request, $cartItem);
 
-        $validated = $request->validate([
-            'quantity' => ['required', 'integer', 'min:0', 'max:99'],
-        ]);
-
         // assertOwned has already established the item has a cart, and whose it is.
         $cart = $cartItem->cart;
         $isAdvance = $cart->isAdvance();
+
+        $validated = $request->validate([
+            'quantity' => ['required', 'integer', 'min:0', 'max:'.Cart::maxQuantity($isAdvance)],
+        ]);
 
         if ($validated['quantity'] === 0) {
             $cartItem->selectedAddons()->detach();
@@ -313,6 +315,9 @@ class CartController extends Controller
 
     private function clampToStock(?Food $food, int $quantity, bool $isAdvance = false): int
     {
+        // Adding to a line already there can run past the cap; it stops at it.
+        $quantity = min($quantity, Cart::maxQuantity($isAdvance));
+
         if ($isAdvance || $food === null || $food->stock_quantity === null) {
             return max(1, $quantity);
         }
@@ -370,6 +375,9 @@ class CartController extends Controller
                 'unit_price' => $unitPrice,
                 'subtotal' => $unitPrice * $item->quantity,
                 'is_orderable' => $isAdvance ? $food !== null : ($food?->is_orderable ?? false),
+                // Marked for the Senior/PWD discount (FR-05.9): the Advance Order
+                // banner works out what it would save from these.
+                'is_discountable' => (bool) ($food?->is_discountable ?? false),
                 'stock_status' => $isAdvance ? null : $food?->stock_status,
                 'stock_quantity' => $isAdvance ? null : $food?->stock_quantity,
             ];

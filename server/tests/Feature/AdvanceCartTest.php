@@ -239,4 +239,75 @@ class AdvanceCartTest extends TestCase
             ->assertOk()
             ->assertJsonPath('item_count', 2);
     }
+
+    // -----------------------------------------------------------------
+    // How many of one line (decided 2026-11-26)
+    // -----------------------------------------------------------------
+
+    public function test_an_advance_line_takes_up_to_four_digits(): void
+    {
+        $user = $this->customer();
+        $food = $this->food(['stock_quantity' => 5]);
+
+        $lineId = $this->actingAs($user)->postJson('/api/cart/items', [
+            'food_id' => $food->id,
+            'quantity' => 1500,
+            'mode' => 'advance',
+        ])->assertCreated()->assertJsonPath('item_count', 1500)->json('cart_item_id');
+
+        $this->actingAs($user)->patchJson("/api/cart/items/{$lineId}", ['quantity' => 9999])
+            ->assertOk()
+            ->assertJsonPath('item_count', 9999);
+
+        $this->actingAs($user)->patchJson("/api/cart/items/{$lineId}", ['quantity' => 10000])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('quantity');
+
+        // Adding more to the line stops at the cap.
+        $this->actingAs($user)->postJson('/api/cart/items', [
+            'food_id' => $food->id,
+            'quantity' => 5,
+            'mode' => 'advance',
+        ])->assertCreated()->assertJsonPath('item_count', 9999);
+    }
+
+    public function test_a_line_says_whether_its_dish_takes_the_discount(): void
+    {
+        $user = $this->customer();
+        $marked = $this->food(['food_name' => 'Lechon', 'is_discountable' => true]);
+        $plain = $this->food(['food_name' => 'Iced Tea', 'is_discountable' => false]);
+
+        foreach ([$marked, $plain] as $food) {
+            $this->actingAs($user)->postJson('/api/cart/items', ['food_id' => $food->id, 'mode' => 'advance'])->assertCreated();
+        }
+
+        $lines = collect($this->actingAs($user)->getJson('/api/cart?mode=advance')->assertOk()->json('cart'))
+            ->pluck('is_discountable', 'food_name');
+
+        $this->assertTrue($lines['Lechon']);
+        $this->assertFalse($lines['Iced Tea']);
+    }
+
+    public function test_todays_cart_keeps_its_two_digit_cap(): void
+    {
+        $user = $this->customer();
+        $food = $this->food(['stock_quantity' => null]);
+
+        $this->actingAs($user)->postJson('/api/cart/items', ['food_id' => $food->id, 'quantity' => 100])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('quantity');
+
+        $lineId = $this->actingAs($user)->postJson('/api/cart/items', ['food_id' => $food->id, 'quantity' => 99])
+            ->assertCreated()
+            ->json('cart_item_id');
+
+        $this->actingAs($user)->patchJson("/api/cart/items/{$lineId}", ['quantity' => 100])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('quantity');
+
+        // A made-to-order dish added again stops at 99 too.
+        $this->actingAs($user)->postJson('/api/cart/items', ['food_id' => $food->id, 'quantity' => 5])
+            ->assertCreated()
+            ->assertJsonPath('item_count', 99);
+    }
 }
