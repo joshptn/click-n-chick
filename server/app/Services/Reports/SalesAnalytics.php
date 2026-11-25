@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 
@@ -25,6 +26,7 @@ class SalesAnalytics
     public function __construct(
         private DailySalesReport $report,
         private StoreAvailability $store,
+        private LoyaltyPoints $points,
     ) {}
 
     /** @return array<string, mixed> */
@@ -65,6 +67,9 @@ class SalesAnalytics
                 'days' => array_map(fn (array $day) => ['hours' => $this->tradingHours($day['hours'])] + $day, array_values($days)),
             ],
             'products' => $this->report->topProducts($weekStart, $tomorrow, self::TOP_PRODUCTS),
+            // The dashboard's Loyalty section (decided 2026-11-24): all time,
+            // from the points ledger.
+            'loyalty' => $this->points->totals(),
         ];
     }
 

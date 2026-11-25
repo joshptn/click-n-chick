@@ -6,6 +6,7 @@ use App\Events\StoreBroadcast;
 use App\Jobs\NotifyEveryAccount;
 use App\Models\Discount;
 use App\Models\Setting;
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Orders\DeliveryPricing;
 use App\Services\Store\StoreAvailability;
 use Illuminate\Http\Request;
@@ -256,10 +257,14 @@ class SystemSettingController extends Controller
     /** @return array<string, mixed> */
     private function loyaltyPayload(): array
     {
+        $points = app(LoyaltyPoints::class);
+
+        // The BES Loyalty Program's 1% and ₱1 until the Store Manager sets
+        // others (decided 2026-11-24). Earning is on the food without VAT.
         return [
-            'points_per_peso' => Setting::number(Setting::LOYALTY_POINTS_PER_PESO, 0.0),
-            'peso_per_point' => Setting::number(Setting::LOYALTY_PESO_PER_POINT, 0.0),
-            'active' => false,
+            'points_per_peso' => $points->earnRate(),
+            'peso_per_point' => $points->pesoPerPoint(),
+            'active' => $points->earnRate() > 0 || $points->redeemable(),
         ] + $this->provenance(Setting::LOYALTY_POINTS_PER_PESO);
     }
 

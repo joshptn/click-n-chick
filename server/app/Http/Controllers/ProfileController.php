@@ -211,8 +211,9 @@ class ProfileController extends Controller
                 'types' => Discount::types(),
                 'percentage' => Discount::currentPercentage(),
             ],
-            // UI only for now - the earning/redeeming ledger is a later module.
-            'loyalty_points' => (int) $user->loyalty_points,
+            // The points balance, centavos kept (decided 2026-11-24); the
+            // history is GET /api/loyalty.
+            'loyalty_points' => round((float) $user->loyalty_points, 2),
         ];
     }
 

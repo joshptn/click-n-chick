@@ -47,6 +47,8 @@ class OrderQueueResource extends JsonResource
                 'id' => $item->id,
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'quantity' => $item->quantity,
+                // Units whose dish was paid with points (decided 2026-11-24).
+                'redeemed_quantity' => (int) $item->redeemed_quantity,
                 // The kitchen cooks to the add-ons, so they ride with the line,
                 // each with the size picked: "Iced Tea (Large)".
                 'addons' => $item->relationLoaded('addons')
@@ -58,6 +60,8 @@ class OrderQueueResource extends JsonResource
             'discount_amount' => $this->discount_amount,
             // The VAT part of discount_amount, shown as its own line.
             'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
+            // The part of the bill paid with points, in pesos.
+            'points_amount' => (float) $this->points_amount,
             'delivery_fee' => $this->delivery_fee,
             'total_amount' => $this->total_amount,
             'payment_status' => $this->paymentStatus(),

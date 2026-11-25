@@ -8,6 +8,8 @@ use App\Models\CartItem;
 use App\Models\Discount;
 use App\Models\User;
 use App\Services\Catalog\AddonPicks;
+use App\Services\Loyalty\LoyaltyPoints;
+use App\Services\Loyalty\LoyaltyRedemption;
 use App\Services\Store\StoreAvailability;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -19,6 +21,8 @@ class CheckoutQuote
         private DeliveryQuote $delivery,
         private StoreAvailability $store,
         private DiscountUsage $discountUsage,
+        private LoyaltyPoints $points,
+        private LoyaltyRedemption $redemption,
     ) {}
 
     public function build(?User $user, ?Cart $cart, array $input): array
@@ -80,6 +84,15 @@ class CheckoutQuote
 
         $subtotal = round((float) $lines->sum('subtotal'), 2);
 
+        // Dishes paid with points (decided 2026-11-24): their menu price comes
+        // off the bill, their add-ons do not.
+        $redemption = $this->redemption->apply($user, $lines, $input['redeem'] ?? []);
+        $lines = $redemption['lines'];
+
+        if ($redemption['blocker']) {
+            $blockers[] = $redemption['blocker'];
+        }
+
         $destination = $this->destination($user, $input);
 
         $delivery = null;
@@ -109,8 +122,9 @@ class CheckoutQuote
             $blockers[] = $contact['blocker'];
         }
 
-        // One unit of the highest-priced dish marked for it (FR-05.4).
-        $discountLine = StatutoryDiscount::pick($lines);
+        // One unit of the highest-priced dish marked for it (FR-05.4), never a
+        // unit already paid with points.
+        $discountLine = StatutoryDiscount::pick(self::paidLines($lines));
         $discountBase = (float) ($discountLine['base_price'] ?? 0);
 
         $discount = $this->discount($user, $discountLine, (bool) ($input['apply_discount'] ?? false));
@@ -138,9 +152,41 @@ class CheckoutQuote
             'delivery_fee' => round($deliveryFee, 2),
             'pickup' => $pickup,
             'discount' => $discount,
-            'total' => round(max(0, $subtotal - (float) $discount['amount']) + $deliveryFee, 2),
+            'points_amount' => $redemption['amount'],
+            'loyalty' => $this->loyalty($user, $subtotal, $redemption),
+            'total' => round(max(0, $subtotal - (float) $discount['amount'] - $redemption['amount']) + $deliveryFee, 2),
             'blockers' => $blockers,
             'can_place' => $blockers === [],
+        ];
+    }
+
+    /** Lines with a unit left that is paid for in money. */
+    public static function paidLines(Collection $lines): Collection
+    {
+        return $lines->filter(fn (array $line) => (int) $line['quantity'] - (int) ($line['redeemed_quantity'] ?? 0) > 0);
+    }
+
+    /**
+     * The customer's points at this checkout; null for a guest or the staff.
+     *
+     * @param  array{amount: float, points: float}  $redemption
+     * @return array<string, mixed>|null
+     */
+    private function loyalty(?User $user, float $subtotal, array $redemption): ?array
+    {
+        if (! LoyaltyPoints::belongsTo($user)) {
+            return null;
+        }
+
+        return [
+            'balance' => round((float) $user->loyalty_points, 2),
+            'earn_rate' => $this->points->earnRate(),
+            'peso_per_point' => $this->points->pesoPerPoint(),
+            'redeemable' => $this->points->redeemable(),
+            'points_used' => $redemption['points'],
+            'amount' => $redemption['amount'],
+            // Credited once the order is completed: 1% of the food left to pay for, VAT out.
+            'points_to_earn' => $this->points->earnedOn(round($subtotal - $redemption['amount'], 2)),
         ];
     }
 

@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\DiscountAlreadyUsed;
 use App\Exceptions\InsufficientStock;
+use App\Exceptions\PointsNotEnough;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Cart;
 use App\Models\Order;
+use App\Services\Loyalty\LoyaltyRedemption;
 use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\CancellationPolicy;
 use App\Services\Orders\CheckoutQuote;
@@ -55,6 +57,7 @@ class OrderController extends Controller implements HasMiddleware
             'contact_name' => ['nullable', 'string', 'max:255'],
             'contact_phone' => ['nullable', 'string', 'max:20'],
             'apply_discount' => ['sometimes', 'boolean'],
+            ...LoyaltyRedemption::RULES,
             PriceCheck::FIELD => PriceCheck::RULE,
         ]);
 
@@ -95,6 +98,11 @@ class OrderController extends Controller implements HasMiddleware
                 'message' => $short->getMessage(),
                 'error_code' => 'ITEM_STOCK_SHORT',
                 'shortages' => $short->shortages,
+            ], 409);
+        } catch (PointsNotEnough $short) {
+            return response()->json([
+                'message' => $short->getMessage(),
+                'error_code' => PointsNotEnough::CODE,
             ], 409);
         } catch (\Throwable $e) {
             Log::error('Failed to place an order.', ['user_id' => $user->id, 'error' => $e->getMessage()]);

@@ -23,10 +23,26 @@ class CheckoutResponder
         private PaymentCheckout $checkout,
         private CheckoutExpiry $expiry,
         private OrderPlacement $placement,
+        private PaymentSettlement $settlement,
     ) {}
 
     public function respond(Order $order, Cart $cart, array $quote, array $extra = []): JsonResponse
     {
+        // Wholly paid with points (decided 2026-11-24): nothing to pay, so no
+        // payment page; it goes to the store at once.
+        if (round((float) ($order->total_amount ?? $order->total_price), 2) <= 0) {
+            $order = $this->settlement->settleWithPoints($order);
+            $this->placement->clearCart($cart, $quote);
+
+            return response()->json([
+                'message' => 'Order placed. It was paid with your points.',
+                'paid' => true,
+                'order' => new OrderTrackingResource($order->load(['items.food', 'items.addons', 'user', 'paidPayment'])),
+                'payment' => null,
+                ...$extra,
+            ], 201);
+        }
+
         try {
             $session = $this->checkout->open($order, NativeApp::isNative(request()));
         } catch (PaymentGatewayException $e) {

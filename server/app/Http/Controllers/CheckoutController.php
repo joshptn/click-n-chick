@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cart;
+use App\Services\Loyalty\LoyaltyRedemption;
 use App\Services\Orders\CheckoutQuote;
 use App\Services\Orders\DeliveryQuote;
 use Illuminate\Http\Request;
@@ -30,13 +31,14 @@ class CheckoutController extends Controller
             'contact_name' => ['nullable', 'string', 'max:255'],
             'contact_phone' => ['nullable', 'string', 'max:20'],
             'apply_discount' => ['sometimes', 'boolean'],
+            ...LoyaltyRedemption::RULES,
         ]);
 
         $user = $request->user();
 
         return response()->json($this->checkout->build($user, Cart::immediateFor($user), $validated));
     }
-    
+
     public function deliveryQuote(Request $request)
     {
         $validated = $request->validate([

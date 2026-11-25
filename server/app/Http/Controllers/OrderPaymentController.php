@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\PointsNotEnough;
 use App\Http\Middleware\ResolveGuestOrder;
 use App\Http\Resources\OrderTrackingResource;
 use App\Models\Order;
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Orders\AdvanceExpiry;
 use App\Services\Orders\AdvanceRepricing;
 use App\Services\Orders\OrderAnnouncer;
@@ -41,6 +43,7 @@ class OrderPaymentController extends Controller
         private AdvanceExpiry $advanceExpiry,
         private AdvanceRepricing $repricing,
         private OrderAnnouncer $announcer,
+        private LoyaltyPoints $points,
     ) {}
 
     public function pay(Request $request, Order $order)
@@ -107,12 +110,49 @@ class OrderPaymentController extends Controller
             }
         }
 
+        // An advance order's points are taken as its payment opens, at the
+        // day's prices (decided 2026-11-24). If the balance no longer covers
+        // them, those dishes are charged instead and the customer is told
+        // before paying anything.
+        if ($order->isAdvance() && (float) $order->points_amount > 0 && ! $this->points->hold($order)) {
+            if ($this->checkout->closeOpen($order)) {
+                return $this->alreadyPaid($order->refresh());
+            }
+
+            $dish = $order->items()->where('redeemed_quantity', '>', 0)->with('food')->get();
+            $this->repricing->dropRedemption($order);
+            $this->points->hold($order->refresh());
+            $this->announcer->announce($order, 'update');
+
+            return response()->json([
+                'message' => sprintf(
+                    'Your points no longer cover %s, so %s charged this time. Your total is now ₱%s. Please check it, then try again.',
+                    $dish->count() === 1 ? ($dish->first()->food?->food_name ?? 'the dish you picked') : 'the dishes you picked',
+                    $dish->count() === 1 ? 'it is' : 'they are',
+                    number_format((float) $order->total_amount, 2),
+                ),
+                'error_code' => PointsNotEnough::CODE,
+                'order' => $this->resource($order),
+            ], 409);
+        }
+
         if ($refusal = PriceCheck::refusal($shown, (float) ($order->total_amount ?? $order->total_price))) {
             return response()->json($refusal + ['order' => $this->resource($order)], 409);
         }
 
         if ($reviewed && $order->isAdvance()) {
             $order->forceFill(['details_confirmed_at' => now()])->save();
+        }
+
+        // Wholly paid with points: nothing to pay, so no payment page.
+        if (round((float) ($order->total_amount ?? $order->total_price), 2) <= 0) {
+            $order = $this->settlement->settleWithPoints($order);
+
+            return response()->json([
+                'paid' => $order->isPaid(),
+                'payment' => null,
+                'order' => $this->resource($order),
+            ]);
         }
 
         try {

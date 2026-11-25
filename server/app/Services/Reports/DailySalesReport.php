@@ -32,7 +32,7 @@ class DailySalesReport
 {
     private const TOP_ITEMS = 5;
 
-    private const FOOD_SALES = 'COALESCE(orders.subtotal, '.Order::TOTAL_SQL.' + COALESCE(orders.discount_amount, 0) - COALESCE(orders.delivery_fee, 0))';
+    private const FOOD_SALES = 'COALESCE(orders.subtotal, '.Order::TOTAL_SQL.' + COALESCE(orders.discount_amount, 0) + COALESCE(orders.points_amount, 0) - COALESCE(orders.delivery_fee, 0))';
 
     public function __construct(private StoreAvailability $store) {}
 
@@ -163,6 +163,7 @@ class DailySalesReport
             ->selectRaw('COUNT(*) AS orders')
             ->selectRaw('SUM('.self::FOOD_SALES.') AS food_sales')
             ->selectRaw('SUM(COALESCE(orders.discount_amount, 0)) AS discounts')
+            ->selectRaw('SUM(COALESCE(orders.points_amount, 0)) AS points')
             ->selectRaw('SUM(COALESCE(orders.delivery_fee, 0)) AS delivery_fees')
             ->selectRaw('SUM('.Order::TOTAL_SQL.') AS total')
             ->first();
@@ -171,6 +172,8 @@ class DailySalesReport
             'orders' => (int) $row->orders,
             'food_sales' => $this->money2($row->food_sales),
             'discounts' => $this->money2($row->discounts),
+            // Dishes paid with loyalty points, at their menu price (decided 2026-11-24).
+            'paid_with_points' => $this->money2($row->points),
             'delivery_fees' => $this->money2($row->delivery_fees),
             'total' => $this->money2($row->total),
         ];
@@ -191,7 +194,7 @@ class DailySalesReport
     private function mismatched(Builder $fulfilled): int
     {
         return (clone $fulfilled)
-            ->whereRaw('ABS('.self::FOOD_SALES.' - COALESCE(orders.discount_amount, 0) + COALESCE(orders.delivery_fee, 0) - '.Order::TOTAL_SQL.') >= 0.01')
+            ->whereRaw('ABS('.self::FOOD_SALES.' - COALESCE(orders.discount_amount, 0) - COALESCE(orders.points_amount, 0) + COALESCE(orders.delivery_fee, 0) - '.Order::TOTAL_SQL.') >= 0.01')
             ->count();
     }
 
@@ -202,7 +205,9 @@ class DailySalesReport
 
     private function money(array $window, array $filters, Builder $cancelled): array
     {
+        // An order paid wholly with points took no money (decided 2026-11-24).
         $paidOnDay = fn (Builder $payment) => $payment->verified()
+            ->where(fn (Builder $money) => $money->whereNull('payments.payment_method')->orWhere('payments.payment_method', '!=', Payment::METHOD_POINTS))
             ->where('payments.paid_at', '>=', $window[0])
             ->where('payments.paid_at', '<', $window[1]);
 
@@ -254,6 +259,7 @@ class DailySalesReport
     {
         return Payment::query()
             ->verified()
+            ->where(fn (Builder $money) => $money->whereNull('payments.payment_method')->orWhere('payments.payment_method', '!=', Payment::METHOD_POINTS))
             ->where('payments.paid_at', '>=', $window[0])
             ->where('payments.paid_at', '<', $window[1])
             // Every payment, as money received does (decided 2026-11-23): a

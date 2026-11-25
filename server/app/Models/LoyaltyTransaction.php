@@ -5,9 +5,26 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * One line of the points ledger (decided 2026-11-24, BES Loyalty Program).
+ * users.loyalty_points is the running balance; this is every point given and
+ * spent, which the Store Manager's totals are read from.
+ *
+ * A row outlives its account (user_id null after a deletion), so the totals
+ * issued and redeemed never drop.
+ */
 class LoyaltyTransaction extends Model
 {
     use HasFactory;
+
+    /** Credited when a paid order is completed or delivered. */
+    public const EARNED = 'earned';
+
+    /** Taken when an order is paid (partly or wholly) with points. */
+    public const REDEEMED = 'redeemed';
+
+    /** Given back when an order paid with points is cancelled or declined. */
+    public const RETURNED = 'returned';
 
     protected $fillable = [
         'user_id',
@@ -19,8 +36,8 @@ class LoyaltyTransaction extends Model
     protected function casts(): array
     {
         return [
-            // Positive = earned, negative = redeemed.
-            'points_change' => 'integer',
+            // Positive = earned or returned, negative = redeemed. Centavos kept.
+            'points_change' => 'decimal:2',
         ];
     }
 
@@ -29,7 +46,6 @@ class LoyaltyTransaction extends Model
         return $this->belongsTo(User::class);
     }
 
-    /** Null for manual adjustments not tied to an order. */
     public function order()
     {
         return $this->belongsTo(Order::class);

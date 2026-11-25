@@ -66,6 +66,8 @@ class OrderRecordResource extends JsonResource
             'discount_amount' => (float) $this->discount_amount,
             // The VAT part of discount_amount, shown as its own line.
             'vat_exempt_amount' => (float) ($this->vat_exempt_amount ?? 0),
+            // The part of the bill paid with points, in pesos (decided 2026-11-24).
+            'points_amount' => (float) $this->points_amount,
             'payment_status' => $paid === null ? 'unpaid' : 'paid',
             'payment_verified' => (bool) ($this->payment_verified ?? $paid !== null),
             // Decided 2026-11-23: the refund lives on the payment. An extra
@@ -106,6 +108,7 @@ class OrderRecordResource extends JsonResource
                 'food_name' => $item->food->food_name ?? 'Removed item',
                 'thumbnail' => $item->food->thumbnail ?? null,
                 'quantity' => (int) $item->quantity,
+                'redeemed_quantity' => (int) $item->redeemed_quantity,
                 // unit_price already includes the add-ons; each add-on keeps the
                 // price it was sold at on the pivot.
                 'unit_price' => (float) ($item->unit_price ?? $item->price),

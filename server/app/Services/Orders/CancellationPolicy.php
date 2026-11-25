@@ -3,6 +3,7 @@
 namespace App\Services\Orders;
 
 use App\Models\Order;
+use App\Services\Loyalty\LoyaltyPoints;
 use App\Services\Store\StoreContact;
 use Carbon\CarbonImmutable;
 
@@ -16,6 +17,10 @@ use Carbon\CarbonImmutable;
  *   advance    only while unpaid (`submitted`, `accepted`, `awaiting_payment`);
  *              nothing was charged, so nothing is refunded. Once paid, the
  *              customer cannot cancel it (BR-21)
+ *
+ * Points an order was paid with come back with any cancellation
+ * (`points_back`, decided 2026-11-24); an order paid wholly with points has
+ * no money to refund.
  *
  * There is no configurable refund threshold any more. A cancellation the shop
  * makes is not decided here: the Store Agent chooses refund or no refund
@@ -38,10 +43,16 @@ class CancellationPolicy
     /** A placed immediate order inside the store's 15 minutes to answer. */
     public const AWAITING_STORE = 'AWAITING_STORE';
 
+    /** Paid wholly with points: cancellable as a paid one, with no money to refund. */
+    public const PAID_WITH_POINTS = 'PAID_WITH_POINTS';
+
     /** Wording decided 2026-11-23, on the web and in the app. */
     public const CONFIRMED_MESSAGE = 'Your order is already confirmed and will be prepared any time now, so it can no longer be cancelled through the app. Please contact %s if you need assistance.';
 
-    public function __construct(private StoreContact $contact) {}
+    public function __construct(
+        private StoreContact $contact,
+        private LoyaltyPoints $points,
+    ) {}
 
     /** @return array<string, mixed> */
     public function for(Order $order): array
@@ -86,8 +97,13 @@ class CancellationPolicy
             ), ['cancel_from' => $from->toIso8601String()]);
         }
 
+        if (round((float) ($order->total_amount ?? $order->total_price), 2) <= 0) {
+            return $this->allowed(false, $order, self::PAID_WITH_POINTS, 'You can cancel this order while the store has not confirmed it yet. You paid with points, so they come back to your balance.');
+        }
+
         // Paid before it was placed, so the whole amount goes back.
-        return $this->allowed(true, $order, null, 'You can cancel this order while the store has not confirmed it yet. Your payment will be refunded in full.');
+        return $this->allowed(true, $order, null, 'You can cancel this order while the store has not confirmed it yet. Your payment will be refunded in full.'
+            .($this->points->heldFor($order) > 0 ? ' The points you used come back to your balance.' : ''));
     }
 
     /** When a placed immediate order may first be cancelled: the store's minutes from payment, then. */
@@ -107,9 +123,15 @@ class CancellationPolicy
 
     public function outcomeMessage(array $decision): string
     {
-        return $decision['refundable']
+        $pointsBack = ($decision['points_back'] ?? 0) > 0 ? ' Your points are back in your balance.' : '';
+
+        if (($decision['code'] ?? null) === self::PAID_WITH_POINTS) {
+            return 'Your order has been cancelled.'.$pointsBack;
+        }
+
+        return ($decision['refundable']
             ? 'Your order has been cancelled and your payment will be refunded in full.'
-            : 'Your order has been cancelled. You had not paid for it, so there is nothing to refund.';
+            : 'Your order has been cancelled. You had not paid for it, so there is nothing to refund.').$pointsBack;
     }
 
     /** @return array<string, mixed> */
@@ -139,6 +161,8 @@ class CancellationPolicy
             'can_cancel' => true,
             'refundable' => $refundable,
             'refund_amount' => $refundable ? round((float) ($order->total_amount ?? $order->total_price), 2) : 0.0,
+            // Points the order holds, given back when it is cancelled.
+            'points_back' => $this->points->heldFor($order),
             'code' => $code,
             'message' => $message,
             'cancel_from' => null,
@@ -152,6 +176,7 @@ class CancellationPolicy
             'can_cancel' => false,
             'refundable' => false,
             'refund_amount' => 0.0,
+            'points_back' => 0.0,
             'code' => $code,
             'message' => $message,
             'cancel_from' => null,

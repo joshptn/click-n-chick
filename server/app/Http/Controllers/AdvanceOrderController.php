@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
 use App\Models\User;
+use App\Services\Loyalty\LoyaltyRedemption;
 use App\Services\Orders\AdvanceQuote;
 use App\Services\Orders\DiscountUsage;
 use App\Services\Orders\OrderAnnouncer;
@@ -85,6 +86,8 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                     'subtotal' => $quote['subtotal'],
                     'discount_amount' => $quote['discount']['amount'],
                     'vat_exempt_amount' => $quote['discount']['applied'] ? $quote['discount']['vat_exempt_amount'] : 0,
+                    // Planned only: the points are taken when it is paid.
+                    'points_amount' => $quote['points_amount'],
                     'delivery_fee' => 0,
                     'total_amount' => $quote['total'],
                     'total_price' => $quote['total'],
@@ -95,6 +98,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
                         'order_id' => $order->id,
                         'food_id' => $line['food_id'],
                         'quantity' => $line['quantity'],
+                        'redeemed_quantity' => $line['redeemed_quantity'] ?? 0,
                         'price' => $line['unit_price'],
                         'unit_price' => $line['unit_price'],
                         'subtotal' => $line['subtotal'],
@@ -152,6 +156,7 @@ class AdvanceOrderController extends Controller implements HasMiddleware
             'cart_item_ids.*' => ['integer'],
             'scheduled_for' => ['nullable', 'string', 'max:64'],
             'apply_discount' => ['sometimes', 'boolean'],
+            ...LoyaltyRedemption::RULES,
             PriceCheck::FIELD => PriceCheck::RULE,
         ]);
     }

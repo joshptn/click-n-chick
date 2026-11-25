@@ -62,7 +62,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             // Left exactly as-is - see the note raised alongside this change.
             'phone_number' => 'encrypted',
-            'loyalty_points' => 'integer',
+            // Points keep centavos (decided 2026-11-24): 1 point = ₱1.
+            'loyalty_points' => 'decimal:2',
             'two_factor_confirmed_at' => 'datetime',
             'two_factor_enabled' => 'boolean',
         ];

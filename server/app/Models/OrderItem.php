@@ -14,6 +14,7 @@ class OrderItem extends Model
         'order_id',
         'food_id',
         'quantity',
+        'redeemed_quantity',
         'price',
         'unit_price',
         'subtotal',
@@ -23,6 +24,7 @@ class OrderItem extends Model
     {
         return [
             'quantity' => 'integer',
+            'redeemed_quantity' => 'integer',
             'price' => 'decimal:2',
             'unit_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
