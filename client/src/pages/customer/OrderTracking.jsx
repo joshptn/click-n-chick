@@ -87,7 +87,6 @@ function OrderTracking({ guest = false }) {
   const queryClient = useQueryClient();
 
   const queryKey = guest ? guestOrderKey(token) : orderKey(orderId);
-  const backTo = guest ? "/home" : "/orders";
   const backLabel = guest ? "Back to the menu" : "Back to my orders";
 
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -109,6 +108,8 @@ function OrderTracking({ guest = false }) {
   });
 
   const order = data?.order ?? null;
+  // Back to the tab the order sits on (My Orders, 2026-11-26).
+  const backTo = guest ? "/home" : order?.is_advance ? "/orders?tab=advance" : "/orders";
   const prompt = cancelPrompt(order);
 
   // Kept in this browser while the order is open, so a closed tab does not
