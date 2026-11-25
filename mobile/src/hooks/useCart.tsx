@@ -48,7 +48,10 @@ type CartContextValue = Cart & {
   selectedCount: number;
   selectedItemCount: number;
   selectedSubtotal: number;
+  /** Always false now: a sold-out line is never ticked (decided 2026-11-26). */
   hasUnavailableSelected: boolean;
+  /** Lines that sold out or were switched off: greyed, unticked, out of checkout. */
+  soldOutCount: number;
   allSelected: boolean;
 };
 
@@ -146,32 +149,47 @@ function useCartStore(mode: CartMode, signedIn: boolean, hasGuestCart: boolean, 
     [scope]
   );
 
+  // A line that sells out is unticked, and stays unticked if it comes back,
+  // until the customer ticks it again; it cannot be ticked while sold out
+  // (decided 2026-11-26, as on the web). An advance line is only "out" when
+  // its dish is gone: today's stock does not apply ahead of time.
+  const soldOutIds = useMemo(() => lines.filter((line) => !line.is_orderable).map((line) => line.id), [lines]);
+
+  // Recorded while rendering, as soon as the cart shows the line sold out.
+  const freshlySoldOut = soldOutIds.filter((id) => !deselected.has(id));
+
+  if (freshlySoldOut.length > 0) setDeselected((prev) => new Set([...prev, ...freshlySoldOut]));
+
   const selection = useMemo(() => {
-    const selected = lines.filter((line) => !deselected.has(line.id));
+    const orderable = lines.filter((line) => line.is_orderable);
+    const selected = orderable.filter((line) => !deselected.has(line.id));
 
     return {
       selectedIds: selected.map((line) => line.id),
       selectedCount: selected.length,
       selectedItemCount: selected.reduce((sum, line) => sum + line.quantity, 0),
       selectedSubtotal: selected.reduce((sum, line) => sum + Number(line.subtotal ?? 0), 0),
-      // Stock does not apply ahead of time: the store checks on acceptance.
-      hasUnavailableSelected: !advance && selected.some((line) => !line.is_orderable),
-      allSelected: lines.length > 0 && selected.length === lines.length,
+      hasUnavailableSelected: false,
+      soldOutCount: lines.length - orderable.length,
+      allSelected: orderable.length > 0 && selected.length === orderable.length,
     };
-  }, [lines, deselected, advance]);
+  }, [lines, deselected]);
 
   const toggleSelected = useCallback(
-    (id: number) =>
+    (id: number) => {
+      if (soldOutIds.includes(id)) return;
+
       setDeselected((prev) => {
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
         else next.add(id);
         return next;
-      }),
-    [setDeselected]
+      });
+    },
+    [setDeselected, soldOutIds]
   );
 
-  const selectAll = useCallback(() => setDeselected(() => new Set()), [setDeselected]);
+  const selectAll = useCallback(() => setDeselected(() => new Set(soldOutIds)), [setDeselected, soldOutIds]);
   const deselectAll = useCallback(
     () => setDeselected(() => new Set(lines.map((line) => line.id))),
     [setDeselected, lines]
@@ -205,7 +223,7 @@ function useCartStore(mode: CartMode, signedIn: boolean, hasGuestCart: boolean, 
       isMutating: change.isPending || remove.isPending || removeMany.isPending,
 
       ...selection,
-      isSelected: (id) => !deselected.has(id),
+      isSelected: (id) => !deselected.has(id) && !soldOutIds.includes(id),
       toggleSelected,
       selectAll,
       deselectAll,
@@ -233,6 +251,7 @@ function useCartStore(mode: CartMode, signedIn: boolean, hasGuestCart: boolean, 
       removeMany.isPending,
       selection,
       deselected,
+      soldOutIds,
       toggleSelected,
       selectAll,
       deselectAll,

@@ -16,6 +16,20 @@ class Cart extends Model
 
     public const MODE_ADVANCE = 'advance';
 
+    /** The most of one line today's cart takes; stock caps it lower. */
+    public const MAX_QUANTITY = 99;
+
+    /**
+     * The most of one line an advance cart takes: four digits, like the Store
+     * Agent's stock count (decided 2026-11-26), for large orders booked ahead.
+     */
+    public const ADVANCE_MAX_QUANTITY = 9999;
+
+    public static function maxQuantity(bool $advance): int
+    {
+        return $advance ? self::ADVANCE_MAX_QUANTITY : self::MAX_QUANTITY;
+    }
+
     public const STATUS_IMMEDIATE = 'active';
 
     public const STATUS_ADVANCE = 'advance';

@@ -85,7 +85,17 @@ function StockControl({ food, threshold, canManage, busy, onStep, onRecount }) {
   if (editing) {
     return (
       <div className="flex flex-col items-center gap-1">
-        <div className="flex items-center gap-1 text-[12px]">
+        {/* Cancel, the count in the middle, save: laid out like − count + beside it. */}
+        <div className="flex items-center gap-1.5 text-[12px]">
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            aria-label="Cancel"
+            data-testid="stock-cancel"
+            className={`${stepButton} bg-[#f4f1ec] text-[#6f6b68] hover:bg-[#ece7e0]`}
+          >
+            <IconX size={14} stroke={2.4} />
+          </button>
           <input
             ref={inputRef}
             type="number"
@@ -110,14 +120,6 @@ function StockControl({ food, threshold, canManage, busy, onStep, onRecount }) {
             className={`${stepButton} bg-brand-500 text-white hover:bg-brand-600`}
           >
             <IconCheck size={15} stroke={2.6} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            aria-label="Cancel"
-            className={`${stepButton} bg-[#f4f1ec] text-[#6f6b68] hover:bg-[#ece7e0]`}
-          >
-            <IconX size={14} stroke={2.4} />
           </button>
         </div>
         <span className="font-display text-[10px] text-[#a39f9b]">Enter to save · Esc to cancel</span>

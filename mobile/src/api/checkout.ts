@@ -23,6 +23,8 @@ export type QuoteLine = {
   quantity: number;
   addons: { id: number; addon_name: string; addon_price: number }[];
   subtotal: number;
+  /** False once the dish has sold out or been switched off since it was put in the cart. */
+  is_orderable?: boolean;
 };
 
 export type QuoteDiscount = {

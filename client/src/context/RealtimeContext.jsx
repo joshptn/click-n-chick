@@ -18,6 +18,18 @@ import { endSession, sessionDeviceId } from "../lib/session";
 const RealtimeContext = createContext(null);
 
 /**
+ * Whether a cart on screen holds this dish, so a stock change elsewhere on the
+ * menu does not make every open cart ask again. Without an id, it assumes so.
+ */
+function cartHolds(queryClient, foodId) {
+  if (foodId == null) return true;
+
+  return queryClient
+    .getQueriesData({ queryKey: ["cart"] })
+    .some(([, data]) => data?.cart?.some((line) => line.food_id === foodId));
+}
+
+/**
  * Subscribes the signed-in user to the channels the backend already
  * broadcasts on, and turns those broadcasts into UI state.
  *
@@ -120,7 +132,19 @@ export function RealtimeProvider({ children }) {
     // effect, so a signed-out visitor got no stock updates at all.
     echo.channel("menu")
       .subscribed(() => markSubscribed("menu"))
-      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }))
+      // A dish's stock or availability changed (an order took the last ones, a
+      // hold lapsed, the agent switched it). A cart holding that dish is asked
+      // again, so a line that just sold out greys and unticks at once, and an
+      // open checkout drops it (decided 2026-11-26).
+      .listen(".food", (payload) => {
+        queryClient.invalidateQueries({ queryKey: ["foods"] });
+
+        if (cartHolds(queryClient, payload?.food?.id)) {
+          queryClient.invalidateQueries({ queryKey: ["cart"] });
+          queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+          queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+        }
+      })
       // Prices changed, one dish or a bulk change (FR-02.5). Carts are priced
       // on every read, so refetching is what makes their totals float; open
       // checkout quotes are asked again too.

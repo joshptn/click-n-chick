@@ -86,7 +86,7 @@ function AdvanceOrder() {
       />
 
       <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="min-w-0">
             <AdvanceNotice />
 

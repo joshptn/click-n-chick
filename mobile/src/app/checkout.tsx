@@ -21,6 +21,7 @@ import { DiscountStep, type DiscountChoice } from "../components/checkout/Discou
 import { DispatchStep, FulfilmentToggle, dispatchProblems, type DispatchValues } from "../components/checkout/DispatchStep";
 import { Notice, OrderSummary, StepCard, Stepper, SummaryRow } from "../components/checkout/parts";
 import { IconCheck, IconChevronRight, IconLock, IconQrcode, IconShoppingCart, IconWallet } from "../components/icons";
+import { useCart } from "../hooks/useCart";
 import { useSession } from "../hooks/useSession";
 import { useStoreStatus } from "../hooks/useStoreStatus";
 import { rememberPendingCheckout } from "../lib/guestOrders";
@@ -52,13 +53,23 @@ export default function Checkout() {
   const { status: store } = useStoreStatus();
 
   const { ids } = useLocalSearchParams<{ ids?: string }>();
-  const cartItemIds = useMemo(
+  const { cart: cartLines } = useCart();
+
+  // Lines that sold out while the customer was here, taken out of this order
+  // (decided 2026-11-26). They stay in the cart, greyed and unticked.
+  const [takenOut, setTakenOut] = useState<{ id: number; name: string }[]>([]);
+
+  const chosenIds = useMemo(
     () =>
       String(ids ?? "")
         .split(",")
         .map(Number)
         .filter((id) => Number.isInteger(id) && id > 0),
     [ids]
+  );
+  const cartItemIds = useMemo(
+    () => chosenIds.filter((id) => !takenOut.some((line) => line.id === id)),
+    [chosenIds, takenOut]
   );
 
   const steps: StepId[] = guest ? ["dispatch", "payment"] : ["dispatch", "discount", "payment"];
@@ -195,6 +206,42 @@ export default function Checkout() {
   // Sent once: the button stays busy from the tap until the payment screen opens.
   const placing = place.isPending || place.isSuccess;
   const placeReady = acknowledged && settled && Boolean(quote?.can_place) && !placing;
+
+  // A line in this order that sells out (the cart or the quote, whichever
+  // hears first, both asked again live) comes out of it at once: recorded
+  // while rendering, then announced below.
+  if (!placing && cartItemIds.length > 0) {
+    const inOrder = new Set(cartItemIds);
+    const gone = new Map<number, string>();
+
+    [...(quote?.items ?? []), ...cartLines]
+      .filter((line) => inOrder.has(line.id) && line.is_orderable === false)
+      .forEach((line) => gone.set(line.id, line.food_name));
+
+    if (gone.size > 0) setTakenOut((prev) => [...prev, ...[...gone].map(([id, name]) => ({ id, name }))]);
+  }
+
+  // Told once per line; with nothing left, back to the menu.
+  const announced = useRef(0);
+
+  useEffect(() => {
+    if (takenOut.length <= announced.current) return;
+
+    const names = takenOut.slice(announced.current).map((line) => line.name);
+    announced.current = takenOut.length;
+    void queryClient.invalidateQueries({ queryKey: ["cart"] });
+
+    const named = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+    if (cartItemIds.length === 0) {
+      toast.info("Sold out", `${named} just sold out, so there is nothing left to check out.`);
+      router.replace("/home");
+
+      return;
+    }
+
+    toast.info("Sold out", `${named} just sold out and ${names.length === 1 ? "was" : "were"} taken out of your order.`);
+  }, [takenOut, cartItemIds, queryClient]);
 
   const back = () => {
     if (placing) return;

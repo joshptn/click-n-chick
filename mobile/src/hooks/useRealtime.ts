@@ -68,7 +68,26 @@ export function useRealtimeConnection() {
 
     echo
       .channel("menu")
-      .listen(".food", () => queryClient.invalidateQueries({ queryKey: ["foods"] }))
+      // A dish's stock or availability changed. A cart holding that dish is
+      // asked again, so a line that just sold out greys and unticks at once,
+      // and an open checkout drops it (decided 2026-11-26, as on the web).
+      .listen(".food", (payload: { food?: { id?: number } }) => {
+        void queryClient.invalidateQueries({ queryKey: ["foods"] });
+        void queryClient.invalidateQueries({ queryKey: ["food"] });
+
+        const foodId = payload?.food?.id;
+        const held =
+          foodId == null ||
+          queryClient
+            .getQueriesData<{ cart?: { food_id: number }[] }>({ queryKey: ["cart"] })
+            .some(([, data]) => data?.cart?.some((line) => line.food_id === foodId));
+
+        if (held) {
+          void queryClient.invalidateQueries({ queryKey: ["cart"] });
+          void queryClient.invalidateQueries({ queryKey: ["checkout", "quote"] });
+          void queryClient.invalidateQueries({ queryKey: ["advance", "quote"] });
+        }
+      })
       // Prices changed, one dish or a bulk change (FR-02.5). Carts are priced
       // on every read, so refetching is what makes their totals float.
       .listen(".prices", () => {

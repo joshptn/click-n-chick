@@ -52,13 +52,25 @@ function Checkout() {
   const captcha = useRecaptcha({ enabled: !signedIn });
   const steps = signedIn ? STEPS : GUEST_STEPS;
   const stepNumber = (id) => steps.findIndex((entry) => entry.id === id) + 1;
-  const { selectedIds, isLoading: cartLoading, item_count: cartCount } = useCartState();
+  const { cart: cartLines, selectedIds, isLoading: cartLoading, item_count: cartCount } = useCartState();
   const { status: storeStatus } = useStoreStatus();
 
-  const routeSelection = location.state?.selectedIds ?? null;
-  const initialSelection = useRef(routeSelection);
+  // The lines brought from the cart. Opened without them (a reload), the
+  // cart's ticked lines once it has loaded.
+  const [chosenIds, setChosenIds] = useState(() => location.state?.selectedIds ?? null);
 
-  const cartItemIds = initialSelection.current ?? selectedIds;
+  useEffect(() => {
+    if (chosenIds === null && !cartLoading && selectedIds.length > 0) setChosenIds(selectedIds);
+  }, [chosenIds, cartLoading, selectedIds]);
+
+  // Lines that sold out while the customer was here, taken out of this order
+  // (decided 2026-11-26). They stay in the cart, greyed and unticked.
+  const [takenOut, setTakenOut] = useState([]);
+
+  const cartItemIds = useMemo(
+    () => (chosenIds ?? selectedIds).filter((id) => !takenOut.includes(id)),
+    [chosenIds, selectedIds, takenOut]
+  );
 
   const [step, setStep] = useState("dispatch");
   const [completed, setCompleted] = useState([]);
@@ -188,6 +200,37 @@ function Checkout() {
       navigate("/home", { replace: true });
     }
   }, [cartCount, cartLoading, navigate, placing]);
+
+  // A line in this order that sells out (the cart or the quote, whichever
+  // hears first, both asked again live) comes out of it at once; with nothing
+  // left, back to the menu.
+  useEffect(() => {
+    if (placing || cartItemIds.length === 0) return;
+
+    const inOrder = new Set(cartItemIds);
+    const gone = new Map();
+
+    [...(quote?.items ?? []), ...cartLines]
+      .filter((line) => inOrder.has(line.id) && !line.is_orderable)
+      .forEach((line) => gone.set(line.id, line.food_name));
+
+    if (gone.size === 0) return;
+
+    setTakenOut((prev) => [...prev, ...gone.keys()]);
+    queryClient.invalidateQueries({ queryKey: ["cart"] });
+
+    const names = [...gone.values()];
+    const named = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+    if (gone.size === inOrder.size) {
+      toast.info(`${named} just sold out, so there is nothing left to check out.`, "Sold out");
+      navigate("/home", { replace: true });
+
+      return;
+    }
+
+    toast.info(`${named} just sold out and ${names.length === 1 ? "was" : "were"} taken out of your order.`, "Sold out");
+  }, [quote, cartLines, cartItemIds, placing, queryClient, navigate]);
 
   const handleContinue = () => {
     setAttemptedContinue(true);

@@ -13,7 +13,8 @@ import { CartLineRow } from "./CartLineRow";
 /**
  * A cart's lines, totals and button, with the web CartPanel's behaviour:
  * lines ticked for checkout by default (BR-25), the totals counting only
- * ticked lines, and checkout blocked while a ticked line has sold out.
+ * ticked lines. A line that sells out greys and unticks live, and cannot be
+ * ticked until it is back (decided 2026-11-26).
  *
  * Today's cart lives on the Cart tab and opens checkout (phase 11). The
  * advance cart lives only inside the advance-order screens (decided
@@ -36,7 +37,7 @@ export function CartContents({ mode, bottomSpace }: { mode: CartMode; bottomSpac
     selectedCount,
     selectedSubtotal,
     selectedItemCount,
-    hasUnavailableSelected,
+    soldOutCount,
     removeSelected,
     setQuantity,
     removeItem,
@@ -51,7 +52,8 @@ export function CartContents({ mode, bottomSpace }: { mode: CartMode; bottomSpac
   }, [lines]);
 
   const empty = !isLoading && lines.length === 0;
-  const canCheckout = selectedCount > 0 && !hasUnavailableSelected && !isMutating;
+  const canCheckout = selectedCount > 0 && !isMutating;
+  const allSoldOut = lines.length > 0 && soldOutCount === lines.length;
 
   // Only the ticked lines go on (BR-25), as on the web.
   const checkout = () =>
@@ -63,9 +65,10 @@ export function CartContents({ mode, bottomSpace }: { mode: CartMode; bottomSpac
         <View style={styles.selectBar}>
           <Pressable
             accessibilityRole="checkbox"
-            accessibilityState={{ checked: allSelected }}
+            accessibilityState={{ checked: allSelected, disabled: allSoldOut }}
+            disabled={allSoldOut}
             onPress={() => (allSelected ? deselectAll() : selectAll())}
-            style={styles.selectAll}
+            style={[styles.selectAll, allSoldOut && styles.faded]}
             hitSlop={8}
             testID="select-all"
           >
@@ -95,7 +98,7 @@ export function CartContents({ mode, bottomSpace }: { mode: CartMode; bottomSpac
 
       <ScrollView
         style={styles.body}
-        contentContainerStyle={[styles.content, { paddingBottom: bottomSpace }]}
+        contentContainerStyle={[styles.content, empty && styles.contentEmpty, { paddingBottom: bottomSpace }]}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={[colors.orange]} />}
       >
         {isLoading && (
@@ -147,11 +150,11 @@ export function CartContents({ mode, bottomSpace }: { mode: CartMode; bottomSpac
 
         {lines.length > 0 && (
           <>
-            {hasUnavailableSelected && (
+            {allSoldOut && (
               <View style={styles.warning}>
                 <IconAlertTriangle size={15} color="#8a6206" strokeWidth={2.2} />
                 <AppText family="display" size={12.5} color="#8a6206" style={styles.warningText}>
-                  Something you selected sold out. Untick or remove it before checking out.
+                  Everything in your cart has sold out.
                 </AppText>
               </View>
             )}
@@ -248,6 +251,8 @@ const styles = StyleSheet.create({
   faded: { opacity: 0.4 },
   body: { flex: 1, backgroundColor: "#f8f5f1" },
   content: { padding: 16, gap: 14 },
+  // An empty cart fills the screen, so its message sits in the middle.
+  contentEmpty: { flexGrow: 1, justifyContent: "center" },
   card: {
     borderRadius: 16,
     borderWidth: 1,
@@ -288,7 +293,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff9e8",
   },
   warningText: { flex: 1 },
-  empty: { alignItems: "center", gap: 6, paddingTop: 56 },
+  empty: { alignItems: "center", gap: 6 },
   browse: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.orange },
 });
 

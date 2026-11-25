@@ -120,20 +120,38 @@ function useCartStore(mode, enabled, scope) {
 
   const [deselectedIds, setDeselectedIds] = useState(() => new Set());
 
+  // A line that sells out is unticked, and stays unticked if it comes back,
+  // until the customer ticks it again (decided 2026-11-26). It cannot be
+  // ticked while it is sold out.
+  useEffect(() => {
+    const soldOut = lines.filter((line) => !line.is_orderable && !deselectedIds.has(line.id));
+
+    if (soldOut.length === 0) return;
+
+    setDeselectedIds((prev) => new Set([...prev, ...soldOut.map((line) => line.id)]));
+  }, [lines, deselectedIds]);
+
   const selection = useMemo(() => {
-    const selectedLines = lines.filter((line) => !deselectedIds.has(line.id));
+    const orderableLines = lines.filter((line) => line.is_orderable);
+    const selectedLines = orderableLines.filter((line) => !deselectedIds.has(line.id));
 
     return {
       selectedIds: selectedLines.map((line) => line.id),
       selectedCount: selectedLines.length,
       selectedItemCount: selectedLines.reduce((sum, line) => sum + line.quantity, 0),
       selectedSubtotal: selectedLines.reduce((sum, line) => sum + Number(line.subtotal ?? 0), 0),
-      hasUnavailableSelected: selectedLines.some((line) => !line.is_orderable),
-      allSelected: lines.length > 0 && selectedLines.length === lines.length,
+      // A sold-out line is never ticked, so it can no longer be carried to checkout.
+      hasUnavailableSelected: false,
+      soldOutCount: lines.length - orderableLines.length,
+      allSelected: orderableLines.length > 0 && selectedLines.length === orderableLines.length,
     };
   }, [lines, deselectedIds]);
 
+  const soldOutIds = useMemo(() => lines.filter((line) => !line.is_orderable).map((line) => line.id), [lines]);
+
   const toggleSelected = useCallback((id) => {
+    if (soldOutIds.includes(id)) return;
+
     setDeselectedIds((prev) => {
       const next = new Set(prev);
 
@@ -145,9 +163,9 @@ function useCartStore(mode, enabled, scope) {
 
       return next;
     });
-  }, []);
+  }, [soldOutIds]);
 
-  const selectAll = useCallback(() => setDeselectedIds(new Set()), []);
+  const selectAll = useCallback(() => setDeselectedIds(new Set(soldOutIds)), [soldOutIds]);
 
   const deselectAll = useCallback(
     () => setDeselectedIds(new Set(lines.map((line) => line.id))),
@@ -187,7 +205,7 @@ function useCartStore(mode, enabled, scope) {
       clearCart: () => clear(),
 
       ...selection,
-      isSelected: (id) => !deselectedIds.has(id),
+      isSelected: (id) => !deselectedIds.has(id) && !soldOutIds.includes(id),
       toggleSelected,
       selectAll,
       deselectAll,
@@ -208,6 +226,7 @@ function useCartStore(mode, enabled, scope) {
       removeMany,
       selection,
       deselectedIds,
+      soldOutIds,
       toggleSelected,
       selectAll,
       deselectAll,
