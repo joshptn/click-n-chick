@@ -1,0 +1,52 @@
+# The routing server: OSRM behind Caddy (HTTPS and our token).
+# Set up and run as described in osrm/README.md (full guide: docs/OSRM-Setup.md).
+# Values like ${OSRM_DOMAIN} come from osrm/.env.
+name: osrm
+
+services:
+  osrm:
+    image: ${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v26.11.0-debian}
+    # --mmap reads the map from disk as needed instead of loading it all into
+    # memory: the server has 1 GB. WARNING keeps customer coordinates (every
+    # request) out of the logs.
+    command: osrm-routed --algorithm mld --mmap --verbosity WARNING /data/area.osrm
+    volumes:
+      # Filled by update-map.sh; read-only here.
+      - ./data/current:/data:ro
+    ports:
+      # Only reachable from the server itself, for checks. The world goes through Caddy.
+      - "127.0.0.1:5000:5000"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2.11.9
+    depends_on:
+      - osrm
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      OSRM_DOMAIN: ${OSRM_DOMAIN}
+      OSRM_TOKEN: ${OSRM_TOKEN}
+      STORE_LAT: ${STORE_LAT}
+      STORE_LNG: ${STORE_LNG}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The HTTPS certificate lives here, so restarts don't ask for a new one.
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:

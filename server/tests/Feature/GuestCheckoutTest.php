@@ -14,6 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\FakesOsrm;
 use Tests\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use Tests\TestCase;
  */
 class GuestCheckoutTest extends TestCase
 {
+    use FakesOsrm;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -37,7 +39,7 @@ class GuestCheckoutTest extends TestCase
         Event::fake([OrderBroadcast::class, NotificationBroadcast::class]);
         Cache::flush();
 
-        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+        $this->useFakeOsrm();
     }
 
     protected function tearDown(): void
@@ -62,11 +64,7 @@ class GuestCheckoutTest extends TestCase
 
     private function fakeRouting(float $km): void
     {
-        Http::fake([
-            'api.openrouteservice.org/*' => Http::response([
-                'routes' => [['summary' => ['distance' => $km, 'duration' => $km * 90]]],
-            ]),
-        ]);
+        Http::fake([self::OSRM => Http::response($this->osrmRoute($km))]);
     }
 
     /** A guest cart with one line, and the token that names it. */

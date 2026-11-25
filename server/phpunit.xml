@@ -29,6 +29,11 @@
         <env name="STORE_OPENS_AT" value="07:00"/>
         <env name="STORE_CLOSES_AT" value="20:00"/>
         <env name="STORE_MAX_DRIVING_KM" value="45"/>
+        <!-- Never a real router: keys and addresses blank. Routing tests pick
+             their engine and fake it (OSRM at https://osrm.test). -->
+        <env name="ROUTING_DRIVER" value="openrouteservice"/>
+        <env name="OSRM_ENDPOINT" value=""/>
+        <env name="OSRM_TOKEN" value=""/>
         <env name="ORS_API_KEY" value=""/>
         <env name="CLOUDINARY_URL" value=""/>
         <env name="RECAPTCHA_ENABLED" value="false"/>

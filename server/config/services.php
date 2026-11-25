@@ -79,14 +79,34 @@ return [
         'reverse_ttl' => (int) env('NOMINATIM_REVERSE_TTL', 604800),
     ],
 
+    /*
+     * Driving distance for the delivery fee. OpenRouteService for now, on its
+     * new host. OSRM on our own server (docs/OSRM-Setup.md) is built and is
+     * switched on with ROUTING_DRIVER=osrm once that server exists: it routes
+     * into subdivisions whose roads OpenStreetMap tags as private, which ORS
+     * refuses (decided 2026-11-26; server set-up postponed the same day).
+     *
+     * OSRM_ENDPOINT is the server's https address, and OSRM_TOKEN must match
+     * OSRM_TOKEN in that server's osrm/.env. Both are secrets in production.
+     */
     'routing' => [
         'driver' => env('ROUTING_DRIVER', 'openrouteservice'),
 
+        'osrm' => [
+            'endpoint' => env('OSRM_ENDPOINT'),
+            'token' => env('OSRM_TOKEN'),
+            'profile' => env('OSRM_PROFILE', 'driving'),
+        ],
+
         'openrouteservice' => [
-            'endpoint' => env('ORS_ENDPOINT', 'https://api.openrouteservice.org'),
+            // The old api.openrouteservice.org host was shut down in November 2026 (it answers 410).
+            'endpoint' => env('ORS_ENDPOINT', 'https://api.heigit.org/openrouteservice'),
             'api_key' => env('ORS_API_KEY'),
             'profile' => env('ORS_PROFILE', 'driving-car'),
         ],
+
+        // A pin farther than this from any road has no route (OSRM; ORS fixes it at 350).
+        'snap_metres' => (int) env('ROUTING_SNAP_METRES', 350),
 
         'timeout' => (int) env('ROUTING_TIMEOUT', 6),
         'connect_timeout' => (int) env('ROUTING_CONNECT_TIMEOUT', 3),

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\Geo\OpenRouteServiceClient;
+use App\Services\Geo\OsrmClient;
 use App\Services\Geo\RoutingProvider;
 use App\Services\Mail\GmailOAuth;
 use App\Services\Mail\GmailTransport;
@@ -45,7 +46,18 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
+        // OpenRouteService unless ROUTING_DRIVER says osrm (the OSRM server is
+        // built but not set up yet, 2026-11-26).
         $this->app->bind(RoutingProvider::class, function () {
+            if (config('services.routing.driver') === 'osrm') {
+                return new OsrmClient(
+                    config('services.routing.osrm.endpoint'),
+                    config('services.routing.osrm.token'),
+                    (string) config('services.routing.osrm.profile', 'driving'),
+                    (int) config('services.routing.snap_metres', 350),
+                );
+            }
+
             return new OpenRouteServiceClient(
                 (string) config('services.routing.openrouteservice.endpoint'),
                 config('services.routing.openrouteservice.api_key'),

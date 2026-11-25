@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\FakesOsrm;
 use Tests\TestCase;
 
 /**
@@ -30,6 +31,7 @@ use Tests\TestCase;
  */
 class CheckoutDispatchTest extends TestCase
 {
+    use FakesOsrm;
     use RefreshDatabase;
 
     private int $phoneSeq = 0;
@@ -55,32 +57,22 @@ class CheckoutDispatchTest extends TestCase
         // next one's assertions.
         Cache::flush();
 
-        // phpunit.xml blanks the real key so nothing can reach the live API by
-        // accident. Tests that route need a key present to get as far as the
-        // faked HTTP layer.
-        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+        // phpunit.xml leaves the router's address blank so nothing can reach a
+        // real one by accident. Tests that route point it at a fake OSRM.
+        $this->useFakeOsrm();
     }
 
     /**
      * Answer every routing call with this many kilometres by road.
      *
-     * `$geometry` mirrors what ORS actually sends - an encoded polyline
-     * alongside the summary - so the geometry path is exercised by default
+     * `$geometry` mirrors what OSRM actually sends - an encoded polyline
+     * alongside the distance - so the geometry path is exercised by default
      * rather than only where a test names it. Pass false for the case where a
-     * provider returns a distance with no drawable shape.
+     * router returns a distance with no drawable shape.
      */
     private function fakeRouting(float $km, bool $geometry = true): void
     {
-        $route = ['summary' => ['distance' => $km, 'duration' => $km * 90]];
-
-        if ($geometry) {
-            // Google's reference vector: three real, decodable points.
-            $route['geometry'] = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
-        }
-
-        Http::fake([
-            'api.openrouteservice.org/*' => Http::response(['routes' => [$route]]),
-        ]);
+        Http::fake([self::OSRM => Http::response($this->osrmRoute($km, $geometry))]);
     }
 
     protected function tearDown(): void
@@ -248,7 +240,7 @@ class CheckoutDispatchTest extends TestCase
 
     public function test_a_routing_outage_is_reported_apart_from_being_out_of_range(): void
     {
-        Http::fake(['api.openrouteservice.org/*' => Http::response('gateway timeout', 504)]);
+        Http::fake([self::OSRM => Http::response('gateway timeout', 504)]);
 
         $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
 
@@ -259,19 +251,16 @@ class CheckoutDispatchTest extends TestCase
     }
 
     /**
-     * ORS answering "there is no road there" is not an outage.
+     * The router answering "there is no road there" is not an outage.
      *
-     * It returns 404 for a destination it cannot reach - a pin in the
-     * fishponds, which around Apalit takes one careless tap. Retrying is
-     * useless advice; moving the pin is the fix, so the two are reported
-     * apart.
+     * OSRM answers NoSegment (HTTP 400) for a pin more than the snap radius
+     * from any road - a pin in the fishponds, which around Apalit takes one
+     * careless tap. Retrying is useless advice; moving the pin is the fix, so
+     * the two are reported apart.
      */
     public function test_an_unreachable_pin_is_reported_apart_from_an_outage(): void
     {
-        Http::fake(['api.openrouteservice.org/*' => Http::response(
-            ['error' => ['code' => 2010, 'message' => 'Could not find routable point']],
-            404
-        )]);
+        Http::fake([self::OSRM => Http::response($this->osrmNoSegment(), 400)]);
 
         $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
 
@@ -285,7 +274,7 @@ class CheckoutDispatchTest extends TestCase
     {
         [$user] = $this->customerWithCart();
 
-        Http::fake(['api.openrouteservice.org/*' => Http::response([], 404)]);
+        Http::fake([self::OSRM => Http::response($this->osrmNoSegment(), 400)]);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/checkout/quote', $this->deliveryBody())
@@ -294,10 +283,10 @@ class CheckoutDispatchTest extends TestCase
             ->assertJsonPath('blockers.0.code', 'NO_ROUTE_FOUND');
     }
 
-    /** A 200 carrying no route means the same thing as the 404. */
-    public function test_an_empty_route_response_is_also_a_missing_route(): void
+    /** No road connecting the two (an island, a closed-off area) means the same as no road nearby. */
+    public function test_a_route_that_does_not_exist_is_also_a_missing_route(): void
     {
-        Http::fake(['api.openrouteservice.org/*' => Http::response(['routes' => []])]);
+        Http::fake([self::OSRM => Http::response(['code' => 'NoRoute', 'message' => 'Impossible route between points'], 400)]);
 
         $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
 
@@ -305,9 +294,9 @@ class CheckoutDispatchTest extends TestCase
         $this->assertFalse($quote['route_found']);
     }
 
-    public function test_an_exhausted_quota_is_treated_as_an_outage(): void
+    public function test_a_rate_limited_router_is_treated_as_an_outage(): void
     {
-        Http::fake(['api.openrouteservice.org/*' => Http::response('quota exceeded', 429)]);
+        Http::fake([self::OSRM => Http::response('slow down', 429)]);
 
         $this->assertFalse(app(DeliveryQuote::class)->for(14.9700, 120.7600)['routing_available']);
     }
@@ -354,9 +343,9 @@ class CheckoutDispatchTest extends TestCase
         $this->assertSame(55.0, $quote['fee']);
     }
 
-    public function test_a_missing_api_key_reads_as_an_outage_not_a_refusal(): void
+    public function test_a_missing_router_address_reads_as_an_outage_not_a_refusal(): void
     {
-        config()->set('services.routing.openrouteservice.api_key', null);
+        config()->set('services.routing.osrm.endpoint', null);
         Http::fake();
 
         $quote = app(DeliveryQuote::class)->for(14.9700, 120.7600);
@@ -456,13 +445,9 @@ class CheckoutDispatchTest extends TestCase
 
         app(DeliveryQuote::class)->for(14.9700, 120.7600);
 
-        // ORS reverses the usual pair. Getting it wrong routes to a different
+        // OSRM reverses the usual pair. Getting it wrong routes to a different
         // continent and still returns 200.
-        Http::assertSent(function ($request) {
-            $sent = $request->data()['coordinates'][1] ?? [];
-
-            return $sent === [120.76, 14.97];
-        });
+        Http::assertSent(fn ($request) => str_contains($request->url(), ';120.760000,14.970000?'));
     }
 
     public function test_the_delivery_quote_endpoint_prices_a_pin(): void
@@ -522,7 +507,7 @@ class CheckoutDispatchTest extends TestCase
     {
         [$user] = $this->customerWithCart();
 
-        Http::fake(['api.openrouteservice.org/*' => Http::response('down', 503)]);
+        Http::fake([self::OSRM => Http::response('down', 503)]);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/checkout/quote', $this->deliveryBody())
@@ -871,7 +856,7 @@ class CheckoutDispatchTest extends TestCase
     {
         [$user] = $this->customerWithCart();
 
-        Http::fake(['api.openrouteservice.org/*' => Http::response('down', 503)]);
+        Http::fake([self::OSRM => Http::response('down', 503)]);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/order/place', $this->deliveryBody())

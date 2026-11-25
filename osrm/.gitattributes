@@ -1,0 +1,2 @@
+# These run on Linux: never check them out with Windows line endings.
+* text eol=lf

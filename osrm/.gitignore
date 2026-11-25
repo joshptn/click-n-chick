@@ -1,0 +1,5 @@
+# The token and the DuckDNS key.
+.env
+# The prepared map (rebuilt by update-map.sh).
+data/
+*.log
