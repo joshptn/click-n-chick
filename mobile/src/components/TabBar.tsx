@@ -9,7 +9,7 @@ import { useNotifications } from "../hooks/useNotifications";
 import { useSession } from "../hooks/useSession";
 import { colors } from "../theme/colors";
 import { AppText } from "./AppText";
-import { IconBell, IconHomeFilled, IconLogin2, IconShoppingCart, IconUser } from "./icons";
+import { IconBell, IconHomeFilled, IconLogin2, IconReceipt, IconShoppingCart, IconUser } from "./icons";
 
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
@@ -26,7 +26,8 @@ export const TAB_BAR_SPACE = 104;
 
 /**
  * The floating bottom bar (design of 2026-11-17). A signed-in customer has
- * Home, Cart, Notif and Profile; a guest has Home, Cart and Sign in.
+ * Home, Cart, Orders (2026-11-26), Notif and Profile; a guest has Home, Cart
+ * and Sign in.
  */
 export function TabBar({ state, navigateToTab, emitter }: BottomTabBarProps) {
   const { signedIn } = useSession();
@@ -39,6 +40,7 @@ export function TabBar({ state, navigateToTab, emitter }: BottomTabBarProps) {
     { route: "cart", label: "Cart", Icon: IconShoppingCart, badge: itemCount },
     ...(signedIn
       ? [
+          { route: "orders", label: "Orders", Icon: IconReceipt },
           { route: "notifications", label: "Notif", Icon: IconBell, badge: unreadCount },
           { route: "profile", label: "Profile", Icon: IconUser },
         ]

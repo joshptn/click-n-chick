@@ -124,19 +124,31 @@ class PushNotificationTest extends TestCase
         $this->assertSame($second->id, PushToken::sole()->user_id);
     }
 
-    public function test_staff_cannot_register_a_token(): void
+    public function test_staff_can_register_a_token_too(): void
     {
         foreach ([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN] as $role) {
             $staff = User::factory()->create(['role' => $role, 'account_status' => User::STATUS_ACTIVE]);
 
-            $this->withToken($staff->createToken('web')->plainTextToken)
-                ->postJson('/api/push-tokens', ['token' => 'staff-'.$role, 'platform' => 'web'])
-                ->assertForbidden();
-
-            $this->app['auth']->forgetGuards();
+            $this->registerDevice($staff, 'staff-'.$role);
         }
 
-        $this->assertSame(0, PushToken::count());
+        $this->assertEqualsCanonicalizing(['staff-admin', 'staff-super_admin'], PushToken::pluck('token')->all());
+    }
+
+    public function test_a_staff_notification_is_pushed_with_the_role_so_it_opens_the_portal(): void
+    {
+        $this->configureFirebase();
+        $staff = User::factory()->create(['role' => User::ROLE_ADMIN, 'account_status' => User::STATUS_ACTIVE]);
+        $this->registerDevice($staff, 'counter-laptop');
+
+        $notification = Notification::push($staff->id, 'New Senior/PWD application', 'Juan sent an ID to review.', 'discount_review');
+
+        $this->assertSame(['counter-laptop'], array_column($this->sent, 'token'));
+        $this->assertSame([
+            'notification_id' => (string) $notification->id,
+            'type' => 'discount_review',
+            'role' => 'admin',
+        ], $this->sent[0]['data']);
     }
 
     public function test_registration_is_validated(): void
@@ -306,7 +318,9 @@ class PushNotificationTest extends TestCase
         $this->registerDevice($this->customer(), 'customer-1');
         $this->registerDevice($this->customer(), 'customer-2');
 
-        // A customer later made staff keeps no reach through an old token.
+        // Staff never get announcements: neither their own devices nor a
+        // customer's token kept after being made staff.
+        $this->registerDevice(User::factory()->create(['role' => User::ROLE_SUPER_ADMIN, 'account_status' => User::STATUS_ACTIVE]), 'manager');
         $promoted = $this->customer();
         $this->registerDevice($promoted, 'now-staff');
         $promoted->forceFill(['role' => User::ROLE_ADMIN])->save();

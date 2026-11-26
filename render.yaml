@@ -70,7 +70,15 @@ services:
         sync: false
       - key: CLOUDINARY_URL
         sync: false
+      # Delivery distance: OSRM first, OpenRouteService (ORS_API_KEY) while
+      # OSRM is down. OSRM_ENDPOINT unset is the public OSRM server; for
+      # osrmroute.com set it to https://osrmroute.com/api/v1/osrm and
+      # OSRM_TOKEN to its API key.
       - key: ORS_API_KEY
+        sync: false
+      - key: OSRM_ENDPOINT
+        sync: false
+      - key: OSRM_TOKEN
         sync: false
 
       - key: SMS_DRIVER

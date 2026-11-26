@@ -1,9 +1,8 @@
 import { useContext, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { IconChevronRight, IconShoppingBag } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
+import LiveOrderBanner from "./LiveOrderBanner";
 import { forgetGuestOrder, useGuestOrders } from "../../lib/guestOrders";
 import { fetchGuestOrder, guestOrderKey, withLinkDeadline } from "../../lib/orders";
 
@@ -13,7 +12,7 @@ import { fetchGuestOrder, guestOrderKey, withLinkDeadline } from "../../lib/orde
  * none, once it closes (and forgotten then), and for a signed-in customer, who
  * has My Orders.
  */
-function GuestOrderBanner() {
+function GuestOrderBanner({ className = "mb-5" }) {
   const { token: session } = useContext(AuthContext);
   const [newest] = useGuestOrders();
   const token = !session ? (newest?.token ?? null) : null;
@@ -41,28 +40,7 @@ function GuestOrderBanner() {
 
   if (!token || !order || order.is_terminal) return null;
 
-  return (
-    <Link
-      to={`/track#${token}`}
-      className="mb-5 flex items-center gap-3 rounded-[16px] bg-brand-500 px-4 py-3.5 text-white no-underline shadow-[0_6px_16px_-4px_rgba(255,139,43,0.5)] transition-colors hover:bg-brand-600"
-    >
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-white/20">
-        <IconShoppingBag size={20} stroke={2} aria-hidden="true" />
-      </span>
-
-      <span className="min-w-0 flex-1">
-        <span className="block font-display text-[14px] font-semibold">{order.title}</span>
-        <span className="block truncate font-display text-[12px] text-white/90">
-          {order.status_label}. Track it live.
-        </span>
-      </span>
-
-      <span className="flex shrink-0 items-center gap-0.5 rounded-[10px] bg-white/20 px-3 py-1.5 font-display text-[12.5px] font-semibold">
-        Track
-        <IconChevronRight size={14} stroke={2.4} aria-hidden="true" />
-      </span>
-    </Link>
-  );
+  return <LiveOrderBanner order={order} to={`/track#${token}`} className={className} />;
 }
 
 export default GuestOrderBanner;

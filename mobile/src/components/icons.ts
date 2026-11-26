@@ -10,11 +10,13 @@ export { default as IconAlertTriangle } from "@tabler/icons-react-native/IconAle
 export { default as IconArrowLeft } from "@tabler/icons-react-native/IconArrowLeft";
 export { default as IconBell } from "@tabler/icons-react-native/IconBell";
 export { default as IconBellOff } from "@tabler/icons-react-native/IconBellOff";
+export { default as IconBike } from "@tabler/icons-react-native/IconBike";
 export { default as IconCalendarEvent } from "@tabler/icons-react-native/IconCalendarEvent";
 export { default as IconCamera } from "@tabler/icons-react-native/IconCamera";
 export { default as IconCheck } from "@tabler/icons-react-native/IconCheck";
 export { default as IconChecks } from "@tabler/icons-react-native/IconChecks";
 export { default as IconChefHat } from "@tabler/icons-react-native/IconChefHat";
+export { default as IconChevronDown } from "@tabler/icons-react-native/IconChevronDown";
 export { default as IconChevronLeft } from "@tabler/icons-react-native/IconChevronLeft";
 export { default as IconChevronRight } from "@tabler/icons-react-native/IconChevronRight";
 export { default as IconCircleCheck } from "@tabler/icons-react-native/IconCircleCheck";

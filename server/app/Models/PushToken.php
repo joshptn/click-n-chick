@@ -38,9 +38,10 @@ class PushToken extends Model
     }
 
     /**
-     * Only customer accounts receive pushes (customer module only). Staff cannot
-     * register a token, and this keeps an account whose role later changed from
-     * still being reached on an old one.
+     * The devices of customer accounts, for store-wide announcements. A
+     * notification to one account goes to that account's devices whatever its
+     * role (staff may register since 2026-11-26); an announcement never reaches
+     * staff, including through a token kept from before a role change.
      */
     public function scopeForCustomers(Builder $query): Builder
     {

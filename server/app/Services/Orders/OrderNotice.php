@@ -67,7 +67,32 @@ class OrderNotice
     }
 
     /**
+     * A paid immediate order has come in (decided 2026-11-26): Store Agents are
+     * told in the app and by push, so a portal in a background tab still hears
+     * of it. Its order id opens it on Today's Orders.
+     *
      * @return array{title: string, body: string, type: string}
+     */
+    public function staffNewOrder(Order $order): array
+    {
+        $items = (int) $order->items()->sum('quantity');
+        $name = $order->contactName();
+        $kind = $order->order_type === 'delivery' ? 'delivery' : 'pickup';
+
+        return [
+            'title' => 'New order',
+            'body' => $order->title().($name !== null ? " from {$name}" : '')
+                ." - {$items} item(s), {$this->peso($order->total_amount ?? $order->total_price)}, {$kind}. "
+                ."It is waiting under New on Today's Orders.",
+            'type' => self::TYPE_ORDER,
+        ];
+    }
+
+    /**
+     * In the app only, never pushed (decided 2026-11-26): the slot it frees
+     * is not urgent.
+     *
+     * @return array{title: string, body: string, type: string, push: false}
      */
     public function staffCancelled(Order $order): array
     {
@@ -79,6 +104,7 @@ class OrderNotice
             'body' => "{$this->staffName($order)} was cancelled by the customer, due {$this->collectAt($order)}. "
                 .($owed > 0 ? "{$this->peso($owed)} is owed back to them." : 'No refund is owed.'),
             'type' => self::TYPE_ADVANCE,
+            'push' => false,
         ];
     }
 

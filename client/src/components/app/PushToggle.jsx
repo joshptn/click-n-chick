@@ -1,13 +1,11 @@
-import { useContext, useState } from "react";
 import { IconBellOff, IconBellRinging, IconDeviceMobile } from "@tabler/icons-react";
 
-import AuthContext from "../../context/AuthContext";
-import { ROLES } from "../../lib/roles";
-import { PUSH_STATUS, isPushOn, pushStatus, turnPushOff, turnPushOn } from "../../lib/push";
-import toast from "./Toast";
+import { usePushSetting } from "../../hooks/usePushSetting";
+import { PUSH_STATUS } from "../../lib/push";
 
 /**
- * The bell menu's "notifications on this device" row (PRD §9). Customers only;
+ * The "notifications on this device" row in the bell's "⋯" menu (PRD §9).
+ * Every signed-in account, customers and staff (staff since 2026-11-26);
  * nothing shows when this build has no Firebase keys or the browser cannot
  * receive push.
  *
@@ -15,12 +13,9 @@ import toast from "./Toast";
  * otherwise override the Tailwind sizes.
  */
 function PushToggle() {
-  const { user } = useContext(AuthContext);
-  const [status, setStatus] = useState(pushStatus);
-  const [on, setOn] = useState(() => isPushOn(user?.id));
-  const [busy, setBusy] = useState(false);
+  const { signedIn, status, on, busy, enable, disable } = usePushSetting();
 
-  if (user?.role !== ROLES.CUSTOMER) return null;
+  if (!signedIn) return null;
   if (status === PUSH_STATUS.UNCONFIGURED || status === PUSH_STATUS.UNSUPPORTED) return null;
 
   if (status === PUSH_STATUS.NEEDS_INSTALL) {
@@ -38,39 +33,6 @@ function PushToggle() {
       </Row>
     );
   }
-
-  const enable = async () => {
-    setBusy(true);
-
-    try {
-      const result = await turnPushOn(user.id);
-
-      if (result === "on") {
-        setOn(true);
-        toast.success("You will get notifications on this device.", "Notifications on");
-      } else if (result === "denied") {
-        setStatus(PUSH_STATUS.DENIED);
-      }
-    } catch (error) {
-      toast.error(error?.message || "Notifications could not be turned on. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const disable = async () => {
-    setBusy(true);
-
-    try {
-      await turnPushOff(user.id);
-      setOn(false);
-      toast.info("Notifications are off for this device.", "Notifications off");
-    } catch (error) {
-      toast.error(error?.message || "Notifications could not be turned off. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <Row
@@ -105,12 +67,12 @@ function Row({ icon, action, children, testId, on = false }) {
     <div
       data-testid={testId}
       data-on={on}
-      className="flex items-center gap-2.5 border-b border-[#f5f0e9] bg-[#fffaf4] px-3 py-2.5"
+      className="flex items-center gap-3 rounded-[12px] bg-[#fffaf4] px-3 py-3"
     >
       <span className={`shrink-0 ${on ? "text-[#2f9e44]" : "text-brand-600"}`} aria-hidden="true">
         {icon}
       </span>
-      <p className="m-0 flex-1 font-display text-[12px] leading-snug text-[#6f6b68]">{children}</p>
+      <p className="m-0 flex-1 font-display text-[12.5px] leading-snug text-[#6f6b68]">{children}</p>
       {action}
     </div>
   );

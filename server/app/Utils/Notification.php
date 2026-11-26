@@ -10,13 +10,17 @@ use App\Services\Orders\OrderNotice;
 
 class Notification
 {
-
+    /**
+     * Store a notification, show it live, and push it to the account's devices
+     * unless $toDevices is false (an in-app-only notice).
+     */
     public static function push(
         int $userId,
         string $title,
         string $body,
         ?string $type = null,
         ?Order $order = null,
+        bool $toDevices = true,
     ): ModelsNotification {
         $notification = ModelsNotification::create([
             'user_id' => $userId,
@@ -27,15 +31,22 @@ class Notification
         ]);
 
         NotificationBroadcast::dispatch($notification, $userId);
-        SendPushNotification::forNotification($notification);
+
+        if ($toDevices) {
+            SendPushNotification::forNotification($notification);
+        }
 
         return $notification;
     }
 
-    /** @param  array{title: string, body: string, type?: string|null}  $notice */
+    /**
+     * A notice built by OrderNotice. `push => false` keeps it in the app only.
+     *
+     * @param  array{title: string, body: string, type?: string|null, push?: bool}  $notice
+     */
     public static function send(int $userId, array $notice, ?Order $order = null): ModelsNotification
     {
-        return self::push($userId, $notice['title'], $notice['body'], $notice['type'] ?? null, $order);
+        return self::push($userId, $notice['title'], $notice['body'], $notice['type'] ?? null, $order, $notice['push'] ?? true);
     }
 
     /** Tell a customer about their own order, worded for the kind of order it is. */

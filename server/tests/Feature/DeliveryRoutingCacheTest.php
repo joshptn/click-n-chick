@@ -5,20 +5,24 @@ namespace Tests\Feature;
 use App\Services\Geo\RoutingProvider;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\FakesOsrm;
 use Tests\TestCase;
 
 /**
- * One OpenRouteService call per coordinate, against a 2,000/day free quota.
+ * One routing call per coordinate. Our OSRM server is a small free machine
+ * an ocean away, so a repeat pin should never go back to it.
  *
  * True concurrency is not reproducible in a single process, so the deduplication
  * is asserted as its observable property - one request per distinct coordinate -
  * alongside both ways the lock is allowed to give up. The lock exists to save
- * quota and must never be able to turn a routable address into a refusal.
+ * calls and must never be able to turn a routable address into a refusal.
  */
 class DeliveryRoutingCacheTest extends TestCase
 {
-    /** Mirrors OpenRouteServiceClient::cacheKey(): profile, then 4-decimal lat,lng. */
-    private const KEY = 'route:driving-car:14.9500,120.7600';
+    use FakesOsrm;
+
+    /** Mirrors CachedRoutingClient::cacheKey(): engine and profile, then 4-decimal lat,lng. */
+    private const KEY = 'route:osrm-driving:14.9500,120.7600';
 
     protected function setUp(): void
     {
@@ -28,18 +32,12 @@ class DeliveryRoutingCacheTest extends TestCase
         // coordinate, so one test's answer would otherwise price the next one.
         Cache::flush();
 
-        // phpunit.xml blanks the real key. A key has to be present to get as far
-        // as the faked HTTP layer.
-        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+        $this->useFakeOsrm();
     }
 
     private function fakeRouting(float $km): void
     {
-        Http::fake([
-            'api.openrouteservice.org/*' => Http::response([
-                'routes' => [['summary' => ['distance' => $km, 'duration' => $km * 90]]],
-            ]),
-        ]);
+        Http::fake([self::OSRM => Http::response($this->osrmRoute($km))]);
     }
 
     private function routing(): RoutingProvider

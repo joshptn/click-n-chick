@@ -311,9 +311,13 @@ const ADVANCE_NOTICE_TYPES = ["advance_request", "advance_due", "advance_order"]
  * Staff notifications open the order on the board rather than the customer
  * tracker, and a new discount application opens the review queue. A poster
  * about to expire opens Store Settings for the Store Manager, who manages
- * posters; the Store Agent's notice opens nothing.
+ * posters; the Store Agent's notice opens nothing. A new-device sign-in alert
+ * opens the account's devices, as it does for a customer. A tapped push opens
+ * the same (public/push-sw.js).
  */
 export function staffNotificationTarget(notification, role) {
+  if (notification?.notification_type === "security") return "/account/security";
+
   if (notification?.notification_type === "discount_review") return "/admin/discount-requests";
 
   if (notification?.notification_type === "poster_expiry") return role === "super_admin" ? "/superadmin/settings" : null;

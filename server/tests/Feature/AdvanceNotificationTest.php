@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Events\NotificationBroadcast;
+use App\Jobs\SendPushNotification;
 use App\Models\Cart;
 use App\Models\Food;
 use App\Models\Notification;
 use App\Models\Order;
+use App\Models\PushToken;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\Orders\OrderNotice;
@@ -16,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -355,7 +358,14 @@ class AdvanceNotificationTest extends TestCase
 
     public function test_staff_are_told_when_a_customer_calls_off_an_accepted_order(): void
     {
+        Queue::fake([SendPushNotification::class]);
         $agent = $this->user(User::ROLE_ADMIN);
+        PushToken::create([
+            'user_id' => $agent->id,
+            'personal_access_token_id' => $agent->createToken('web')->accessToken->getKey(),
+            'token' => 'counter-laptop',
+            'platform' => PushToken::PLATFORM_WEB,
+        ]);
         $customer = $this->user();
         $order = $this->advanceOrderAt(OrderStatus::AWAITING_PAYMENT, $customer);
 
@@ -365,6 +375,9 @@ class AdvanceNotificationTest extends TestCase
 
         $this->assertStringContainsString("{$customer->first_name} {$customer->last_name}'s request was cancelled by the customer", $body);
         $this->assertStringContainsString('No refund is owed', $body);
+
+        // In the app only (decided 2026-11-26), even with a device to push to.
+        Queue::assertNotPushed(SendPushNotification::class, fn (SendPushNotification $job) => $job->userId === $agent->id);
     }
 
     public function test_an_immediate_cancellation_does_not_pester_staff(): void

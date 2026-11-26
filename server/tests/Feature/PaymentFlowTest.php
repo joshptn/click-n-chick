@@ -7,6 +7,7 @@ use App\Events\NotificationBroadcast;
 use App\Events\OrderBroadcast;
 use App\Http\Controllers\CartController;
 use App\Http\Middleware\ResolveGuestOrder;
+use App\Jobs\SendPushNotification;
 use App\Mail\GuestOrderNotice;
 use App\Mail\GuestTrackingLinkMail;
 use App\Models\CartItem;
@@ -14,6 +15,7 @@ use App\Models\Food;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PushToken;
 use App\Models\StockHold;
 use App\Models\User;
 use App\Services\Orders\OrderNotice;
@@ -30,6 +32,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
@@ -269,6 +272,48 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(1, Notification::query()->where('user_id', $customer->id)->count());
         Event::assertDispatchedTimes(OrderBroadcast::class, 1);
         $this->assertTrue($this->staffSees($order));
+    }
+
+    public function test_store_agents_are_told_of_a_new_paid_order_in_the_app_and_by_push(): void
+    {
+        // Decided 2026-11-26: Store Agents only, like the other order notices.
+        Queue::fake([SendPushNotification::class]);
+        $agent = $this->user(User::ROLE_ADMIN);
+        $manager = $this->user(User::ROLE_SUPER_ADMIN);
+        PushToken::create([
+            'user_id' => $agent->id,
+            'personal_access_token_id' => $agent->createToken('web')->accessToken->getKey(),
+            'token' => 'counter-laptop',
+            'platform' => PushToken::PLATFORM_WEB,
+        ]);
+
+        $customer = $this->user();
+        $this->checkout($customer, $this->food())->assertCreated();
+        $order = Order::firstOrFail();
+
+        // Unpaid, the shop has not got it yet.
+        $this->assertSame(0, Notification::query()->where('user_id', $agent->id)->count());
+
+        $this->gateway->pay($this->sessionOf($order));
+        $this->completed($order)->assertOk();
+        $this->completed($order)->assertOk();
+
+        $notices = Notification::query()->where('user_id', $agent->id)->get();
+
+        $this->assertCount(1, $notices);
+        $this->assertSame('New order', $notices[0]->title);
+        $this->assertSame('order', $notices[0]->notification_type);
+        $this->assertSame($order->id, $notices[0]->order_id);
+        $this->assertSame(
+            "Order 001 from Julia Veneese - 2 item(s), ₱700.00, pickup. It is waiting under New on Today's Orders.",
+            $notices[0]->body
+        );
+        $this->assertSame(0, Notification::query()->where('user_id', $manager->id)->count());
+
+        Queue::assertPushed(SendPushNotification::class, fn (SendPushNotification $job) => $job->userId === $agent->id
+            && $job->title === 'New order'
+            && $job->data['order_id'] === $order->id
+            && $job->data['role'] === User::ROLE_ADMIN);
     }
 
     public function test_a_webhook_with_the_wrong_token_is_refused(): void

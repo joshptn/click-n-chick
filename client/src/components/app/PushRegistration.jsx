@@ -2,30 +2,29 @@ import { useContext, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import AuthContext from "../../context/AuthContext";
-import { ROLES } from "../../lib/roles";
 import { OPEN_MESSAGE, resumePush } from "../../lib/push";
 
 /**
  * Keeps push working without asking again (PRD §9). Renders nothing.
  *
- * - A customer who turned push on in this browser is registered again each time
- *   they are signed in here: the server dropped the token when the last sign-in
- *   ended, and Firebase may have rotated it.
+ * - An account (customer or staff) that turned push on in this browser is
+ *   registered again each time it is signed in here: the server dropped the
+ *   token when the last sign-in ended, and Firebase may have rotated it.
  * - A tapped notification, while the app is already open, arrives as a message
  *   from the service worker and is opened here without reloading the page.
  */
 function PushRegistration() {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
-  const customerId = user?.role === ROLES.CUSTOMER ? user.id : null;
+  const userId = user?.id ?? null;
 
   useEffect(() => {
-    if (!customerId) return;
+    if (!userId) return;
 
-    resumePush(customerId).catch(() => {
-      // Quiet: the bell still offers "Turn on" if this keeps failing.
+    resumePush(userId).catch(() => {
+      // Quiet: the bell's "⋯" menu still offers "Turn on" if this keeps failing.
     });
-  }, [customerId]);
+  }, [userId]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return undefined;

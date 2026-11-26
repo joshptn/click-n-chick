@@ -5,8 +5,8 @@ export const ORDERS_KEY = ["orders"];
 
 export const orderKey = (id) => ["orders", String(id)];
 
-export function fetchOrders({ filter = "all", signal } = {}) {
-  return api.get("/api/orders", { params: { filter }, signal });
+export function fetchOrders({ filter = "all", page = 1, signal } = {}) {
+  return api.get("/api/orders", { params: { filter, page }, signal });
 }
 
 export function fetchOrder(id, { signal } = {}) {
@@ -77,11 +77,68 @@ export function changeGuestEmail(token, email) {
   return api.patch("/api/guest/order", { contact_email: email }, holding(token));
 }
 
-export const ORDER_FILTERS = [
-  { id: "active", label: "Active" },
+/**
+ * My Orders' tabs (redesigned 2026-11-26). Today and Advance keep an order
+ * until its day has passed, whatever became of it; Past holds completed and
+ * delivered orders after that; Cancelled holds every cancelled, declined or
+ * rejected order at once. The server decides which is which.
+ */
+export const ORDER_TABS = [
+  { id: "today", label: "Today" },
+  { id: "advance", label: "Advance" },
   { id: "past", label: "Past" },
-  { id: "all", label: "All" },
+  { id: "cancelled", label: "Cancelled" },
 ];
+
+const PAYMENT_METHODS = {
+  gcash: "GCash",
+  qrph: "QR Ph",
+  qr_ph: "QR Ph",
+  maya: "Maya",
+  paymaya: "Maya",
+  card: "Card",
+  grab_pay: "GrabPay",
+};
+
+/** "GCash", "QR Ph", or null before it is paid. */
+export function paymentMethodLabel(order) {
+  const method = order?.payment?.method;
+
+  if (!method) return null;
+
+  return PAYMENT_METHODS[String(method).toLowerCase()] ?? method;
+}
+
+/** A card's status pill: an advance order waiting to be paid reads "To pay", as on the app. */
+export function cardStatusLabel(order) {
+  if (order?.is_advance && (order.status === "accepted" || order.status === "awaiting_payment")) return "To pay";
+
+  return order?.status_label ?? "";
+}
+
+/** The small line above a card's total: where the order stands on money. */
+export function cardMoneyNote(order) {
+  if (order?.status === ADVANCE_STATUS.REJECTED) return "Declined by the store";
+  if (order?.is_cancelled) return order.cancelled_by_store ? "Cancelled by the store" : "Cancelled";
+
+  if (order?.is_advance) {
+    if (order.status === ADVANCE_STATUS.SUBMITTED) return "Waiting for the store's response";
+    if (order.awaiting_payment || order.status === ADVANCE_STATUS.ACCEPTED) return "Waiting for payment";
+  }
+
+  if (Number(order?.points_amount) > 0 && Number(order?.total) === 0) return "Paid with points";
+
+  const method = paymentMethodLabel(order);
+
+  return method ? `Paid through ${method}` : "";
+}
+
+/** How many dishes, counting quantities: "3 items". */
+export function itemCount(items = []) {
+  const count = items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+
+  return `${count} item${count === 1 ? "" : "s"}`;
+}
 
 export function formatTime(iso) {
   if (!iso) return "";

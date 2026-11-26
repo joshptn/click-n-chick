@@ -117,10 +117,16 @@ class OrderTrackingTest extends TestCase
             ->assertJsonCount(2, 'data')
             ->assertJsonPath('counts.active', 2);
 
+        // Finished today, so it is still Today's until the day ends (2026-11-26).
+        $this->actingAs($customer, 'sanctum')
+            ->getJson('/api/orders?filter=today')
+            ->assertOk()
+            ->assertJsonCount(3, 'data');
+
         $this->actingAs($customer, 'sanctum')
             ->getJson('/api/orders?filter=past')
             ->assertOk()
-            ->assertJsonCount(1, 'data');
+            ->assertJsonCount(0, 'data');
     }
 
     // -----------------------------------------------------------------

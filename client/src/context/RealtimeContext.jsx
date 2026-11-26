@@ -225,6 +225,12 @@ export function RealtimeProvider({ children }) {
         // trusting this payload to be the whole story.
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
 
+        // A notice about one of the customer's orders: My Orders and Home's
+        // live-order card catch up with it.
+        if (notification.order_id && currentUser?.role === ROLES.CUSTOMER) {
+          queryClient.invalidateQueries({ queryKey: ["orders"] });
+        }
+
         // A Senior/PWD application approved or not: the Advance Order banner
         // and Profile show the new standing.
         if (notification.notification_type === "discount_decision") {
@@ -265,8 +271,15 @@ export function RealtimeProvider({ children }) {
         analytics.order(payload?.order?.status);
 
         // A new advance request is announced by its own staff notification
-        // ("New advance request"); this toast is for new paid orders.
-        if (payload?.event === "create" && payload?.order?.status !== "submitted") {
+        // ("New advance request"); this toast is for new paid orders. Store
+        // Agents get a "New order" notification for those since 2026-11-26,
+        // whose own toast would make this one a second, so it is the Store
+        // Manager's only.
+        if (
+          payload?.event === "create"
+          && payload?.order?.status !== "submitted"
+          && currentUser?.role !== ROLES.ADMIN
+        ) {
           toast.info(`Order ${payload?.order?.number ?? `#${payload?.order?.id}`} just came in.`, "New order");
         }
       });

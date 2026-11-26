@@ -16,7 +16,11 @@ import { pages, preloadWhenIdle } from "../../lib/pages";
 
 const MotionLi = motion.li;
 
-function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
+/**
+ * The cart: its lines, what is ticked, and the way to checkout. `bare` drops
+ * the frame and the title, for the phone's Cart tab, whose page has its own.
+ */
+function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE, bare = false }) {
   const isAdvance = mode === CART_MODE.ADVANCE;
 
   const {
@@ -60,17 +64,19 @@ function CartPanel({ onCheckout, className = "", mode = CART_MODE.IMMEDIATE }) {
   return (
     <section
       aria-label={isAdvance ? "Advance order" : "My orders"}
-      className={`flex min-h-0 flex-col overflow-hidden rounded-[16px] border border-[#f0e9df] bg-white ${className}`}
+      className={`flex min-h-0 flex-col overflow-hidden bg-white ${bare ? "" : "rounded-[16px] border border-[#f0e9df]"} ${className}`}
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#f0e9df] px-5 py-4">
-        <h2 className="m-0 font-display text-[16px] font-extrabold text-ink">
-          {isAdvance ? "Advance Order" : "My Orders"}
-        </h2>
+      {!bare && (
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#f0e9df] px-5 py-4">
+          <h2 className="m-0 font-display text-[16px] font-extrabold text-ink">
+            {isAdvance ? "Advance Order" : "My Orders"}
+          </h2>
 
-        <span className="rounded-full bg-brand-500 px-3 py-1 font-display text-[11px] font-bold text-white">
-          {itemCount} item{itemCount === 1 ? "" : "s"}
-        </span>
-      </header>
+          <span className="rounded-full bg-brand-500 px-3 py-1 font-display text-[11px] font-bold text-white">
+            {itemCount} item{itemCount === 1 ? "" : "s"}
+          </span>
+        </header>
+      )}
 
       {cart.length > 0 && (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#f5f0e9] bg-[#faf7f3] px-5 py-2.5">

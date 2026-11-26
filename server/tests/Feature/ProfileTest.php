@@ -3,12 +3,15 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\DiscountController;
+use App\Jobs\SendPushNotification;
 use App\Models\Discount;
+use App\Models\PushToken;
 use App\Models\User;
 use App\Services\Media\CloudinaryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
 
@@ -326,10 +329,17 @@ class ProfileTest extends TestCase
         ]);
     }
 
-    /** The hand-off: agents must find out there is something to review. */
+    /** The hand-off: agents must find out there is something to review, in the app and by push (2026-11-26). */
     public function test_applying_notifies_the_store_agents(): void
     {
+        Queue::fake([SendPushNotification::class]);
         $agent = $this->staff(User::ROLE_ADMIN);
+        PushToken::create([
+            'user_id' => $agent->id,
+            'personal_access_token_id' => $agent->createToken('web')->accessToken->getKey(),
+            'token' => 'counter-laptop',
+            'platform' => PushToken::PLATFORM_WEB,
+        ]);
         $user = $this->customer();
 
         $this->actingAs($user, 'sanctum')
@@ -340,6 +350,11 @@ class ProfileTest extends TestCase
             'user_id' => $agent->id,
             'title' => 'Discount application to review',
         ]);
+
+        Queue::assertPushed(SendPushNotification::class, fn (SendPushNotification $job) => $job->userId === $agent->id
+            && $job->title === 'Discount application to review'
+            && $job->data['type'] === 'discount_review'
+            && $job->data['role'] === User::ROLE_ADMIN);
     }
 
     public function test_a_second_application_is_refused_while_one_is_pending(): void

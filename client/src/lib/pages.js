@@ -61,9 +61,14 @@ export const pages = {
   AdvanceCheckout: lazyPage(() => import("../pages/customer/AdvanceCheckout")),
   AdvanceSubmitted: lazyPage(() => import("../pages/customer/AdvanceSubmitted")),
   Orders: lazyPage(() => import("../pages/customer/Orders")),
+  // The phone's Cart and Notif tabs (2026-11-26).
+  Cart: lazyPage(() => import("../pages/customer/Cart")),
+  Notifications: lazyPage(() => import("../pages/customer/Notifications")),
 
   // The customer's account.
   Profile: lazyPage(() => import("../pages/account/Profile")),
+  // The phone's Profile tab; the editor above is its Edit Profile.
+  ProfileHub: lazyPage(() => import("../pages/account/ProfileHub")),
   Security: lazyPage(() => import("../pages/account/Security")),
 
   // Store Agent (and the pages the Store Manager shares).

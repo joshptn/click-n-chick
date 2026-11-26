@@ -8,7 +8,7 @@ import { sectionAnchor } from "../../lib/menuSections";
  * page to its section. One row, scrolling sideways when the tabs do not fit;
  * the active tab is kept in view.
  */
-function MenuCategoryBar({ sections, active, onPick }) {
+function MenuCategoryBar({ sections, active, onPick, stickyTop = 68 }) {
   const scroller = useRef(null);
   const tabs = useRef({});
 
@@ -26,7 +26,9 @@ function MenuCategoryBar({ sections, active, onPick }) {
   return (
     <nav
       aria-label="Menu categories"
-      className="sticky top-[68px] z-30 -mx-4 mt-4 border-b border-[#f0e9df] bg-white sm:mx-0 sm:rounded-t-[4px]"
+      // Under the header: the website's (68px) or the phone's (lib/phone.js).
+      style={{ top: stickyTop }}
+      className="sticky z-30 -mx-4 mt-4 border-b border-[#f0e9df] bg-white sm:mx-0 sm:rounded-t-[4px]"
       data-testid="menu-category-bar"
     >
       <div ref={scroller} className="relative flex overflow-x-auto px-2 [scrollbar-width:none] sm:px-3 [&::-webkit-scrollbar]:hidden">

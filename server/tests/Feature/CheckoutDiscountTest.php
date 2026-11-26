@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\FakesOsrm;
 use Tests\TestCase;
 
 /**
@@ -30,6 +31,7 @@ use Tests\TestCase;
  */
 class CheckoutDiscountTest extends TestCase
 {
+    use FakesOsrm;
     use RefreshDatabase;
 
     private int $phoneSeq = 0;
@@ -42,13 +44,9 @@ class CheckoutDiscountTest extends TestCase
         Event::fake([OrderBroadcast::class, NotificationBroadcast::class]);
         Cache::flush();
 
-        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+        $this->useFakeOsrm();
 
-        Http::fake([
-            'api.openrouteservice.org/*' => Http::response([
-                'routes' => [['summary' => ['distance' => 2.5, 'duration' => 300]]],
-            ]),
-        ]);
+        Http::fake([self::OSRM => Http::response($this->osrmRoute(2.5))]);
     }
 
     protected function tearDown(): void

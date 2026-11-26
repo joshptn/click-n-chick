@@ -10,12 +10,13 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Where the installed PWA and the native app say "send pushes here" (PRD §9).
- * Customers only; the routes carry the role check.
+ * Any signed-in account: customers, and staff on the web portal since
+ * 2026-11-26.
  */
 class PushTokenController extends Controller
 {
     /**
-     * Register this device's FCM token for the signed-in customer, tied to the
+     * Register this device's FCM token for the signed-in account, tied to the
      * current sign-in so it is deleted when that sign-in ends.
      *
      * Safe to call on every app open: the same token just moves to the current

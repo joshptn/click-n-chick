@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Tests\Concerns\FakesOsrm;
 use Tests\TestCase;
 
 /**
@@ -21,6 +22,7 @@ use Tests\TestCase;
  */
 class GeocodingProxyTest extends TestCase
 {
+    use FakesOsrm;
     use RefreshDatabase;
 
     private int $phoneSeq = 0;
@@ -230,14 +232,14 @@ class GeocodingProxyTest extends TestCase
     {
         Http::fake([
             'nominatim.openstreetmap.org/*' => Http::response($this->fakeSearchResults()),
-            'api.openrouteservice.org/*' => Http::response(['routes' => [['summary' => ['distance' => 5]]]]),
+            self::OSRM => Http::response($this->osrmRoute(5)),
         ]);
 
         $this->actingAs($this->customer(), 'sanctum')
             ->getJson('/api/geocode/search?q=apalit')
             ->assertOk();
 
-        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouteservice'));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'osrm.test'));
     }
 
     public function test_a_result_beyond_the_limit_is_listed_but_marked_out_of_range(): void
@@ -332,11 +334,11 @@ class GeocodingProxyTest extends TestCase
      */
     public function test_pricing_a_pin_does_not_touch_the_geocoder(): void
     {
-        config()->set('services.routing.openrouteservice.api_key', 'test-key');
+        $this->useFakeOsrm();
 
         Http::fake([
             'nominatim.openstreetmap.org/*' => fn () => throw new \Illuminate\Http\Client\ConnectionException('down'),
-            'api.openrouteservice.org/*' => Http::response(['routes' => [['summary' => ['distance' => 2.4]]]]),
+            self::OSRM => Http::response($this->osrmRoute(2.4)),
         ]);
 
         $this->actingAs($this->customer(), 'sanctum')

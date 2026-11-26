@@ -4,13 +4,14 @@ import { isInstalledApp } from "./installedApp";
 /**
  * Push notifications through Firebase Cloud Messaging (PRD §9).
  *
- * A customer turns them on from the bell menu; the browser's permission prompt
- * only ever follows that tap. It works in an installed app and in any browser
- * tab that supports web push; an iPhone only allows it once the site is added
- * to the Home Screen.
+ * Any signed-in account, customer or staff (staff since 2026-11-26), turns
+ * them on from the bell's "⋯" menu; the browser's permission prompt only ever
+ * follows that tap. It works in an installed app and in any browser tab that
+ * supports web push; an iPhone only allows it once the site is added to the
+ * Home Screen.
  *
  * Turning it on is remembered per account on this browser, so the same
- * customer is registered again on each visit (the server deletes a token when
+ * account is registered again on each visit (the server deletes a token when
  * its sign-in ends, and Firebase rotates tokens now and then), while another
  * account signing in here has to turn it on for itself.
  *
@@ -62,6 +63,13 @@ export function pushStatus() {
   }
 
   return Notification.permission === "denied" ? PUSH_STATUS.DENIED : PUSH_STATUS.AVAILABLE;
+}
+
+/** Whether the bell's "⋯" menu has anything to show in this browser. */
+export function hasPushSettings() {
+  const status = pushStatus();
+
+  return status !== PUSH_STATUS.UNCONFIGURED && status !== PUSH_STATUS.UNSUPPORTED;
 }
 
 // --- "Turned on for this account on this browser" ---------------------------
@@ -155,7 +163,7 @@ export async function turnPushOff(userId) {
 }
 
 /**
- * Register again for a customer who turned push on here before. Quiet: no
+ * Register again for an account that turned push on here before. Quiet: no
  * prompt, no toast. If the permission was withdrawn in the browser settings,
  * the remembered choice is dropped so the bell offers it again.
  */

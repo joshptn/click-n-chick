@@ -79,14 +79,46 @@ return [
         'reverse_ttl' => (int) env('NOMINATIM_REVERSE_TTL', 604800),
     ],
 
+    /*
+     * Driving distance for the delivery fee (decided 2026-11-26): OSRM first,
+     * OpenRouteService only while OSRM is down. OSRM's car profile drives into
+     * subdivisions whose roads OpenStreetMap tags as private; ORS stops at the
+     * gate. A "no route" from OSRM is the answer; ORS is not asked.
+     *
+     * OSRM_ENDPOINT is any OSRM-compatible base URL, the part before /route/v1:
+     *  - https://router.project-osrm.org: the public server (the default).
+     *    No key. At most 1 request a second; no uptime promise.
+     *  - https://osrmroute.com/api/v1/osrm with OSRM_TOKEN = its API key
+     *    (free plan: 1,000 routes a day, 30 a minute).
+     * Both free tiers are for non-commercial use (their terms, 2026-11-26).
+     */
     'routing' => [
-        'driver' => env('ROUTING_DRIVER', 'openrouteservice'),
+        // Tried in this order; a name left out is switched off.
+        'providers' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('ROUTING_PROVIDERS', 'osrm,openrouteservice'))
+        ))),
+
+        'osrm' => [
+            // Empty is the public server too, so a blank line in .env cannot switch OSRM off.
+            'endpoint' => env('OSRM_ENDPOINT') ?: 'https://router.project-osrm.org',
+            'token' => env('OSRM_TOKEN'),
+            'profile' => env('OSRM_PROFILE', 'driving'),
+        ],
 
         'openrouteservice' => [
-            'endpoint' => env('ORS_ENDPOINT', 'https://api.openrouteservice.org'),
+            // The old api.openrouteservice.org host was shut down in November 2026 (it answers 410).
+            'endpoint' => env('ORS_ENDPOINT', 'https://api.heigit.org/openrouteservice'),
             'api_key' => env('ORS_API_KEY'),
             'profile' => env('ORS_PROFILE', 'driving-car'),
         ],
+
+        // Sent with every OSRM request instead of the HTTP library's default,
+        // so a shared server can tell our traffic apart.
+        'user_agent' => env('ROUTING_USER_AGENT', 'delivery-quote/1.0'),
+
+        // A pin farther than this from any road has no route (OSRM; ORS fixes it at 350).
+        'snap_metres' => (int) env('ROUTING_SNAP_METRES', 350),
 
         'timeout' => (int) env('ROUTING_TIMEOUT', 6),
         'connect_timeout' => (int) env('ROUTING_CONNECT_TIMEOUT', 3),

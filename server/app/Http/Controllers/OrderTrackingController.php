@@ -7,6 +7,9 @@ use App\Models\Order;
 use App\Services\Orders\AmendmentPolicy;
 use App\Services\Orders\OrderAnnouncer;
 use App\Services\Orders\OrderStatus;
+use App\Services\Store\StoreAvailability;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
@@ -21,28 +24,39 @@ class OrderTrackingController extends Controller
         private AmendmentPolicy $amendment,
     ) {}
 
+    /**
+     * The customer's orders, by My Orders tab (redesigned 2026-11-26):
+     *
+     *  - today:     today's orders (not advance), whatever became of them, and
+     *               any still open from before, until the store day ends;
+     *  - advance:   advance orders whose collection day has not passed, or
+     *               still open, whatever became of them;
+     *  - past:      completed or delivered orders whose day has passed;
+     *  - cancelled: every cancelled, declined or rejected order, at once
+     *               (so one cancelled today shows in Today and here).
+     *
+     * `active` and `all` stay for the app's Notif tab. "Today" is the store's
+     * date (Asia/Manila), not UTC's.
+     */
     public function index(Request $request)
     {
         $validated = $request->validate([
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
-            'filter' => ['sometimes', 'string', 'in:active,past,all'],
+            'filter' => ['sometimes', 'string', 'in:active,past,all,today,advance,cancelled'],
         ]);
 
         $filter = $validated['filter'] ?? 'all';
+        $dayStart = app(StoreAvailability::class)->now()->startOfDay()->utc();
 
-        // An unpaid checkout is not an order yet, for the customer either.
-        $query = $request->user()->orders()
-            ->withoutUnpaidCheckouts()
+        $orders = $this->tab($request, $filter, $dayStart)
             ->with([...self::WITH, 'loyaltyTransactions'])
-            ->latest('created_at');
-
-        if ($filter === 'active') {
-            $query->whereNotIn('status', OrderStatus::terminal());
-        } elseif ($filter === 'past') {
-            $query->whereIn('status', OrderStatus::terminal());
-        }
-
-        $orders = $query->paginate((int) ($validated['per_page'] ?? 15));
+            ->when(
+                $filter === 'advance',
+                // Soonest collection first: the next one to come is on top.
+                fn (Builder $query) => $query->orderBy('scheduled_for')->orderByDesc('created_at'),
+                fn (Builder $query) => $query->latest('created_at'),
+            )
+            ->paginate((int) ($validated['per_page'] ?? 15));
 
         return OrderTrackingResource::collection($orders->items())
             ->additional([
@@ -53,11 +67,32 @@ class OrderTrackingController extends Controller
                     'per_page' => $orders->perPage(),
                 ],
                 'counts' => [
-                    'active' => $request->user()->orders()
-                        ->withoutUnpaidCheckouts()
-                        ->whereNotIn('status', OrderStatus::terminal())->count(),
+                    'active' => $this->tab($request, 'active', $dayStart)->count(),
+                    'today' => $this->tab($request, 'today', $dayStart)->count(),
+                    'advance' => $this->tab($request, 'advance', $dayStart)->count(),
                 ],
             ]);
+    }
+
+    /** One tab's orders, as a query; an unpaid checkout is not an order yet. */
+    private function tab(Request $request, string $filter, CarbonInterface $dayStart): Builder
+    {
+        $query = $request->user()->orders()->withoutUnpaidCheckouts()->getQuery();
+        $open = fn (Builder $q) => $q->whereNotIn('status', OrderStatus::terminal());
+
+        return match ($filter) {
+            'active' => $query->where($open),
+            'today' => $query->whereNull('scheduled_for')
+                ->where(fn (Builder $q) => $q->where('created_at', '>=', $dayStart)->orWhere($open)),
+            'advance' => $query->whereNotNull('scheduled_for')
+                ->where(fn (Builder $q) => $q->where('scheduled_for', '>=', $dayStart)->orWhere($open)),
+            'past' => $query->whereIn('status', [OrderStatus::COMPLETED, OrderStatus::DELIVERED])
+                ->where(fn (Builder $q) => $q
+                    ->where(fn (Builder $today) => $today->whereNull('scheduled_for')->where('created_at', '<', $dayStart))
+                    ->orWhere(fn (Builder $ahead) => $ahead->whereNotNull('scheduled_for')->where('scheduled_for', '<', $dayStart))),
+            'cancelled' => $query->whereIn('status', [OrderStatus::CANCELLED, OrderStatus::REJECTED]),
+            default => $query,
+        };
     }
 
     public function show(Request $request, Order $order)
