@@ -19,7 +19,7 @@ export function useNotifications() {
   // over the live connection has no stored copy to update yet.
   const [readIds, setReadIds] = useState(() => new Set());
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: NOTIFICATIONS_KEY,
     queryFn: ({ signal }) => fetchNotifications({ signal }),
     // An inbox needs an account. Without this a guest browsing the menu would
@@ -87,6 +87,8 @@ export function useNotifications() {
     items,
     unreadCount,
     isLoading,
+    isError,
+    refetch,
     markAllRead,
     markRead,
     isMarking: marking.isPending,

@@ -1,9 +1,7 @@
-import { useContext, useState } from "react";
 import { IconBellOff, IconBellRinging, IconDeviceMobile } from "@tabler/icons-react";
 
-import AuthContext from "../../context/AuthContext";
-import { PUSH_STATUS, isPushOn, pushStatus, turnPushOff, turnPushOn } from "../../lib/push";
-import toast from "./Toast";
+import { usePushSetting } from "../../hooks/usePushSetting";
+import { PUSH_STATUS } from "../../lib/push";
 
 /**
  * The "notifications on this device" row in the bell's "⋯" menu (PRD §9).
@@ -15,12 +13,9 @@ import toast from "./Toast";
  * otherwise override the Tailwind sizes.
  */
 function PushToggle() {
-  const { user } = useContext(AuthContext);
-  const [status, setStatus] = useState(pushStatus);
-  const [on, setOn] = useState(() => isPushOn(user?.id));
-  const [busy, setBusy] = useState(false);
+  const { signedIn, status, on, busy, enable, disable } = usePushSetting();
 
-  if (!user?.id) return null;
+  if (!signedIn) return null;
   if (status === PUSH_STATUS.UNCONFIGURED || status === PUSH_STATUS.UNSUPPORTED) return null;
 
   if (status === PUSH_STATUS.NEEDS_INSTALL) {
@@ -38,39 +33,6 @@ function PushToggle() {
       </Row>
     );
   }
-
-  const enable = async () => {
-    setBusy(true);
-
-    try {
-      const result = await turnPushOn(user.id);
-
-      if (result === "on") {
-        setOn(true);
-        toast.success("You will get notifications on this device.", "Notifications on");
-      } else if (result === "denied") {
-        setStatus(PUSH_STATUS.DENIED);
-      }
-    } catch (error) {
-      toast.error(error?.message || "Notifications could not be turned on. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const disable = async () => {
-    setBusy(true);
-
-    try {
-      await turnPushOff(user.id);
-      setOn(false);
-      toast.info("Notifications are off for this device.", "Notifications off");
-    } catch (error) {
-      toast.error(error?.message || "Notifications could not be turned off. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <Row

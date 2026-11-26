@@ -9,6 +9,7 @@ import OfflineNotice from './components/app/OfflineNotice'
 import InstalledStaffGate from './components/app/InstalledStaffGate'
 import PushRegistration from './components/app/PushRegistration'
 import { pages } from './lib/pages'
+import { usePhoneLayout } from './hooks/usePhoneLayout'
 
 const {
   Login,
@@ -27,7 +28,10 @@ const {
   AdvanceCheckout,
   AdvanceSubmitted,
   Orders,
+  Cart,
+  Notifications,
   Profile,
+  ProfileHub,
   Security,
   AdminDashboard,
   PendingOrders,
@@ -50,6 +54,17 @@ function TrackRedirect() {
   return <Navigate to={{ pathname: '/track', hash: token }} replace />
 }
 
+/**
+ * /account/profile: the Profile tab's hub on a phone (the app's design,
+ * 2026-11-26), Account Settings everywhere else. Account Settings is also at
+ * /account/profile/edit, the hub's Edit Profile.
+ */
+function ProfilePage() {
+  return usePhoneLayout() ? <ProfileHub /> : <Profile />
+}
+
+ProfilePage.preload = () => Promise.all([ProfileHub.preload(), Profile.preload()])
+
 const routes = (
   <>
     <Route path="/login" element={<Login />} />
@@ -62,6 +77,7 @@ const routes = (
     <Route path="/" element={<LandingPage />} />
     <Route path="/unauthorized" element={<Unauthorized />} />
     <Route path="/home" element={<Home />} />
+    <Route path="/cart" element={<Cart />} />
     <Route path="/checkout" element={<Checkout />} />
     {/* The token rides after "#" (decided 2026-11-22); /track/<token> is kept for links from before. */}
     <Route path="/track" element={<OrderTracking guest />} />
@@ -74,7 +90,9 @@ const routes = (
       <Route path="/advance-order/sent/:orderId" element={<AdvanceSubmitted />} />
       <Route path="/orders" element={<Orders />} />
       <Route path="/orders/:orderId" element={<OrderTracking />} />
-      <Route path="/account/profile" element={<Profile />} />
+      <Route path="/notifications" element={<Notifications />} />
+      <Route path="/account/profile" element={<ProfilePage />} />
+      <Route path="/account/profile/edit" element={<Profile />} />
       <Route path="/account/security" element={<Security />} />
       <Route path="/account/devices" element={<Navigate to="/account/security" replace />} />
     </Route>

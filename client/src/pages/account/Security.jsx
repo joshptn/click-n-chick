@@ -1,5 +1,5 @@
-import { useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useContext, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader, Modal, Tooltip } from "@mantine/core";
 import {
@@ -211,6 +211,18 @@ function Security() {
     queryFn: ({ signal }) => fetchDevices({ signal }),
   });
 
+  // "Manage Devices" on the phone's Profile opens this page at its devices.
+  const { hash } = useLocation();
+
+  // At once, and again when the list arrives and the page above it settles.
+  useEffect(() => {
+    if (hash !== "#devices") return undefined;
+
+    const timer = window.setTimeout(() => document.getElementById("devices")?.scrollIntoView({ block: "start" }), 60);
+
+    return () => window.clearTimeout(timer);
+  }, [hash, isLoading]);
+
   const revokeMutation = useMutation({
     mutationFn: (device) => revokeDevice(device.id),
     onSuccess: (result, device) => {
@@ -318,7 +330,7 @@ function Security() {
 
         <TwoFactorCard />
 
-        <div className="mb-3 mt-8">
+        <div id="devices" className="mb-3 mt-8 scroll-mt-[84px]">
           <h2 className="m-0 font-display text-[17px] font-bold tracking-[-0.2px] text-ink">Your devices</h2>
           <p className="m-0 mt-1 font-display text-[13px] leading-relaxed text-[#6f6b68]">
             Every device that has signed in to your account. If you do not recognise one, sign it out &mdash;

@@ -111,19 +111,36 @@ function AppHeader({
             {isOpen ? "Open" : "Closed"}
           </span>
 
-          <button
-            type="button"
-            onClick={onOpenCart}
-            aria-label={`My orders, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
-            className="relative grid h-10 w-10 place-items-center rounded-full bg-transparent text-ink transition-colors hover:bg-[#f7f4f0] xl:hidden"
-          >
-            <IconShoppingBag size={21} stroke={1.9} />
-            {itemCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 grid h-[19px] min-w-[19px] place-items-center rounded-full bg-brand-500 px-1 font-display text-[10.5px] font-bold text-white">
-                {itemCount > 99 ? "99+" : itemCount}
-              </span>
-            )}
-          </button>
+          {/* A page with its own cart (Home) opens it; anywhere else this goes
+              to the Cart page, rather than being a button that does nothing. */}
+          {onOpenCart || cartMode !== CART_MODE.IMMEDIATE ? (
+            <button
+              type="button"
+              onClick={onOpenCart}
+              aria-label={`My orders, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
+              className="relative grid h-10 w-10 place-items-center rounded-full bg-transparent text-ink transition-colors hover:bg-[#f7f4f0] xl:hidden"
+            >
+              <IconShoppingBag size={21} stroke={1.9} />
+              {itemCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid h-[19px] min-w-[19px] place-items-center rounded-full bg-brand-500 px-1 font-display text-[10.5px] font-bold text-white">
+                  {itemCount > 99 ? "99+" : itemCount}
+                </span>
+              )}
+            </button>
+          ) : (
+            <Link
+              to="/cart"
+              aria-label={`My cart, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
+              className="relative grid h-10 w-10 place-items-center rounded-full bg-transparent text-ink no-underline transition-colors hover:bg-[#f7f4f0] xl:hidden"
+            >
+              <IconShoppingBag size={21} stroke={1.9} />
+              {itemCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 grid h-[19px] min-w-[19px] place-items-center rounded-full bg-brand-500 px-1 font-display text-[10.5px] font-bold text-white">
+                  {itemCount > 99 ? "99+" : itemCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           {signedIn && <NotificationMenu />}
 

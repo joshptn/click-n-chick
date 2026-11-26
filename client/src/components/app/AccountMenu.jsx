@@ -1,10 +1,10 @@
 import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, Modal } from "@mantine/core";
+import { Menu } from "@mantine/core";
 import { IconChevronUp, IconLogout, IconReceipt, IconShieldLock, IconUser } from "@tabler/icons-react";
 
 import AuthContext from "../../context/AuthContext";
-import Button from "../ui/Button";
+import SignOutModal from "./SignOutModal";
 
 /**
  * The signed-in user's menu and its sign-out confirmation.
@@ -14,7 +14,7 @@ import Button from "../ui/Button";
  */
 function AccountMenu({ trigger = "pill", position = "bottom-end", showOrders = true, subtitle }) {
   const nav = useNavigate();
-  const { user, logOut } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
 
   const displayName = user?.first_name
     ? `${user.first_name} ${user.last_name?.charAt(0) ?? ""}.`.trim()
@@ -33,19 +33,6 @@ function AccountMenu({ trigger = "pill", position = "bottom-end", showOrders = t
   const showAvatar = Boolean(avatar) && !avatarBroken;
 
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-
-    try {
-      await logOut();
-    } finally {
-      setSigningOut(false);
-      setConfirmingSignOut(false);
-      nav("/login", { replace: true });
-    }
-  };
 
   const face = showAvatar ? (
     <img
@@ -118,32 +105,7 @@ function AccountMenu({ trigger = "pill", position = "bottom-end", showOrders = t
         </Menu.Dropdown>
       </Menu>
 
-      <Modal
-        opened={confirmingSignOut}
-        onClose={() => setConfirmingSignOut(false)}
-        title="Sign out of your account?"
-        centered
-        radius="md"
-      >
-        <p className="m-0 font-display text-[13.5px] leading-relaxed text-[#6f6b68]">
-          You will need to sign in again on this device. Your other devices stay signed in.
-        </p>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setConfirmingSignOut(false)} disabled={signingOut}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            loading={signingOut}
-            loadingLabel="Signing out&hellip;"
-            onClick={handleSignOut}
-          >
-            Sign out
-          </Button>
-        </div>
-      </Modal>
+      <SignOutModal opened={confirmingSignOut} onClose={() => setConfirmingSignOut(false)} />
     </>
   );
 }

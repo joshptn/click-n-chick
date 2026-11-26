@@ -225,6 +225,12 @@ export function RealtimeProvider({ children }) {
         // trusting this payload to be the whole story.
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
 
+        // A notice about one of the customer's orders: My Orders and Home's
+        // live-order card catch up with it.
+        if (notification.order_id && currentUser?.role === ROLES.CUSTOMER) {
+          queryClient.invalidateQueries({ queryKey: ["orders"] });
+        }
+
         // A Senior/PWD application approved or not: the Advance Order banner
         // and Profile show the new standing.
         if (notification.notification_type === "discount_decision") {

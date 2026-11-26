@@ -68,6 +68,10 @@ body {
      onto the next line instead of running out of it. Ordinary text is
      unaffected: it only applies when a single word cannot fit. */
   overflow-wrap: break-word;
+  /* The page fills the whole screen (viewport-fit=cover, for the phone tab
+     bar's safe area), so an iPhone held sideways keeps text clear of its notch. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Anchor targets sit behind the fixed header without this offset. */
