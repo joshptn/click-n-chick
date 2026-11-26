@@ -200,9 +200,6 @@ export const ordersApi = {
   tab: (tab: OrderTab, page: number, signal?: AbortSignal) =>
     api.get<OrdersPage>("/api/orders", { params: { filter: tab, page, per_page: 15 }, signal }),
 
-  active: (signal?: AbortSignal) =>
-    api.get<OrdersPage>("/api/orders", { params: { filter: "active", per_page: 1 }, signal }),
-
   show: (id: number | string, signal?: AbortSignal) => api.get<{ order: Order }>(`/api/orders/${id}`, { signal }),
 
   cancel: (id: number | string) => api.post<OrderAnswer>(`/api/order/${id}/cancel`),

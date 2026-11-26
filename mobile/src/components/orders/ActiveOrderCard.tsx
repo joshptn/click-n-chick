@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "../../api/client";
-import { ORDERS_KEY, guestOrderKey, guestOrdersApi, ordersApi, type Order } from "../../api/orders";
+import { guestOrderKey, guestOrdersApi, type Order } from "../../api/orders";
 import { useSession } from "../../hooks/useSession";
 import { forgetGuestOrder, useGuestOrders } from "../../lib/guestOrders";
 import { colors } from "../../theme/colors";
@@ -17,22 +17,15 @@ function line(order: Order) {
 }
 
 /**
- * "Order CNC-… Track it live" on Home (design of 2026-11-17): the customer's
- * newest live order, or for a guest the newest order tracked on this phone.
- * Hidden when nothing is in progress.
+ * "Order CNC-… Track it live" on Home (design of 2026-11-17), for a guest:
+ * the newest order tracked on this phone. Hidden when nothing is in progress,
+ * and for a signed-in customer, who has the Orders tab (decided 2026-11-26,
+ * as on the web).
  */
 export function ActiveOrderCard() {
   const { signedIn } = useSession();
   const guestOrders = useGuestOrders();
   const guestToken = !signedIn ? (guestOrders[0]?.token ?? null) : null;
-
-  const mine = useQuery({
-    queryKey: [...ORDERS_KEY, "active"],
-    queryFn: ({ signal }) => ordersApi.active(signal),
-    enabled: signedIn,
-    staleTime: 15 * 1000,
-    refetchOnWindowFocus: true,
-  });
 
   const guest = useQuery({
     queryKey: guestOrderKey(guestToken ?? ""),
@@ -43,7 +36,7 @@ export function ActiveOrderCard() {
     refetchOnWindowFocus: true,
   });
 
-  const order = signedIn ? mine.data?.data[0] : guest.data?.order;
+  const order = guestToken !== null ? guest.data?.order : undefined;
 
   // A guest's order is kept only while it is open (decided 2026-11-22), so the
   // next one tracked on this phone takes its place.
@@ -56,7 +49,7 @@ export function ActiveOrderCard() {
 
   if (!order || order.is_terminal) return null;
 
-  const open = () => router.push(signedIn ? `/orders/${order.id}` : `/track/${guestToken}`);
+  const open = () => router.push(`/track/${guestToken}`);
 
   return (
     <Pressable

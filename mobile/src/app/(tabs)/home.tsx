@@ -100,7 +100,6 @@ export default function Home() {
     void refetch();
     void queryClient.invalidateQueries({ queryKey: ["posters"] });
     void queryClient.invalidateQueries({ queryKey: ["store", "status"] });
-    void queryClient.invalidateQueries({ queryKey: ["orders", "active"] });
   };
 
   /** The section whose heading has passed under the bar; the last one at the very bottom. */
