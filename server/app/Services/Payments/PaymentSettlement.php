@@ -384,6 +384,9 @@ class PaymentSettlement
         $order->assignOrderNumber();
         $this->announcer->announce($order, 'create', 'create');
 
+        // The Store Agents' "New order", in the app and by push (decided 2026-11-26).
+        $this->announcer->toStaff($order, $this->notice->staffNewOrder($order));
+
         // A guest's tracking link, now that it is a real order (FR-02.13a,
         // decided 2026-11-22). Once: settle() lets only the first confirmation
         // of a payment get this far. A payment that could not place the order

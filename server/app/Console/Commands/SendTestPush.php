@@ -9,17 +9,17 @@ use Throwable;
 
 /**
  * Manual check of the Firebase setup: sends one push, now (not through the
- * queue), to every device a customer account has registered, and says what
- * happened. Only the push: no in-app notification is written.
+ * queue), to every device an account has registered, and says what happened.
+ * Only the push: no in-app notification is written.
  */
 class SendTestPush extends Command
 {
     protected $signature = 'push:test
-                            {user : The customer account, by id or email}
+                            {user : The account, by id or email}
                             {--title=Click n Chick : Notification title}
                             {--body=This is a test notification. : Notification body}';
 
-    protected $description = 'Send one test push to a customer account\'s registered devices';
+    protected $description = 'Send one test push to an account\'s registered devices';
 
     public function handle(PushSender $sender): int
     {
@@ -48,15 +48,10 @@ class SendTestPush extends Command
             return self::FAILURE;
         }
 
-        if ($user->role !== User::ROLE_CUSTOMER) {
-            $this->warn('That account is not a customer, so pushes are not sent to it.');
-
-            return self::FAILURE;
-        }
-
         try {
             $result = $sender->toUser((int) $user->getKey(), (string) $this->option('title'), (string) $this->option('body'), [
                 'type' => 'test',
+                'role' => $user->role !== User::ROLE_CUSTOMER ? $user->role : null,
             ]);
         } catch (Throwable $e) {
             $this->error('Not sent: '.$e->getMessage());

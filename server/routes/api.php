@@ -149,8 +149,9 @@ Route::middleware(['auth:sanctum', 'device-check', 'staff-idle'])->group(functio
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
 
-    // Push to the installed PWA and the native app: customer accounts only.
-    Route::middleware(['role:customer', 'throttle:push-token'])->group(function () {
+    // Push to the installed PWA and the native app: every account, staff
+    // included since 2026-11-26 (store-wide announcements still reach customers only).
+    Route::middleware(['throttle:push-token'])->group(function () {
         Route::post('/push-tokens', [PushTokenController::class, 'store']);
         Route::delete('/push-tokens', [PushTokenController::class, 'destroy']);
     });

@@ -3,17 +3,37 @@
  * importScripts (vite.config.js). Plain JavaScript: it is not bundled.
  *
  * Messages come from Firebase Cloud Messaging; the API sends a `notification`
- * (title, body) and `data` (notification_id, type, order_id). The Firebase SDK
- * is not needed here: the payload is read straight from the push event.
+ * (title, body) and `data` (notification_id, type, order_id, and `role` when
+ * the account is staff). The Firebase SDK is not needed here: the payload is
+ * read straight from the push event.
  */
 
 const APPLE = /iPhone|iPad|iPod|Macintosh/.test(self.navigator.userAgent)
   && !/Chrome|CriOS|Edg|Firefox|FxiOS/.test(self.navigator.userAgent);
 
-/** Where a tapped notification opens; matches notificationTarget() in the app. */
+const ADVANCE_NOTICE_TYPES = ["advance_request", "advance_due", "advance_order"];
+
+/**
+ * Where a tapped notification opens; matches notificationTarget() for a
+ * customer and staffNotificationTarget() (src/lib/agent.js) for staff, with
+ * the portal's first page where those open nothing.
+ */
 function targetFor(data) {
+  if (data.role === "admin" || data.role === "super_admin") {
+    const home = data.role === "super_admin" ? "/superadmin" : "/admin";
+
+    if (data.type === "security") return "/account/security";
+    if (data.type === "discount_review") return "/admin/discount-requests";
+    if (data.type === "poster_expiry") return data.role === "super_admin" ? "/superadmin/settings" : home;
+    if (ADVANCE_NOTICE_TYPES.includes(data.type) && data.order_id) return `/admin/advance-orders?order=${data.order_id}`;
+    if (data.order_id) return `/admin?order=${data.order_id}`;
+
+    return home;
+  }
+
   if (data.order_id) return `/orders/${data.order_id}`;
   if (data.type === "security") return "/account/security";
+  if (data.type === "discount_decision") return "/account/profile";
 
   return "/home";
 }

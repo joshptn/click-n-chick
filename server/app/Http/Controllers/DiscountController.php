@@ -320,7 +320,8 @@ class DiscountController extends Controller
     // -----------------------------------------------------------------
 
     /**
-     * Tell the Store Agents there is something to review.
+     * Tell the Store Agents there is something to review, in the app and by
+     * push to the devices they turned it on for (decided 2026-11-26).
      *
      * Typed, so the staff bell can open the Pending Verification queue.
      */
@@ -340,7 +341,8 @@ class DiscountController extends Controller
                 (int) $reviewer->id,
                 'Discount application to review',
                 "{$name} submitted a {$claim->typeLabel()} ID for approval.",
-                self::NOTICE_REVIEW
+                self::NOTICE_REVIEW,
+                true
             );
         }
     }
@@ -380,7 +382,8 @@ class DiscountController extends Controller
 
             NotificationBroadcast::dispatch($notification, $userId);
 
-            // The customer's own decisions also reach their phone.
+            // A customer's decision, and an agent's application to review, also
+            // reach their devices.
             if ($toPhone) {
                 SendPushNotification::forNotification($notification);
             }

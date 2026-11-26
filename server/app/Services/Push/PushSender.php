@@ -6,7 +6,7 @@ use App\Models\PushToken;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Sends a push to an account's devices, or to every customer's, and deletes
+ * Sends a push to one account's devices (any role), or to every customer's, and deletes
  * the tokens FCM reports dead. Called from the queue (SendPushNotification,
  * PushToEveryCustomer), so no request waits on Firebase.
  *
@@ -24,11 +24,14 @@ class PushSender
         return $this->fcm->isConfigured();
     }
 
-    /** @param  array<string, string|int|null>  $data */
+    /**
+     * One account's devices, whatever its role.
+     *
+     * @param  array<string, string|int|null>  $data
+     */
     public function toUser(int $userId, string $title, string $body, array $data = []): PushResult
     {
         $tokens = PushToken::query()
-            ->forCustomers()
             ->where('user_id', $userId)
             ->pluck('token')
             ->all();
