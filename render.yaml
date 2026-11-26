@@ -70,11 +70,10 @@ services:
         sync: false
       - key: CLOUDINARY_URL
         sync: false
-      # Delivery distance. Unset means OpenRouteService (needs ORS_API_KEY).
-      # Set ROUTING_DRIVER=osrm, OSRM_ENDPOINT and OSRM_TOKEN once our OSRM
-      # server exists (docs/OSRM-Setup.md).
-      - key: ROUTING_DRIVER
-        sync: false
+      # Delivery distance: OSRM first, OpenRouteService (ORS_API_KEY) while
+      # OSRM is down. OSRM_ENDPOINT unset is the public OSRM server; for
+      # osrmroute.com set it to https://osrmroute.com/api/v1/osrm and
+      # OSRM_TOKEN to its API key.
       - key: ORS_API_KEY
         sync: false
       - key: OSRM_ENDPOINT

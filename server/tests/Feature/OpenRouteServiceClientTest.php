@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * OpenRouteService: the engine in use until our OSRM server is set up, and
- * the fallback after that (ROUTING_DRIVER=openrouteservice).
+ * OpenRouteService, the fallback while OSRM is down, on its own here
+ * (ROUTING_PROVIDERS=openrouteservice).
  */
 class OpenRouteServiceClientTest extends TestCase
 {
@@ -22,7 +22,7 @@ class OpenRouteServiceClientTest extends TestCase
 
         Cache::flush();
 
-        config()->set('services.routing.driver', 'openrouteservice');
+        config()->set('services.routing.providers', ['openrouteservice']);
         config()->set('services.routing.openrouteservice.api_key', 'test-key');
     }
 

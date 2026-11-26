@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Geo\FallbackRoutingClient;
 use App\Services\Geo\OpenRouteServiceClient;
 use App\Services\Geo\OsrmClient;
 use App\Services\Geo\RoutingProvider;
@@ -46,23 +47,29 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        // OpenRouteService unless ROUTING_DRIVER says osrm (the OSRM server is
-        // built but not set up yet, 2026-11-26).
+        // OSRM, then OpenRouteService while OSRM is down (ROUTING_PROVIDERS,
+        // decided 2026-11-26).
         $this->app->bind(RoutingProvider::class, function () {
-            if (config('services.routing.driver') === 'osrm') {
-                return new OsrmClient(
-                    config('services.routing.osrm.endpoint'),
-                    config('services.routing.osrm.token'),
-                    (string) config('services.routing.osrm.profile', 'driving'),
-                    (int) config('services.routing.snap_metres', 350),
-                );
+            $engines = [];
+
+            foreach ((array) config('services.routing.providers', []) as $name) {
+                $engines[] = match ($name) {
+                    'osrm' => new OsrmClient(
+                        config('services.routing.osrm.endpoint'),
+                        config('services.routing.osrm.token'),
+                        (string) config('services.routing.osrm.profile', 'driving'),
+                        (int) config('services.routing.snap_metres', 350),
+                    ),
+                    'openrouteservice' => new OpenRouteServiceClient(
+                        (string) config('services.routing.openrouteservice.endpoint'),
+                        config('services.routing.openrouteservice.api_key'),
+                        (string) config('services.routing.openrouteservice.profile'),
+                    ),
+                    default => null,
+                };
             }
 
-            return new OpenRouteServiceClient(
-                (string) config('services.routing.openrouteservice.endpoint'),
-                config('services.routing.openrouteservice.api_key'),
-                (string) config('services.routing.openrouteservice.profile'),
-            );
+            return new FallbackRoutingClient(array_values(array_filter($engines)));
         });
 
         // Read when first used, so a test can set the Firebase config before it.

@@ -3,7 +3,7 @@
 namespace Tests\Concerns;
 
 /**
- * Point routing at a fake OSRM server (phpunit.xml leaves the endpoint blank,
+ * Point routing at a fake OSRM host (phpunit.xml leaves the endpoint blank,
  * so nothing can reach a real router by accident).
  *
  * Fake it with Http::fake([self::OSRM => Http::response(...)]).
@@ -15,15 +15,19 @@ trait FakesOsrm
     /** Google's reference vector: three real, decodable points. */
     protected const OSRM_GEOMETRY = '_p~iF~ps|U_ulLnnqC_mqNvxq`@';
 
+    /** OSRM alone, so a test sees its answers and not the ORS fallback's. */
     protected function useFakeOsrm(): void
     {
-        config()->set('services.routing.driver', 'osrm');
+        config()->set('services.routing.providers', ['osrm']);
         config()->set('services.routing.osrm.endpoint', 'https://osrm.test');
         config()->set('services.routing.osrm.token', 'test-token');
     }
 
-    /** OSRM's answer for one route of this many kilometres. */
-    protected function osrmRoute(float $km, bool $geometry = true): array
+    /**
+     * OSRM's answer for one route of this many kilometres, the pin moved
+     * $snappedMetres to reach a road.
+     */
+    protected function osrmRoute(float $km, bool $geometry = true, float $snappedMetres = 0.0): array
     {
         $route = ['distance' => $km * 1000, 'duration' => $km * 90, 'weight' => $km * 90];
 
@@ -34,7 +38,7 @@ trait FakesOsrm
         return [
             'code' => 'Ok',
             'routes' => [$route],
-            'waypoints' => [['distance' => 0.0, 'location' => [0, 0]], ['distance' => 0.0, 'location' => [0, 0]]],
+            'waypoints' => [['distance' => 0.0, 'location' => [0, 0]], ['distance' => $snappedMetres, 'location' => [0, 0]]],
         ];
     }
 

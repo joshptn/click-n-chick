@@ -2,8 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Services\Geo\OpenRouteServiceClient;
-use App\Services\Geo\OsrmClient;
+use App\Services\Geo\FallbackRoutingClient;
 use App\Services\Geo\RouteNotFound;
 use App\Services\Geo\RoutingProvider;
 use App\Services\Geo\RoutingUnavailable;
@@ -15,8 +14,9 @@ use Tests\Concerns\FakesOsrm;
 use Tests\TestCase;
 
 /**
- * OSRM on our own server (decided 2026-11-26): how we ask, and how its
- * answers become a distance, a missing route or an outage.
+ * OSRM through a hosted API (decided 2026-11-26: the public server, or a
+ * managed host with a key): how we ask, and how its answers become a
+ * distance, a missing route or an outage.
  */
 class OsrmClientTest extends TestCase
 {
@@ -38,20 +38,14 @@ class OsrmClientTest extends TestCase
         return app(RoutingProvider::class);
     }
 
-    /** OpenRouteService until the OSRM server exists; then ROUTING_DRIVER=osrm. */
-    public function test_routing_driver_picks_the_engine(): void
+    public function test_the_engines_are_tried_through_the_fallback_chain(): void
     {
-        $this->assertInstanceOf(OsrmClient::class, $this->routing());
-
-        config()->set('services.routing.driver', 'openrouteservice');
-        $this->assertInstanceOf(OpenRouteServiceClient::class, $this->routing());
-
-        config()->set('services.routing.driver', null);
-        $this->assertInstanceOf(OpenRouteServiceClient::class, $this->routing());
+        $this->assertInstanceOf(FallbackRoutingClient::class, $this->routing());
     }
 
-    public function test_it_asks_for_the_shop_to_the_pin_longitude_first_with_our_token(): void
+    public function test_it_asks_for_the_shop_to_the_pin_longitude_first_with_the_key(): void
     {
+        config()->set('services.routing.user_agent', 'delivery-quote/1.0');
         Http::fake([self::OSRM => Http::response($this->osrmRoute(3.2))]);
 
         $this->routing()->route(14.97, 120.76);
@@ -59,22 +53,50 @@ class OsrmClientTest extends TestCase
         Http::assertSent(function (Request $request) {
             return $request->method() === 'GET'
                 && str_starts_with($request->url(), 'https://osrm.test/route/v1/driving/120.758469,14.958753;120.760000,14.970000?')
-                && str_contains($request->url(), 'radiuses=unlimited;350')
                 && str_contains($request->url(), 'overview=full')
                 && str_contains($request->url(), 'steps=false')
-                && $request->hasHeader('Authorization', 'Bearer test-token');
+                // Not every host passes radiuses on; the snap is checked here instead.
+                && ! str_contains($request->url(), 'radiuses')
+                && $request->hasHeader('Authorization', 'Bearer test-token')
+                && $request->hasHeader('User-Agent', 'delivery-quote/1.0');
         });
     }
 
     /** A pin in the fishponds must not be snapped to a road far away and priced from there. */
-    public function test_only_the_pin_is_held_to_the_snap_radius(): void
+    public function test_a_pin_moved_too_far_to_reach_a_road_has_no_route(): void
     {
-        config()->set('services.routing.snap_metres', 120);
-        Http::fake([self::OSRM => Http::response($this->osrmRoute(3.2))]);
+        Http::fake([self::OSRM => Http::response($this->osrmRoute(3.2, snappedMetres: 351))]);
+
+        $this->expectException(RouteNotFound::class);
 
         $this->routing()->route(14.97, 120.76);
+    }
 
-        Http::assertSent(fn (Request $request) => str_contains($request->url(), 'radiuses=unlimited;120'));
+    public function test_a_pin_moved_within_the_snap_radius_is_priced(): void
+    {
+        Http::fake([self::OSRM => Http::response($this->osrmRoute(3.2, snappedMetres: 340))]);
+
+        $this->assertSame(3.2, $this->routing()->route(14.97, 120.76)->distanceKm);
+    }
+
+    public function test_the_snap_radius_comes_from_config(): void
+    {
+        config()->set('services.routing.snap_metres', 120);
+        Http::fake([self::OSRM => Http::response($this->osrmRoute(3.2, snappedMetres: 200))]);
+
+        $this->expectException(RouteNotFound::class);
+
+        $this->routing()->route(14.97, 120.76);
+    }
+
+    /** osrmroute.com's answer when no connected road is within 2 km (HTTP 422). */
+    public function test_a_managed_hosts_no_nearby_road_is_a_missing_route(): void
+    {
+        Http::fake([self::OSRM => Http::response(['code' => 'NoNearbyRoad', 'message' => 'No connected route within 2000 metres'], 422)]);
+
+        $this->expectException(RouteNotFound::class);
+
+        $this->routing()->route(14.97, 120.76);
     }
 
     public function test_without_a_token_no_authorization_header_is_sent(): void
@@ -143,14 +165,14 @@ class OsrmClientTest extends TestCase
         $this->routing()->route(14.97, 120.76);
     }
 
-    /** A wrong token is our mistake, not the customer's pin: an outage, never "move the pin". */
-    public function test_a_refused_token_is_an_outage(): void
+    /** A wrong key is our mistake, not the customer's pin: an outage, never "move the pin". */
+    public function test_a_refused_key_is_an_outage(): void
     {
         Http::fake([self::OSRM => Http::response('Unauthorized', 401)]);
 
         try {
             $this->routing()->route(14.97, 120.76);
-            $this->fail('A refused token must not produce a route.');
+            $this->fail('A refused key must not produce a route.');
         } catch (RoutingUnavailable $e) {
             $this->assertNotInstanceOf(RouteNotFound::class, $e);
         }

@@ -7,12 +7,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * OpenRouteService's hosted API: the routing engine in use until our OSRM
- * server is set up (ROUTING_DRIVER=osrm), and the fallback after that.
+ * OpenRouteService's hosted API: the fallback while OSRM is down
+ * (FallbackRoutingClient, decided 2026-11-26).
  *
  * ORS treats roads tagged access=private as closed, and most subdivisions
  * around the shop are tagged that way, so its routes stop at the gate. That
- * is why OSRM is replacing it (decided 2026-11-26).
+ * is why OSRM answers first.
  */
 class OpenRouteServiceClient extends CachedRoutingClient
 {

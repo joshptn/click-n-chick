@@ -5,11 +5,10 @@ namespace App\Services\Geo;
 /**
  * A driving route from the shop to a destination.
  *
- * An interface rather than a concrete class because the hosting decision is
- * expected to change: OpenRouteService's hosted tier today, very likely a
- * self-hosted instance later. Self-hosted ORS is a base-URL change, but OSRM
- * speaks a different API entirely, and callers should not have to know which
- * is answering.
+ * An interface rather than a concrete class because more than one engine
+ * answers: OSRM first and OpenRouteService while it is down
+ * (FallbackRoutingClient). They speak different APIs, and callers should not
+ * have to know which one answered.
  */
 interface RoutingProvider
 {
