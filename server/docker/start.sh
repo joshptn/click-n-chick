@@ -5,7 +5,7 @@ cd /var/www/html
 
 sed "s/__PORT__/${PORT:-10000}/" /etc/nginx/app.conf.template > /etc/nginx/sites-enabled/app.conf
 
-php artisan migrate:fresh --seed --force
+php artisan migrate --force
 php artisan optimize
 
 chown -R www-data:www-data storage bootstrap/cache
